@@ -6,10 +6,10 @@ use App\Models\ChatMessage;
 use App\Models\GallerySpace;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -68,7 +68,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('chat_messages')) {
+        if (! Tabulky::je('chat_messages')) {
             return [];
         }
 
@@ -296,7 +296,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $ref = trim((string) ($m->attachment_ref ?? ''));
 
-        if ($ref === '' || ! Schema::hasTable('media_items')) {
+        if ($ref === '' || ! Tabulky::je('media_items')) {
             return null;
         }
 
@@ -426,7 +426,7 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
             return $this->nahravky;
         }
 
-        if (! Schema::hasTable('voice_notes')) {
+        if (! Tabulky::je('voice_notes')) {
             return $this->nahravky = [];
         }
 

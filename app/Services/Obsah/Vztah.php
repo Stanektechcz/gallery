@@ -11,10 +11,10 @@ use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Mechanismy vztahu ve tvaru, ve kterém je kreslí prototyp.
@@ -78,7 +78,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_decisions')) {
+        if (! Tabulky::je('couple_decisions')) {
             return [];
         }
 
@@ -284,7 +284,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         // Úkol s termínem, který prošel a nikdo ho nezavřel.
-        if (Schema::hasTable('shared_todos')) {
+        if (Tabulky::je('shared_todos')) {
             foreach (DB::table('shared_todos')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNotNull('due_at')
@@ -310,7 +310,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
          * (`LATER_ITEMS` se čte odtamtud). Úkol s termínem už je o řádek výš
          * jako propadlá lhůta, takže se sem nedostane dvakrát.
          */
-        if (Schema::hasTable('shared_todos')) {
+        if (Tabulky::je('shared_todos')) {
             foreach (DB::table('shared_todos')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('due_at')
@@ -367,7 +367,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $rozhodnuta = Schema::hasTable('couple_decisions')
+        $rozhodnuta = Tabulky::je('couple_decisions')
             ? DB::table('couple_decisions')
                 ->where('gallery_space_id', $prostor->id)
                 ->pluck('title')
@@ -470,7 +470,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function sliby(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_promises')) {
+        if (! Tabulky::je('couple_promises')) {
             return [];
         }
 
@@ -566,7 +566,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return Collection<int, CoupleNudge> */
     private function nudge(GallerySpace $prostor): Collection
     {
-        if (! Schema::hasTable('couple_nudges')) {
+        if (! Tabulky::je('couple_nudges')) {
             return collect();
         }
 
@@ -609,7 +609,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function randicka(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_date_ideas')) {
+        if (! Tabulky::je('couple_date_ideas')) {
             return [];
         }
 
@@ -656,7 +656,7 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vygenerovanaRandicka(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_date_ideas')) {
+        if (! Tabulky::je('couple_date_ideas')) {
             return [];
         }
 

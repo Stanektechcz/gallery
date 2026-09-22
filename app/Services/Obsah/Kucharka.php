@@ -3,11 +3,11 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
 /**
@@ -56,7 +56,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public function idPodleKlice(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('recipes')) {
+        if (! Tabulky::je('recipes')) {
             return [];
         }
 
@@ -99,7 +99,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function menuNaTyden(GallerySpace $prostor, array $idPodleKlice): array
     {
-        if (! Schema::hasTable('planned_meals') || $idPodleKlice === []) {
+        if (! Tabulky::je('planned_meals') || $idPodleKlice === []) {
             return [];
         }
 
@@ -148,7 +148,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('recipes')) {
+        if (! Tabulky::je('recipes')) {
             return [];
         }
 
@@ -212,7 +212,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nakupy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('planned_meals') || ! Schema::hasTable('recipe_ingredients')) {
+        if (! Tabulky::je('planned_meals') || ! Tabulky::je('recipe_ingredients')) {
             return [];
         }
 
@@ -239,7 +239,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             return $this->pripsane($prostor);
         }
 
-        $odskrtnute = Schema::hasTable('meal_shopping_states')
+        $odskrtnute = Tabulky::je('meal_shopping_states')
             ? DB::table('meal_shopping_states')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('calendar_event_id')
@@ -300,7 +300,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pripsane(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('shopping_list_items')) {
+        if (! Tabulky::je('shopping_list_items')) {
             return [];
         }
 
@@ -329,7 +329,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function menu(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('planned_meals')) {
+        if (! Tabulky::je('planned_meals')) {
             return [];
         }
 
@@ -419,7 +419,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function suroviny(Collection $id): Collection
     {
-        if (! Schema::hasTable('recipe_ingredients')) {
+        if (! Tabulky::je('recipe_ingredients')) {
             return collect();
         }
 
@@ -447,7 +447,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function postup(Collection $id): Collection
     {
-        if (! Schema::hasTable('recipe_steps')) {
+        if (! Tabulky::je('recipe_steps')) {
             return collect();
         }
 
@@ -469,7 +469,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vareni(Collection $id, GallerySpace $prostor): Collection
     {
-        if (! Schema::hasTable('recipe_cooking_sessions')) {
+        if (! Tabulky::je('recipe_cooking_sessions')) {
             return collect();
         }
 
@@ -499,8 +499,16 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return array_values(array_filter([
             ['Čas přípravy', $this->cas((int) $r->prep_minutes + (int) $r->cook_minutes)],
-            $sCenou && $r->base_servings > 0
-                ? ['Cena za porci', round((float) $sCenou->actual_cost / (float) $r->base_servings).' Kč']
+            /*
+             * Cena se dělí porcemi **toho vaření**, ne receptu.
+             *
+             * `actual_cost` patří k jednomu uvaření a `recipe_cooking_sessions`
+             * má vlastní `servings`. Dvojnásobná dávka dvouporcového receptu
+             * za 400 Kč tak hlásila „Cena za porci 200 Kč", i když to bylo sto.
+             * Podle tohohle čísla se vybírá, co se bude vařit.
+             */
+            $sCenou && (int) ($sCenou->servings ?: $r->base_servings) > 0
+                ? ['Cena za porci', round((float) $sCenou->actual_cost / (float) ($sCenou->servings ?: $r->base_servings)).' Kč']
                 : null,
             $posledni
                 ? ['Naposledy', CarbonImmutable::parse($posledni->cooked_at)->format('j. n. Y')]
@@ -508,8 +516,10 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             $hodnocena->isNotEmpty()
                 ? ['Hodnocení', $this->hodnoceni((float) $hodnocena->avg('overall_rating'))
                     .' · '.$this->pocet($vareni->count(), 'vaření', 'vaření', 'vaření')]
+                // `pocet()` lepí číslo před slovo, takže z jednoho vaření
+                // vycházelo „Uvařeno: 1 jednou".
                 : ($vareni->isNotEmpty()
-                    ? ['Uvařeno', $this->pocet($vareni->count(), 'jednou', 'krát', 'krát')]
+                    ? ['Uvařeno', $vareni->count() === 1 ? 'jednou' : $vareni->count().'×']
                     : null),
         ]));
     }
@@ -589,7 +599,7 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             default => 'Jídlo',
         };
 
-        $znacky = json_decode((string) ($r->dietary_tags ?? '[]'), true) ?: [];
+        $znacky = $this->seznam($r->dietary_tags ?? null);
 
         return $kategorie.($znacky ? ' · '.implode(', ', array_slice($znacky, 0, 2)) : '');
     }
@@ -600,13 +610,37 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             return 'oblíbené';
         }
 
-        $prilezitosti = json_decode((string) ($r->occasion_tags ?? '[]'), true) ?: [];
+        $prilezitosti = $this->seznam($r->occasion_tags ?? null);
 
         return $prilezitosti[0] ?? match ((string) $r->difficulty) {
             'hard' => 'na víkend',
             'easy' => 'rychlovka',
             default => '',
         };
+    }
+
+    /**
+     * Značky z JSON sloupce jako seznam řetězců.
+     *
+     * `json_decode(...) ?: []` vypadá bezpečně, ale skalár projde: z uloženého
+     * `"vegan"` vznikne řetězec, `array_slice()` na něm shodí celou skupinu
+     * `kucharka` (500) a `$prilezitosti[0]` z něj tiše udělá značku „v".
+     * Recept se dá naimportovat odkudkoli, takže tvar dat není zaručený.
+     *
+     * @return list<string>
+     */
+    private function seznam(mixed $json): array
+    {
+        $hodnoty = json_decode((string) ($json ?? '[]'), true);
+
+        if (! is_array($hodnoty)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map(fn ($z) => is_scalar($z) ? trim((string) $z) : '', $hodnoty),
+            fn (string $z) => $z !== '',
+        ));
     }
 
     private function zdroj(object $r): string

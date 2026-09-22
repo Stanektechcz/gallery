@@ -4,10 +4,11 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Cesty a místa ve tvaru, ve kterém je kreslí prototyp.
@@ -60,8 +61,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        $cesty = Schema::hasTable('trips') ? $this->cesty($prostor) : [];
-        $mista = Schema::hasTable('places') ? $this->mista($prostor) : [];
+        $cesty = Tabulky::je('trips') ? $this->cesty($prostor) : [];
+        $mista = Tabulky::je('places') ? $this->mista($prostor) : [];
 
         return array_filter([
             'TRIPS' => $cesty,
@@ -74,7 +75,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
              * tvrdila „Jsme na cestě · den 5 z 8" dvojici, která seděla doma.
              * Prázdný objekt je úplná kolekce, takže ukázku smaže.
              */
-            'NOWTRIP' => Schema::hasTable('trips') ? ($this->prave($prostor, $cesty) ?? (object) []) : null,
+            'NOWTRIP' => Tabulky::je('trips') ? ($this->prave($prostor, $cesty) ?? (object) []) : null,
             'PLACES' => $mista,
             'PLACE_BY_TITLE' => $this->rejstrik($mista),
             // Tytéž cesty a místa ve tvaru seznamu — víc dotazů to nestojí.
@@ -138,7 +139,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function jizdenky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('saved_transport_routes')) {
+        if (! Tabulky::je('saved_transport_routes')) {
             return [];
         }
 
@@ -172,7 +173,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cestovniInbox(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('travel_inbox_items')) {
+        if (! Tabulky::je('travel_inbox_items')) {
             return [];
         }
 
@@ -445,7 +446,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function mista(GallerySpace $prostor): array
     {
-        if (! Schema::hasColumn('places', 'gallery_space_id')) {
+        if (! Tabulky::sloupec('places', 'gallery_space_id')) {
             return [];
         }
 
@@ -509,7 +510,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function navstevy(Collection $id, GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('place_plans')) {
+        if (! Tabulky::je('place_plans')) {
             return [];
         }
 
@@ -537,7 +538,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function poznamky(Collection $id, GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('place_notes')) {
+        if (! Tabulky::je('place_notes')) {
             return [];
         }
 
@@ -602,7 +603,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function baleni(Collection $id, GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('trip_packing_items')) {
+        if (! Tabulky::je('trip_packing_items')) {
             return [];
         }
 
@@ -630,7 +631,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function doklady(Collection $id): array
     {
-        if (! Schema::hasTable('trip_document_checks')) {
+        if (! Tabulky::je('trip_document_checks')) {
             return [];
         }
 
@@ -657,19 +658,43 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
+     * Zápis v deníku cesty, který je buď společný, nebo můj.
+     *
+     * `travel_journal_entries.visibility` drží `shared` / `private` a čtecí
+     * cesta modulu (`TripPlanController`) ji respektuje. Obsah pro obrazovky
+     * ne, takže zápis, který si jeden označil za soukromý, vypadl druhému
+     * v deníku cesty. U poznámek k místům se to o pár řádků výš hlídá.
+     *
+     * @param  Builder  $dotaz
+     */
+    private function jenMojeNeboSdilene($dotaz): void
+    {
+        if (! Tabulky::sloupec('travel_journal_entries', 'visibility')) {
+            return;
+        }
+
+        $ja = auth()->id();
+
+        $dotaz->where(fn ($q) => $q->where('visibility', 'shared')
+            ->orWhereNull('visibility')
+            ->when($ja !== null, fn ($w) => $w->orWhere('user_id', $ja)));
+    }
+
+    /**
      * Deník cesty: `[datum, nadpis, text, místo a počet fotek]`.
      *
      * @return array<int, list<array<int, string>>>
      */
     private function denik(Collection $id): array
     {
-        if (! Schema::hasTable('travel_journal_entries')) {
+        if (! Tabulky::je('travel_journal_entries')) {
             return [];
         }
 
         return DB::table('travel_journal_entries')
             ->whereIn('trip_id', $id)
             ->where('type', 'note')
+            ->tap($this->jenMojeNeboSdilene(...))
             ->orderByDesc('recorded_at')
             ->get()
             ->groupBy('trip_id')
@@ -689,7 +714,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function denikCesty(int $cesta, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('travel_journal_entries')) {
+        if (! Tabulky::je('travel_journal_entries')) {
             return [];
         }
 
@@ -698,6 +723,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         return DB::table('travel_journal_entries')
             ->where('trip_id', $cesta)
             ->where('type', 'note')
+            ->tap($this->jenMojeNeboSdilene(...))
             ->orderByDesc('recorded_at')
             ->limit(10)
             ->get()

@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\Budget;
+use App\Models\FinanceAccess;
 use App\Models\FinanceRecurring;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
@@ -11,11 +12,11 @@ use App\Services\Finance\LedgerService;
 use App\Services\Finance\ZarazeniPodlePopisu;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Finance ve tvaru, ve kterém je kreslí prototyp.
@@ -94,6 +95,13 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             'INCOMES' => new \stdClass,
             'SHARED' => [],
             'RULEXP' => [],
+            /*
+             * `kolekce()` znak měny posílá, `prazdne()` o něm mlčelo — po
+             * vyprázdnění financí si prototyp nechal ten poslední a kreslil
+             * v něm dál. Prázdno je tu správná hodnota: `kc()` na klientu má
+             * `MENA || 'Kč'`, takže spadne na výchozí a ne na cizí měnu.
+             */
+            'MENA' => '',
             'ABARS' => ['bud' => [], 'year' => [], 'fc' => [], 'res' => []],
             'AL' => ['accounts' => [], 'balancing' => []],
         ];
@@ -224,8 +232,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             // Převod mezi vlastními účty výdaj není — v hledání by zdvojil útratu.
-            ->where('type', 'expense')
-            ->where('occurred_at', '>=', CarbonImmutable::now()->subYear()->startOfDay())
+            ->utraty()
+            ->where('occurred_at', '>=', Cas::dnes()->subYear()->startOfDay())
             ->orderByDesc('occurred_at')
             ->limit(2000)
             ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'amount_to'])
@@ -255,7 +263,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nadchazejici(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('finance_recurring')) {
+        if (! Tabulky::je('finance_recurring')) {
             return [];
         }
 
@@ -306,6 +314,10 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
+            // Rozepsaný zápis se v seznamu nedá odlišit — stav se do prototypu
+            // neposílá — takže by se tvářil jako hotová útrata a sečetl se do
+            // součtu záložky. Do knihy patří, až když je schválený.
+            ->zapsane()
             ->with(['category:id,name,icon', 'walletFrom:id,name', 'walletTo:id,name', 'receipt' => fn ($q) => $q->withoutGlobalScope(SpaceContext::SCOPE)->select('id', 'uuid')])
             ->orderByDesc('occurred_at')
             ->limit(self::TRANSAKCI)
@@ -373,7 +385,15 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         $opakovane = $pohyby->filter(fn (Transaction $t) => $t->recurring_id !== null);
         $importovane = $pohyby->filter(fn (Transaction $t) => (string) $t->provider !== '');
 
-        $mesic = $this->mesic(CarbonImmutable::parse($pohyby->first()->occurred_at ?? now()));
+        /*
+         * Popisek nese celé období, ne měsíc první transakce.
+         *
+         * Seznam sahá 120 zápisů zpátky, takže běžně přes tři měsíce — a
+         * hlavička přesto tvrdila „31 transakcí · září 2026 · −22 460 Kč",
+         * i když v září z toho byly necelé dva tisíce. Když se všechno vejde
+         * do jednoho měsíce, píše se dál jen ten.
+         */
+        $mesic = $this->obdobi($pohyby);
 
         /*
          * Všechny čtyři záložky se posílají i prázdné.
@@ -458,7 +478,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     /** „ · sync dnes 8:14" — nebo nic, když se ještě nesynchronizovalo. */
     private function kdySync(GallerySpace $prostor): string
     {
-        $kdy = Schema::hasTable('bank_connections')
+        $kdy = Tabulky::je('bank_connections')
             ? DB::table('bank_connections')
                 ->where('gallery_space_id', $prostor->id)
                 ->max('last_synced_at')
@@ -686,8 +706,26 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function rozpocet(GallerySpace $prostor): ?Budget
     {
-        return Budget::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
+        $ja = auth()->id();
+
+        if (! $ja) {
+            return null;
+        }
+
+        /*
+         * Osobní rozpočet druhého z dvojice se nekreslí.
+         *
+         * Obrazovka brala prostě poslední rozpočet v prostoru. Když si jeden
+         * z nich založil vlastní — „Makinčin rozpočet na Německo" — a nesdílel
+         * ho, druhý ho stejně viděl i s limity a příjmem. Pravidlo, kdo na co
+         * vidí, je v `FinanceAccess::viditelne()`; používá ho i obrazovka
+         * rozpočtů, takže obě místa teď ukazují totéž.
+         */
+        return FinanceAccess::viditelne(
+            Budget::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id),
+            'budget', $ja,
+        )
             // Běžící rozpočet má přednost před tím, co skončilo nebo teprve začne.
             ->orderByRaw('CASE WHEN starts_on <= ? AND (ends_on IS NULL OR ends_on >= ?) THEN 0 ELSE 1 END', [now(), now()])
             ->orderByDesc('starts_on')
@@ -731,6 +769,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $prijem = $this->mesicniPrijem($rozpocet);
         $plan = $naMesic((float) $limity->sum('amount'));
+        $mesice = $this->mesice($prostor, $mena);
 
         return [
             'month' => $this->mesic($dnes),
@@ -759,8 +798,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 ];
             })->values()->all(),
             'paid' => $this->kdoCoZaplatil($prostor, $dnes),
-            'months' => $this->mesice($prostor, $mena),
-            'year' => $this->rok($prostor, $rozpocet),
+            'months' => $mesice,
+            'year' => $this->rok($prostor, $rozpocet, $mesice),
             'goals' => $this->cile($rozpocet),
             'yearCats' => [],
         ];
@@ -777,7 +816,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $soucty = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('occurred_at', '>=', $od)
             ->get(['occurred_at', 'amount_from'])
             ->groupBy(fn (Transaction $t) => CarbonImmutable::parse($t->occurred_at)->format('Y-m'))
@@ -798,22 +837,38 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /** @return array{income: int, spent: int, saved: int} */
-    private function rok(GallerySpace $prostor, Budget $rozpocet): array
+    private function rok(GallerySpace $prostor, Budget $rozpocet, array $mesice = []): array
     {
-        $od = CarbonImmutable::today()->startOfYear();
+        $od = Cas::dnes()->startOfYear();
 
         $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
+            ->zapsane()
+            ->whereIn('type', Transaction::VYSLEDKOVE)
             ->where('occurred_at', '>=', $od)
             ->get(['type', 'amount_from', 'amount_to']);
 
         $prijem = (float) $pohyby->where('type', 'income')->sum(fn (Transaction $t) => abs((float) ($t->amount_to ?? $t->amount_from)));
-        $vydaj = (float) $pohyby->where('type', '!=', 'income')->sum(fn (Transaction $t) => abs((float) $t->amount_from));
+        $vydaj = (float) $pohyby->where('type', 'expense')->sum(fn (Transaction $t) => abs((float) $t->amount_from));
+
+        /*
+         * Nejdražší a nejlevnější měsíc — z už spočítaných součtů.
+         *
+         * `prazdne()` obě pole slibuje, ale `rok()` je nevracel, takže v knize
+         * roku stálo natrvalo „Nejdražší měsíc —". Měsíční součty přitom leží
+         * o dva řádky vedle, takže to nestojí ani jeden dotaz navíc. Měsíce
+         * bez jediné útraty se nepočítají: „nejlevnější byl leden (0 Kč)"
+         * o ničem nevypovídá.
+         */
+        $neprazdne = array_values(array_filter($mesice, fn (array $m) => (int) ($m[1] ?? 0) > 0));
+        $castky = array_column($neprazdne, 1);
 
         return [
             'income' => (int) round($prijem),
             'spent' => (int) round($vydaj),
             'saved' => (int) round($prijem - $vydaj),
+            'worst' => $castky ? (string) $neprazdne[array_search(max($castky), $castky, true)][0] : '',
+            'best' => $castky ? (string) $neprazdne[array_search(min($castky), $castky, true)][0] : '',
         ];
     }
 
@@ -902,7 +957,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('excluded_from_budget', false)
             ->whereBetween('occurred_at', [$od, $do])
             ->selectRaw('category_id, SUM(ABS(amount_from)) AS castka')
@@ -934,7 +989,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
          */
         $od = $dnes->startOfMonth();
 
-        if (Schema::hasTable('budget_settlements')) {
+        if (Tabulky::je('budget_settlements')) {
             $posledni = DB::table('budget_settlements as v')
                 ->join('budgets as r', 'r.id', '=', 'v.budget_id')
                 ->where('r.gallery_space_id', $prostor->id)
@@ -950,9 +1005,17 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->leftJoin('finance_categories as k', 'k.id', '=', 't.category_id')
             ->where('t.gallery_space_id', $prostor->id)
             ->where('t.type', 'expense')
+            ->whereIn('t.state', Transaction::ZAPSANE)
             ->whereNull('t.deleted_at')
             ->where('t.excluded_from_budget', false)
-            ->whereBetween('t.occurred_at', [$od->toDateString(), $dnes->endOfMonth()->toDateString()])
+            /*
+             * Do konce dne, ne k jeho půlnoci.
+             *
+             * `occurred_at` nese i čas, takže horní mez `'2026-09-30'` uřízla
+             * celý poslední den měsíce: třicátého se z „kdo co zaplatil"
+             * ztratily všechny ten den zapsané útraty.
+             */
+            ->whereBetween('t.occurred_at', [$od->startOfDay(), $dnes->endOfMonth()->endOfDay()])
             ->selectRaw('COALESCE(p.user_id, t.created_by) AS kdo, COALESCE(k.name, ?) AS kategorie, SUM(ABS(t.amount_from)) AS castka', ['Nezařazeno'])
             ->groupBy('kdo', 'kategorie')
             ->orderByDesc('castka')
@@ -1072,7 +1135,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nazvyKategorii(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('finance_categories')) {
+        if (! Tabulky::je('finance_categories')) {
             return [];
         }
 
@@ -1107,7 +1170,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $jmena = System::jmenaClenu($prostor);
 
-        if ($jmena === [] || ! Schema::hasTable('partners')) {
+        if ($jmena === [] || ! Tabulky::je('partners')) {
             return [];
         }
 
@@ -1187,6 +1250,34 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
+     * Od kdy do kdy seznam sahá — „září 2026" nebo „červenec – září 2026".
+     *
+     * @param  Collection<int, Transaction>  $pohyby
+     */
+    private function obdobi(Collection $pohyby): string
+    {
+        $data = $pohyby->map(fn (Transaction $t) => CarbonImmutable::parse($t->occurred_at ?? $t->booked_on ?? Cas::dnes()));
+        $od = $data->min();
+        $do = $data->max();
+
+        if ($od === null || $do === null) {
+            return '';
+        }
+
+        if ($od->format('Y-m') === $do->format('Y-m')) {
+            return $this->mesic($do);
+        }
+
+        $jmena = [1 => 'leden', 'únor', 'březen', 'duben', 'květen', 'červen',
+            'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec'];
+
+        // V rámci jednoho roku stačí rok napsat jednou.
+        return $od->year === $do->year
+            ? $jmena[$od->month].' – '.$jmena[$do->month].' '.$do->year
+            : $this->mesic($od).' – '.$this->mesic($do);
+    }
+
+    /**
      * Částka i s měnou rozpočtu.
      *
      * Makinčin rozpočet na Německo je v eurech; napsat u něj „zbývá 60 Kč" by byla
@@ -1203,7 +1294,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vyrovnani(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('budget_settlements') || ! Schema::hasTable('budgets')) {
+        if (! Tabulky::je('budget_settlements') || ! Tabulky::je('budgets')) {
             return [];
         }
 

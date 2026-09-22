@@ -8,10 +8,10 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 
 /**
@@ -214,7 +214,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function filmy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('watch_titles')) {
+        if (! Tabulky::je('watch_titles')) {
             return [];
         }
 
@@ -228,7 +228,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $hodnoceni = Schema::hasTable('watch_title_ratings')
+        $hodnoceni = Tabulky::je('watch_title_ratings')
             ? DB::table('watch_title_ratings')->whereIn('watch_title_id', $tituly->pluck('id'))->get()->groupBy('watch_title_id')
             : collect();
 
@@ -305,9 +305,11 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         $casti = [];
 
         if ($t->episodes_done !== null && $t->episodes_total) {
+            // Sérii aplikace nikde neeviduje — `watch_titles` má jen díly.
+            // „S1E7" tvrdilo o každém seriálu, že jde o první řadu.
             $casti[] = (int) $t->episodes_done >= (int) $t->episodes_total
-                ? 'dokoukáno · '.$t->episodes_total.' dílů'
-                : 'S1E'.$t->episodes_done.' · sledujeme';
+                ? 'dokoukáno · '.$this->pocet((int) $t->episodes_total, 'díl', 'díly', 'dílů')
+                : $this->pocet((int) $t->episodes_done, 'díl', 'díly', 'dílů').' z '.(int) $t->episodes_total.' · sledujeme';
         } elseif ($t->status === 'probíhá') {
             $casti[] = 'sledujeme';
         } else {
@@ -427,7 +429,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             ];
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             $platby = DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereBetween('occurred_at', [$od, $do])
@@ -449,7 +451,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             $zapisy = DB::table('journal_entries')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereDate('entry_date', $den->toDateString())
@@ -489,9 +491,19 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             $kdy = CarbonImmutable::parse($m->taken_at);
             $misto = (string) ($m->location_name ?? '');
 
+            /*
+             * Mezera mezi snímky se měří odspoda nahoru.
+             *
+             * Carbon 3 vrací rozdíl **se znaménkem**: pozdější okamžik proti
+             * dřívějšímu dá zápor. Fotky sem chodí seřazené podle času, takže
+             * `$kdy->diffInMinutes($aktualni['do'])` bylo vždycky ≤ 0 a shluk
+             * nikdy nerozdělil čas — jen změna místa. Celý den se tím slil do
+             * jednoho „momentu" a rekonstrukce dne pak neměla dost kroků, aby
+             * vůbec vznikla.
+             */
             $novy = $aktualni === null
                 || $misto !== $aktualni['misto']
-                || $kdy->diffInMinutes($aktualni['do']) > 30;
+                || $aktualni['do']->diffInMinutes($kdy) > 30;
 
             if ($novy) {
                 if ($aktualni !== null) {
@@ -580,9 +592,11 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         ));
 
         return implode(', ', array_filter([
-            isset($podle['fotky']) ? $this->pocet($podle['fotky'], 'shluku fotek', 'shluků fotek', 'shluků fotek') : null,
-            isset($podle['transakce']) ? $this->pocet($podle['transakce'], 'platby', 'plateb', 'plateb') : null,
-            isset($podle['denik']) ? $this->pocet($podle['denik'], 'zápisu', 'zápisů', 'zápisů') : null,
+            // Jednotné číslo bylo ve všech třech tvarech v druhém pádu:
+            // „1 shluku fotek, 1 platby, 1 zápisu".
+            isset($podle['fotky']) ? $this->pocet($podle['fotky'], 'shluk fotek', 'shluky fotek', 'shluků fotek') : null,
+            isset($podle['transakce']) ? $this->pocet($podle['transakce'], 'platba', 'platby', 'plateb') : null,
+            isset($podle['denik']) ? $this->pocet($podle['denik'], 'zápis', 'zápisy', 'zápisů') : null,
         ]));
     }
 
@@ -613,7 +627,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function kapitoly(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_story_chapters')) {
+        if (! Tabulky::je('couple_story_chapters')) {
             return [];
         }
 
@@ -656,7 +670,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function milniky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_story_milestones')) {
+        if (! Tabulky::je('couple_story_milestones')) {
             return [];
         }
 
@@ -693,7 +707,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function objednavky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('print_orders')) {
+        if (! Tabulky::je('print_orders')) {
             return [];
         }
 
@@ -730,7 +744,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nouzovePolozky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('emergency_access_items')) {
+        if (! Tabulky::je('emergency_access_items')) {
             return [];
         }
 
@@ -756,7 +770,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nouzovyProtokol(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('emergency_access_log')) {
+        if (! Tabulky::je('emergency_access_log')) {
             return [];
         }
 
@@ -780,7 +794,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function papir(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('paper_backup_rows')) {
+        if (! Tabulky::je('paper_backup_rows')) {
             return [];
         }
 
@@ -809,7 +823,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function komentareHostu(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('guest_comments')) {
+        if (! Tabulky::je('guest_comments')) {
             return [];
         }
 
@@ -857,7 +871,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function tierlisty(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('watch_titles')) {
+        if (! Tabulky::je('watch_titles')) {
             return [];
         }
 
@@ -936,7 +950,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $zapisy = $this->zapisyPoRocich($prostor);
-        $cesty = Schema::hasTable('trips')
+        $cesty = Tabulky::je('trips')
             ? DB::table('trips')->where('gallery_space_id', $prostor->id)->get(['start_date', 'end_date'])
             : collect();
 
@@ -973,7 +987,7 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array<string, int> */
     private function zapisyPoRocich(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('journal_entries')) {
+        if (! Tabulky::je('journal_entries')) {
             return [];
         }
 

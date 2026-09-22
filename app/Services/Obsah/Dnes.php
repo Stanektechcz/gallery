@@ -4,10 +4,10 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -31,7 +31,7 @@ use Illuminate\Support\Facades\URL;
  *     navrhy:   [{ id, icon, title, body, cta, route, album }]
  *     aktivita: [[iniciála, text, kdy, náhled]]
  */
-class Dnes implements PoskytovatelObsahu
+class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const MESICE = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června',
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
@@ -54,9 +54,35 @@ class Dnes implements PoskytovatelObsahu
         return ['DNES'];
     }
 
+    /**
+     * Prázdný dnešek.
+     *
+     * Bez tohohle zůstane úvodní obrazovka na ukázce, kdykoli `kolekce()`
+     * vrátí `[]` — galerie bez tabulky médií, spadlý dotaz. Všechny části
+     * úvodní obrazovky se čtou jako „něco nebo nic", takže prázdno je `null`
+     * a seznam `[]`; obrazovka si pro každou z nich kreslí vlastní větu.
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'DNES' => [
+                'nahrani' => null,
+                'vyroci' => [],
+                'archiv' => [],
+                'rytmus' => null,
+                'cil' => null,
+                'den' => ['nadpis' => 'dnes', 'radky' => []],
+                'navrhy' => [],
+                'aktivita' => [],
+            ],
+        ];
+    }
+
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('media_items')) {
+        if (! Tabulky::je('media_items')) {
             return [];
         }
 
@@ -100,7 +126,7 @@ class Dnes implements PoskytovatelObsahu
             ->get(['id', 'status', 'primary_album_id']);
 
         $albumId = $davka->pluck('primary_album_id')->filter()->countBy()->sortDesc()->keys()->first();
-        $album = $albumId && Schema::hasTable('albums')
+        $album = $albumId && Tabulky::je('albums')
             ? DB::table('albums')->where('id', $albumId)->whereNull('deleted_at')->first(['uuid', 'title', 'full_display_path'])
             : null;
         $hotovo = $davka->where('status', 'ready')->count();
@@ -168,7 +194,7 @@ class Dnes implements PoskytovatelObsahu
                 (string) ($fotka->caption ?? ''), $this->nahled($fotka), 'all'];
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             $vydaj = DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)->where('type', 'expense')->whereNull('deleted_at')
                 ->whereMonth('occurred_at', $dnes->month)->whereDay('occurred_at', $dnes->day)->whereYear('occurred_at', '<', $dnes->year)
@@ -183,7 +209,7 @@ class Dnes implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             $ja = auth()->id();
             $zapis = DB::table('journal_entries')
                 ->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
@@ -199,7 +225,7 @@ class Dnes implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('calendar_events')) {
+        if (Tabulky::je('calendar_events')) {
             $udalost = DB::table('calendar_events')
                 ->where('gallery_space_id', $prostor->id)->where('is_private', false)
                 ->whereMonth('starts_at', $dnes->month)->whereDay('starts_at', $dnes->day)->whereYear('starts_at', '<', $dnes->year)
@@ -228,11 +254,11 @@ class Dnes implements PoskytovatelObsahu
      */
     private function rytmus(GallerySpace $prostor, CarbonImmutable $dnes): ?array
     {
-        $od = Schema::hasTable('relationship_milestones')
+        $od = Tabulky::je('relationship_milestones')
             ? DB::table('relationship_milestones')->where('gallery_space_id', $prostor->id)->where('visibility', '!=', 'private')->min('occurred_on')
             : null;
 
-        $cesty = Schema::hasTable('trips')
+        $cesty = Tabulky::je('trips')
             ? DB::table('trips')->where('gallery_space_id', $prostor->id)
                 ->whereDate('end_date', '>=', $dnes->startOfYear()->toDateString())
                 ->whereDate('start_date', '<=', $dnes->toDateString())
@@ -265,7 +291,7 @@ class Dnes implements PoskytovatelObsahu
     /** @return array<string, mixed>|null */
     private function cil(GallerySpace $prostor): ?array
     {
-        if (! Schema::hasTable('budget_goals')) {
+        if (! Tabulky::je('budget_goals')) {
             return null;
         }
 
@@ -361,7 +387,7 @@ class Dnes implements PoskytovatelObsahu
                 $this->pocet($hodina->count(), 'fotka', 'fotky', 'fotek').($misto ? ' · '.$misto : ''), 'all', $this->nahled($prvni)];
         }
 
-        if (Schema::hasTable('chat_messages')) {
+        if (Tabulky::je('chat_messages')) {
             DB::table('chat_messages')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
                 ->where('created_at', '>=', $odUtc)->where('created_at', '<', $doUtc)
                 ->orderBy('created_at')->limit(4)
@@ -373,7 +399,7 @@ class Dnes implements PoskytovatelObsahu
                 });
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             DB::table('transactions')->where('gallery_space_id', $prostor->id)->where('type', 'expense')->whereNull('deleted_at')
                 ->whereDate('occurred_at', $od->toDateString())
                 ->orderBy('created_at')->limit(4)
@@ -386,7 +412,7 @@ class Dnes implements PoskytovatelObsahu
                 });
         }
 
-        if (Schema::hasTable('shared_todos')) {
+        if (Tabulky::je('shared_todos')) {
             DB::table('shared_todos')->where('gallery_space_id', $prostor->id)->where('status', 'completed')
                 ->where('completed_at', '>=', $odUtc)->where('completed_at', '<', $doUtc)
                 ->orderBy('completed_at')->limit(4)
@@ -396,7 +422,7 @@ class Dnes implements PoskytovatelObsahu
                 });
         }
 
-        if (Schema::hasTable('voice_notes')) {
+        if (Tabulky::je('voice_notes')) {
             DB::table('voice_notes')->where('gallery_space_id', $prostor->id)
                 ->where('created_at', '>=', $odUtc)->where('created_at', '<', $doUtc)
                 ->orderBy('created_at')->limit(3)
@@ -407,7 +433,7 @@ class Dnes implements PoskytovatelObsahu
                 });
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             $ja = auth()->id();
             DB::table('journal_entries')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
                 ->where(fn ($q) => $q->where('visibility', '!=', 'private')->orWhere('created_by', $ja))
@@ -461,7 +487,7 @@ class Dnes implements PoskytovatelObsahu
             ];
         }
 
-        if (Schema::hasTable('duplicate_groups')) {
+        if (Tabulky::je('duplicate_groups')) {
             $skupin = DB::table('duplicate_groups')->where('gallery_space_id', $prostor->id)->whereNull('resolved_at')->count();
 
             if ($skupin > 0) {
@@ -477,7 +503,7 @@ class Dnes implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             $dnySFotkami = $this->media($prostor)->where('taken_at', '>=', $dnes->subDays(7)->startOfDay())->where('taken_at', '<', $dnes->startOfDay())
                 ->get(['taken_at'])
                 ->countBy(fn ($f) => CarbonImmutable::parse($f->taken_at)->toDateString())
@@ -517,7 +543,7 @@ class Dnes implements PoskytovatelObsahu
      */
     private function aktivita(GallerySpace $prostor, array $jmena, CarbonImmutable $dnes): array
     {
-        if (! Schema::hasTable('audit_logs') || $jmena === []) {
+        if (! Tabulky::je('audit_logs') || $jmena === []) {
             return [];
         }
 
@@ -535,6 +561,19 @@ class Dnes implements PoskytovatelObsahu
         $zaznamy = DB::table('audit_logs')
             ->whereIn('user_id', array_keys($jmena))
             ->whereIn('action', array_keys($popisy))
+            /*
+             * Jen tahle galerie.
+             *
+             * Filtr na členy prostoru nestačí: kdo je ve dvou galeriích,
+             * viděl v jedné, co nahrál do druhé — včetně jména souboru
+             * v textu řádku. Sloupec je od září 2026, takže starší záznamy
+             * ho nemají a do přehledu se nepočítají; dohledat by se dal
+             * jen u předmětů, které ještě existují.
+             */
+            ->when(
+                Tabulky::sloupec('audit_logs', 'gallery_space_id'),
+                fn ($q) => $q->where('gallery_space_id', $prostor->id),
+            )
             ->orderByDesc('created_at')
             ->limit(200)
             ->get(['user_id', 'action', 'subject_type', 'subject_id', 'payload', 'created_at']);
@@ -670,7 +709,7 @@ class Dnes implements PoskytovatelObsahu
     {
         $id = array_values(array_diff(array_map('intval', $id), array_keys($this->nahledy)));
 
-        if (! $id || ! Schema::hasTable('media_variants')) {
+        if (! $id || ! Tabulky::je('media_variants')) {
             return;
         }
 

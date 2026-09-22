@@ -6,10 +6,10 @@ use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\WellbeingMood;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Cyklus a nálada ve tvaru, ve kterém je kreslí prototyp.
@@ -51,6 +51,9 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
     public function prazdne(): array
     {
         return [
+            // Bez tohohle klíče zůstalo na obrazovce ukázkové nastavení sdílení
+            // cyklu — a to je přesně ta věc, u které se nikdo nesmí splést.
+            'CYC_NASTAVENI' => new \stdClass,
             'CYC_BASE' => new \stdClass,
             'CYC_STARTS' => [],
             'KL_MOOD' => new \stdClass,
@@ -62,7 +65,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        $dny = Schema::hasTable('cycle_days') ? $this->dny($prostor) : collect();
+        $dny = Tabulky::je('cycle_days') ? $this->dny($prostor) : collect();
 
         $zacatky = $this->zacatky($dny);
         $nalady = $this->nalady($prostor);
@@ -94,7 +97,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $ja = auth()->id();
 
-        if (! $ja || ! Schema::hasTable('cycle_settings')) {
+        if (! $ja || ! Tabulky::je('cycle_settings')) {
             return null;
         }
 
@@ -122,7 +125,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderBy('day')
             ->get();
 
-        $urovne = Schema::hasTable('cycle_settings')
+        $urovne = Tabulky::je('cycle_settings')
             ? CycleSetting::where('gallery_space_id', $prostor->id)->pluck('share_level', 'user_id')
             : collect();
 
@@ -312,7 +315,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
         $poradi = fn ($kdy) => (int) $od->diffInDays(CarbonImmutable::parse($kdy)->startOfDay());
         $udalosti = [];
 
-        if (Schema::hasTable('calendar_events')) {
+        if (Tabulky::je('calendar_events')) {
             $kalendar = DB::table('calendar_events')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('starts_at', '>=', $od)
@@ -339,7 +342,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('trips')) {
+        if (Tabulky::je('trips')) {
             $cesty = DB::table('trips')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('end_date', '>=', $od)
@@ -373,7 +376,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function dnyPresLimit(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('budget_category_limits') || ! Schema::hasTable('transactions')) {
+        if (! Tabulky::je('budget_category_limits') || ! Tabulky::je('transactions')) {
             return [];
         }
 
@@ -432,7 +435,7 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function nalady(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_moods')) {
+        if (! Tabulky::je('wellbeing_moods')) {
             return [];
         }
 

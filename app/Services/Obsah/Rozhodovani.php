@@ -3,8 +3,8 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Čtyři věci na obrazovkách rozhodování, které aplikace vědět nemůže.
@@ -90,7 +90,7 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function krytiDomacnosti(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_bus_items')) {
+        if (! Tabulky::je('couple_bus_items')) {
             return [];
         }
 
@@ -128,7 +128,7 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function premortem(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_premortems')) {
+        if (! Tabulky::je('couple_premortems')) {
             return [];
         }
 
@@ -221,7 +221,7 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function minulost(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_past_cases')) {
+        if (! Tabulky::je('couple_past_cases')) {
             return [];
         }
 
@@ -267,7 +267,7 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vstupyRozhodnuti(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_decision_inputs') || ! Schema::hasTable('couple_decisions')) {
+        if (! Tabulky::je('couple_decision_inputs') || ! Tabulky::je('couple_decisions')) {
             return [];
         }
 

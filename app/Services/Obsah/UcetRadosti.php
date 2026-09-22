@@ -3,9 +3,9 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Účet radosti: co doopravdy vyrobilo dobré dny — a za kolik.
@@ -35,7 +35,7 @@ class UcetRadosti
      */
     public function spocitej(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('calendar_events') || ! Schema::hasTable('wellbeing_moods')) {
+        if (! Tabulky::je('calendar_events') || ! Tabulky::je('wellbeing_moods')) {
             return [];
         }
 
@@ -205,7 +205,7 @@ class UcetRadosti
      */
     private function utrataPoDnech(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('transactions')) {
+        if (! Tabulky::je('transactions')) {
             return [];
         }
 

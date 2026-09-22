@@ -9,9 +9,9 @@ use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use App\Models\HousePantryItem;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Domácnost ve tvaru, ve kterém ji kreslí prototyp.
@@ -83,13 +83,16 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
             'HOUSE_DUES' => [],
             'HOUSE_INV' => [],
             'PANTRY' => [],
+            // `kolekce()` `ABARS.cap` posílá, `prazdne()` o něm mlčelo — po
+            // smazání posledního týdne zůstaly na telefonu ukázkové sloupce.
+            'ABARS' => ['cap' => []],
             'MOBIL' => ['HOUSE_CHORES' => [], 'HOUSE_LOG' => [], 'HOUSE_WEEK' => [], 'HOUSE_DUES' => [], 'HOUSE_INV' => [], 'MPANTRY' => []],
         ];
     }
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('house_chores')) {
+        if (! Tabulky::je('house_chores')) {
             return [];
         }
 
@@ -245,11 +248,11 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
         $pondeli = CarbonImmutable::now()->startOfWeek();
         $obsazeno = $this->obsazenost($prostor, $pondeli);
 
-        $dny = Schema::hasTable('house_week')
+        $dny = Tabulky::je('house_week')
             ? DB::table('house_week')->where('gallery_space_id', $prostor->id)->get()->keyBy('weekday')
             : collect();
 
-        $opravy = $dny->isNotEmpty() && Schema::hasTable('house_week_capacity')
+        $opravy = $dny->isNotEmpty() && Tabulky::je('house_week_capacity')
             ? DB::table('house_week_capacity')->whereIn('house_week_id', $dny->pluck('id'))->get()->groupBy('house_week_id')
             : collect();
 
@@ -306,7 +309,7 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function obsazenost(GallerySpace $prostor, CarbonImmutable $pondeli): array
     {
-        if (! Schema::hasTable('calendar_events') || ! Schema::hasTable('event_participants')) {
+        if (! Tabulky::je('calendar_events') || ! Tabulky::je('event_participants')) {
             return [];
         }
 

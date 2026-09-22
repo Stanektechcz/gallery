@@ -3,9 +3,9 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Mlčky platná pravidla — vzorce, které aplikace najde v tom, co se opravdu děje.
@@ -65,7 +65,7 @@ class TichaPravidla
      */
     private function delbaPrace(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('house_chore_log')) {
+        if (! Tabulky::je('house_chore_log')) {
             return [];
         }
 
@@ -173,7 +173,7 @@ class TichaPravidla
      */
     private function klidNaPenize(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('transactions')) {
+        if (! Tabulky::je('transactions')) {
             return [];
         }
 
@@ -216,7 +216,7 @@ class TichaPravidla
      */
     private function velkyNakupSeRekne(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('transactions') || ! Schema::hasTable('couple_cooling_purchases')) {
+        if (! Tabulky::je('transactions') || ! Tabulky::je('couple_cooling_purchases')) {
             return [];
         }
 
@@ -285,7 +285,7 @@ class TichaPravidla
      */
     private function denBezPlanu(GallerySpace $prostor, CarbonImmutable $od): array
     {
-        if (! Schema::hasTable('calendar_events')) {
+        if (! Tabulky::je('calendar_events')) {
             return [];
         }
 

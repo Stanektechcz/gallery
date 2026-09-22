@@ -5,9 +5,9 @@ namespace App\Services\Obsah;
 use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Zápisy z deníku, milníky a záznamy cyklu — pro obrazovku „co o nás víme".
@@ -80,7 +80,7 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function hlasovky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('voice_notes')) {
+        if (! Tabulky::je('voice_notes')) {
             return [];
         }
 
@@ -133,7 +133,7 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function zapisy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('journal_entries')) {
+        if (! Tabulky::je('journal_entries')) {
             return [];
         }
 
@@ -141,7 +141,7 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return DB::table('journal_entries')
             ->where('gallery_space_id', $prostor->id)
-            ->when(Schema::hasColumn('journal_entries', 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
+            ->when(Tabulky::sloupec('journal_entries', 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
             // Cizí soukromý zápis není nic, co by měla obrazovka ukazovat.
             ->where(fn ($q) => $q->where('created_by', $ja)->orWhere('visibility', '!=', 'private'))
             ->orderByDesc('entry_date')
@@ -173,7 +173,7 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function milniky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('relationship_milestones')) {
+        if (! Tabulky::je('relationship_milestones')) {
             return [];
         }
 
@@ -220,13 +220,13 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cyklus(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('cycle_days')) {
+        if (! Tabulky::je('cycle_days')) {
             return [];
         }
 
         $ja = auth()->id();
 
-        $urovne = Schema::hasTable('cycle_settings')
+        $urovne = Tabulky::je('cycle_settings')
             ? CycleSetting::where('gallery_space_id', $prostor->id)->pluck('share_level', 'user_id')
             : collect();
 

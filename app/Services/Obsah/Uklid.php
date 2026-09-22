@@ -5,10 +5,10 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Karanténa, výběry fotek a rozpracovaný tisk.
@@ -403,7 +403,7 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function zakazky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('photo_books')) {
+        if (! Tabulky::je('photo_books')) {
             return [];
         }
 

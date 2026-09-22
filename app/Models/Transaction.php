@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
@@ -32,6 +33,9 @@ class Transaction extends Model
 
     public const TYPES = [...self::VYSLEDKOVE, ...self::PRESUNY];
 
+    /** Stavy, ve kterých je zápis hotová věc a smí se počítat. */
+    public const ZAPSANE = ['approved', 'settled'];
+
     protected $fillable = [
         'uuid', 'client_key', 'gallery_space_id', 'type', 'occurred_at', 'booked_on',
         'wallet_from_id', 'wallet_to_id',
@@ -59,6 +63,37 @@ class Transaction extends Model
             'excluded_from_budget' => 'boolean',
             'is_settlement' => 'boolean',
         ];
+    }
+
+    /**
+     * Zapsané pohyby — koncept ani zamítnutý zápis ještě nejsou peníze.
+     *
+     * Účetní kniha (`LedgerService`) čte vždycky jen `approved` a `settled`;
+     * obrazovky obsahu to nedělaly, takže rozepsaný nákup za 12 000 Kč měnil
+     * zůstatek, čerpání rozpočtu i předpověď — a po schválení se přičetl
+     * znovu. Táž peněženka pak na dvou obrazovkách ukazovala dvě čísla.
+     *
+     * @param  Builder<self>  $dotaz
+     * @return Builder<self>
+     */
+    public function scopeZapsane($dotaz)
+    {
+        return $dotaz->whereIn('state', self::ZAPSANE);
+    }
+
+    /**
+     * Skutečné útraty — ne příjem a ne přesun mezi vlastními peněženkami.
+     *
+     * `type != 'income'` znamenalo, že směna 80 000 Kč na eura i každý výběr
+     * z bankomatu nafoukly útraty po kategoriích, měsíční součty i „obvyklou
+     * útratu" — a tytéž peníze se počítaly podruhé, až se doopravdy utratily.
+     *
+     * @param  Builder<self>  $dotaz
+     * @return Builder<self>
+     */
+    public function scopeUtraty($dotaz)
+    {
+        return $dotaz->zapsane()->where('type', 'expense');
     }
 
     /**

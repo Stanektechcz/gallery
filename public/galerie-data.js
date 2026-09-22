@@ -435,10 +435,10 @@
     ]
   };
   const SCEN = [
-    { key: 'income', label: 'Příjem o 20 % nižší', note: 'Makinka jde na částečný úvazek.' },
-    { key: 'loan', label: 'Nová splátka 4 900 / měs.', note: 'Rekonstrukce koupelny na úvěr.' },
-    { key: 'parent', label: 'Rodičovská za půl roku', note: 'Jeden příjem klesne na 40 %.' },
-    { key: 'save', label: 'Zrušit dvě předplatná', note: 'Úspora 438 Kč měsíčně.' }
+    { key: 'income', label: 'Příjem o 20 % nižší', note: 'Makinka jde na částečný úvazek.', amt: 0 },
+    { key: 'loan', label: 'Modelová splátka 5 000 / měs.', note: 'Rekonstrukce koupelny na úvěr.', amt: 5000 },
+    { key: 'parent', label: 'Rodičovská za půl roku', note: 'Jeden příjem klesne na 40 %.', amt: 0 },
+    { key: 'save', label: 'Zrušit dvě předplatná', note: 'Úspora 438 Kč měsíčně.', amt: 438 }
   ];
   const EST = [
     { name: 'Rekonstrukce koupelny', who: 'Adrian', unit: 'kc', est: 60000, real: 84500 },

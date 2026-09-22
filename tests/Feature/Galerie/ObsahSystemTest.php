@@ -148,6 +148,28 @@ class ObsahSystemTest extends TestCase
         $this->assertSame('2 zaznamenané cykly', $r['where']);
     }
 
+    /**
+     * Cyklus druhého z dvojice se do přehledu nepočítá.
+     *
+     * `Zdravi` řeší souhlas se sdílením do detailu; tenhle řádek se ptal jen
+     * na prostor, takže „Délka cyklu · poslední začátek 3. 9." obešel celé to
+     * nastavení — a při dvou zapisujících prokládal dvě řady do jednoho
+     * průměru, ze kterého nevyšlo nic.
+     */
+    public function test_cyklus_partnera_se_nepocita(): void
+    {
+        $this->fotka();
+        $this->zacatekCyklu(now()->subDays(84), $this->maki);
+        $this->zacatekCyklu(now()->subDays(56), $this->maki);
+        $this->zacatekCyklu(now()->subDays(28), $this->maki);
+        $this->zacatekCyklu(now(), $this->maki);
+
+        $data = collect($this->getJson('/api/data/system')->assertOk()->json('data.DATA_HEALTH'))
+            ->pluck('label');
+
+        $this->assertNotContains('Délka cyklu', $data);
+    }
+
     /** Nesouměrná řada dá desetinné číslo — a to se čte „dne". */
     public function test_nesoumerna_rada_da_desetinnou_delku(): void
     {
@@ -436,11 +458,11 @@ class ObsahSystemTest extends TestCase
         ], $navic));
     }
 
-    private function zacatekCyklu($den): void
+    private function zacatekCyklu($den, ?User $kdo = null): void
     {
         DB::table('cycle_days')->insert([
             'uuid' => (string) Str::uuid(),
-            'user_id' => $this->maki->id,
+            'user_id' => ($kdo ?? $this->adri)->id,
             'gallery_space_id' => $this->prostor->id,
             'day' => $den->toDateString(),
             'is_cycle_start' => true,

@@ -3,9 +3,10 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Mechanismy pro dva, které si dvojice sama zapisuje.
@@ -70,6 +71,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
             'VIS_ROWS' => [],
             'SPEAK' => [],
             'TICHO' => [],
+            'HOURS' => [],
         ];
     }
 
@@ -90,7 +92,98 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
             'CAS_ROWS' => $this->casVersusSluzba($prostor, $jmena),
             'VIS_ROWS' => $this->neviditelnaPrace($prostor, $jmena),
             'SPEAK' => $this->kdoMluvi($prostor, $jmena),
+            'HOURS' => $this->pozdniVecery($prostor),
         ], fn ($v) => $v !== null && $v !== []);
+    }
+
+    /**
+     * Pozdní večery: `[{ label, n, reg }]` — kdy se věci zapisují a jak dopadly.
+     *
+     * `n` je kolik věcí v tom pásmu vzniklo, `reg` kolik z nich skončilo
+     * špatně. Obrazovka z toho počítá podíl a píše „X % věcí odtud skončilo
+     * špatně" — dřív to dostávala z knihovny, kde `n` byly fotky a `reg`
+     * počet dnů, kdy se fotilo. Tady jsou to věci, které opravdu mají
+     * pozdější osud:
+     *
+     * - **útrata**, ke které se později vrátily peníze (`refund_of_id`),
+     *   nebo která se smazala,
+     * - **rozhodnutí**, které dvojice později označila za „změněno".
+     *
+     * Bere se čas zápisu, ne datum události: zajímá nás, v kolik hodin se
+     * ta věc rozhodovala. Proto `created_at` a v pásmu dvojice.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function pozdniVecery(GallerySpace $prostor): array
+    {
+        /** @var list<array{0: int, 1: bool}> $udalosti */
+        $udalosti = [];
+
+        if (Tabulky::je('transactions')) {
+            $vracene = DB::table('transactions')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNotNull('refund_of_id')
+                ->pluck('refund_of_id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            DB::table('transactions')
+                ->where('gallery_space_id', $prostor->id)
+                ->where('type', 'expense')
+                ->whereNotNull('created_at')
+                ->orderByDesc('created_at')
+                ->limit(2000)
+                ->get(['id', 'created_at', 'deleted_at'])
+                ->each(function (object $t) use (&$udalosti, $vracene) {
+                    $kdy = Cas::mistni($t->created_at);
+
+                    if ($kdy !== null) {
+                        $udalosti[] = [(int) $kdy->hour, in_array((int) $t->id, $vracene, true) || $t->deleted_at !== null];
+                    }
+                });
+        }
+
+        if (Tabulky::je('couple_decisions')) {
+            DB::table('couple_decisions')
+                ->where('gallery_space_id', $prostor->id)
+                ->whereNotNull('created_at')
+                ->orderByDesc('created_at')
+                ->limit(500)
+                ->get(['created_at', 'status'])
+                ->each(function (object $r) use (&$udalosti) {
+                    $kdy = Cas::mistni($r->created_at);
+
+                    if ($kdy !== null) {
+                        $udalosti[] = [(int) $kdy->hour, (string) $r->status === 'změněno'];
+                    }
+                });
+        }
+
+        if ($udalosti === []) {
+            return [];
+        }
+
+        // Popisky musí sedět s tím, co obrazovka hledá jako „pozdní" —
+        // dřív posílala „po 22:00", klient filtruje „22–24", takže nadpis
+        // hlásil natrvalo nula procent.
+        $pasma = [['do 12:00', 0, 12], ['12–17', 12, 17], ['17–20', 17, 20], ['20–22', 20, 22], ['22–24', 22, 24]];
+        $radky = [];
+
+        foreach ($pasma as [$popis, $od, $do]) {
+            $vPasmu = array_filter($udalosti, fn (array $u) => $u[0] >= $od && $u[0] < $do);
+
+            if ($vPasmu === []) {
+                continue;
+            }
+
+            $radky[] = [
+                'label' => $popis,
+                'n' => count($vPasmu),
+                'reg' => count(array_filter($vPasmu, fn (array $u) => $u[1])),
+            ];
+        }
+
+        return $radky;
     }
 
     /**
@@ -109,7 +202,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function neviditelnaPrace(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_outreach_log') || ! Schema::hasTable('couple_family_contacts')) {
+        if (! Tabulky::je('couple_outreach_log') || ! Tabulky::je('couple_family_contacts')) {
             return [];
         }
 
@@ -166,7 +259,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function kdoMluvi(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_outreach_log')) {
+        if (! Tabulky::je('couple_outreach_log')) {
             return [];
         }
 
@@ -221,7 +314,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function casVersusSluzba(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('house_chore_log')) {
+        if (! Tabulky::je('house_chore_log')) {
             return [];
         }
 
@@ -268,7 +361,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function laskavosti(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_favours')) {
+        if (! Tabulky::je('couple_favours')) {
             return [];
         }
 
@@ -297,7 +390,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function odpustene(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_forgiven')) {
+        if (! Tabulky::je('couple_forgiven')) {
             return [];
         }
 
@@ -326,7 +419,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function antiRozpocet(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_anti_budget')) {
+        if (! Tabulky::je('couple_anti_budget')) {
             return [];
         }
 
@@ -359,7 +452,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function mentalniZatez(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_mental_load')) {
+        if (! Tabulky::je('couple_mental_load')) {
             return [];
         }
 
@@ -390,7 +483,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rodina(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_family_contacts')) {
+        if (! Tabulky::je('couple_family_contacts')) {
             return [];
         }
 
@@ -430,7 +523,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pravdy(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_truths')) {
+        if (! Tabulky::je('couple_truths')) {
             return [];
         }
 
@@ -464,7 +557,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pauzy(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('couple_pause')) {
+        if (! Tabulky::je('couple_pause')) {
             return [];
         }
 
@@ -498,7 +591,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pravidlaPauzy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('couple_pause')) {
+        if (! Tabulky::je('couple_pause')) {
             return [];
         }
 
@@ -526,7 +619,7 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
         $radky = [];
 
         foreach (self::SEKCE as [$nazev, $cesta, $tabulka, $sloupec]) {
-            if (! Schema::hasTable($tabulka)) {
+            if (! Tabulky::je($tabulka)) {
                 continue;
             }
 

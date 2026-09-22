@@ -3,10 +3,11 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Klid a pohoda: mapa energie, rozpočet pozornosti, co čeká na okno
@@ -38,6 +39,17 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
         ['byt', 'Byt a provoz', 12, 'chores', 'Dělba práce, lhůty, inventář.', 'x-domacnost', 'chores'],
         ['penize', 'Peníze a papíry', 8, 'money', 'Transakce, rozpočty, splátky.', 'x-finance', null],
         ['sam', 'Každý sám za sebe', 14, 'none', 'Nejmenší položka — a nikdo ji nehájí.', null, null],
+    ];
+
+    /**
+     * Měřítka, která ve skutečnosti přepočítávají počet položek na čas —
+     * a obrazovka to u nich musí napsat.
+     *
+     * @var array<string, string>
+     */
+    private const ODHADEM = [
+        'dates' => 'počítá se půl hodiny za každý zápis v deníku',
+        'money' => 'počítá se pět minut za každý zapsaný pohyb',
     ];
 
     public function __construct(private readonly UcetRadosti $radost) {}
@@ -102,7 +114,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function casProSebe(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('calendar_events') || ! Schema::hasTable('event_participants')) {
+        if (! Tabulky::je('calendar_events') || ! Tabulky::je('event_participants')) {
             return [];
         }
 
@@ -112,13 +124,13 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $od = CarbonImmutable::now()->startOfWeek()->subWeeks(5);
+        $od = Cas::dnes()->startOfWeek()->subWeeks(5);
 
         $udalosti = DB::table('calendar_events as u')
             ->join('event_participants as ucast', 'ucast.event_id', '=', 'u.id')
             ->where('u.gallery_space_id', $prostor->id)
             ->where('u.starts_at', '>=', $od)
-            ->get(['u.id', 'u.starts_at', 'ucast.user_id'])
+            ->get(['u.id', 'u.starts_at', 'u.ends_at', 'u.all_day', 'ucast.user_id'])
             ->groupBy('id');
 
         if ($udalosti->isEmpty()) {
@@ -133,16 +145,28 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
                 continue;
             }
 
-            $kdo = (int) $ucastnici->first()->user_id;
-            $tyden = CarbonImmutable::parse($ucastnici->first()->starts_at)->startOfWeek();
+            $udalost = $ucastnici->first();
+            $kdo = (int) $udalost->user_id;
+            $tyden = CarbonImmutable::parse($udalost->starts_at)->startOfWeek();
             $klic = $tyden->format('Y-m-d');
 
-            $tydny[$klic] ??= ['week' => $tyden->format('j. n.'), 'a' => 0, 'k' => 0];
+            $tydny[$klic] ??= ['week' => $tyden->format('j. n.'), 'a' => 0.0, 'k' => 0.0];
+
+            /*
+             * Sčítá se **doba**, ne počet položek.
+             *
+             * Obrazovka kreslí „3 h" a dělí výšku sloupce šesti hodinami.
+             * Tady se přitom přičítala jednička za událost, takže tři
+             * dvacetiminutové procházky znamenaly tři hodiny — a celodenní
+             * výlet taky jednu. Z toho pak vycházel i signál vyhoření
+             * a věta „N týdnů bez hodiny pro sebe".
+             */
+            $hodin = $this->hodinUdalosti($udalost);
 
             if ($kdo === $prvni) {
-                $tydny[$klic]['a']++;
+                $tydny[$klic]['a'] += $hodin;
             } elseif ($kdo === $druhy) {
-                $tydny[$klic]['k']++;
+                $tydny[$klic]['k'] += $hodin;
             }
         }
 
@@ -152,7 +176,35 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
 
         ksort($tydny);
 
-        return array_values($tydny);
+        return array_values(array_map(fn (array $t) => [
+            'week' => $t['week'],
+            'a' => round($t['a'], 1),
+            'k' => round($t['k'], 1),
+        ], $tydny));
+    }
+
+    /**
+     * Kolik hodin ta událost zabrala.
+     *
+     * Bez konce se počítá hodina — tolik trvá běžný zápis v kalendáři a je
+     * to míň než den, takže se tím nic nenafoukne. Celodenní položka stojí
+     * osm hodin: „celý den pro sebe" nejsou čtyřiadvacet hodin volna, ale
+     * ani hodina. Nic z toho nepřeteče přes den.
+     */
+    private function hodinUdalosti(object $udalost): float
+    {
+        if ((bool) ($udalost->all_day ?? false)) {
+            return 8.0;
+        }
+
+        $od = Cas::mistni($udalost->starts_at);
+        $do = Cas::mistni($udalost->ends_at ?? null);
+
+        if ($od === null || $do === null || ! $do->greaterThan($od)) {
+            return 1.0;
+        }
+
+        return min(24.0, round($od->diffInMinutes($do) / 60, 2));
     }
 
     /**
@@ -168,12 +220,21 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function dnesniOtazka(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_answers')) {
+        if (! Tabulky::je('wellbeing_answers')) {
             return [];
         }
 
         $ja = auth()->id();
-        $dnes = CarbonImmutable::now()->toDateString();
+
+        /*
+         * Dnešek dvojice, ne serveru.
+         *
+         * Zapisuje se `Cas::dnes()`, čte se `now()` v UTC — mezi půlnocí
+         * a druhou hodinou ranní pražského času to jsou dvě různá data.
+         * Kdo odpověděl o půl jedné, o svou odpověď přišel a při dalším
+         * pokusu narazil na jedinečný klíč v databázi.
+         */
+        $dnes = Cas::dnes()->toDateString();
 
         $dnesni = DB::table('wellbeing_answers')
             ->where('gallery_space_id', $prostor->id)
@@ -209,7 +270,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function energie(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_energy')) {
+        if (! Tabulky::je('wellbeing_energy')) {
             return [];
         }
 
@@ -249,7 +310,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pozornost(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_attention')) {
+        if (! Tabulky::je('wellbeing_attention')) {
             return [];
         }
 
@@ -283,9 +344,17 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
                 'name' => $r['name'],
                 'want' => $r['want'],
                 'real' => $merene === null ? 0 : (int) round($merene / $celkem * 100),
+                /*
+                 * U odhadu se to musí říct.
+                 *
+                 * Dvě z pěti měřítek nejsou měření, ale přepočet počtu
+                 * položek na minuty (zápis v deníku ≈ půl hodiny, pohyb
+                 * v účetnictví ≈ pět minut). Na obrazovce to stálo jako
+                 * „X ze Y" vedle přání dvojice a nic neříkalo, odkud to X je.
+                 */
                 'note' => $merene === null
                     ? 'Tohle zatím nic neměří — číslo vlevo je jen vaše přání.'
-                    : $r['note'],
+                    : trim($r['note'].(isset(self::ODHADEM[$r['measure']]) ? ' Změřit to nejde — '.self::ODHADEM[$r['measure']].'.' : '')),
                 'route' => $r['route'],
                 'tab' => $r['tab'],
             ];
@@ -302,14 +371,14 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
         $od = CarbonImmutable::now()->subDays(self::MERENO_DNI);
         $minuty = [];
 
-        if (Schema::hasTable('house_chore_log')) {
+        if (Tabulky::je('house_chore_log')) {
             $minuty['chores'] = (float) DB::table('house_chore_log')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('done_at', '>=', $od)
                 ->sum('minutes');
         }
 
-        if (Schema::hasTable('calendar_events')) {
+        if (Tabulky::je('calendar_events')) {
             $udalosti = DB::table('calendar_events')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('starts_at', '>=', $od)
@@ -321,7 +390,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
             );
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             // Zápis v deníku i randíčko jsou stopa po čase, který spolu
             // strávili — kolik ho bylo, aplikace neví, tak počítá půl hodiny.
             $minuty['dates'] = 30.0 * DB::table('journal_entries')
@@ -330,7 +399,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->count();
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             // Za každý pohyb pět minut: zapsat, zařadit, občas dohledat.
             $minuty['money'] = 5.0 * DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)
@@ -348,7 +417,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cekaNaOkno(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_tasks')) {
+        if (! Tabulky::je('wellbeing_tasks')) {
             return [];
         }
 
@@ -380,7 +449,7 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function otazky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('wellbeing_answers')) {
+        if (! Tabulky::je('wellbeing_answers')) {
             return [];
         }
 

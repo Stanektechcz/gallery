@@ -5,9 +5,9 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Přepínače nastavení — a co za každým z nich doopravdy stojí.
@@ -77,7 +77,7 @@ class Formulare
     {
         $sekce = [];
 
-        if (Schema::hasTable('bank_connections')) {
+        if (Tabulky::je('bank_connections')) {
             $napojeni = DB::table('bank_connections')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('revoked_at')
@@ -99,7 +99,7 @@ class Formulare
             }
         }
 
-        $nastaveni = Schema::hasTable('finance_settings')
+        $nastaveni = Tabulky::je('finance_settings')
             ? DB::table('finance_settings')->where('gallery_space_id', $prostor->id)->first()
             : null;
 
@@ -123,7 +123,7 @@ class Formulare
     /** @return list<array{label: string, rows: list<array<string, mixed>>}> */
     private function promitani(?User $uzivatel): array
     {
-        if ($uzivatel === null || ! Schema::hasTable('user_settings')) {
+        if ($uzivatel === null || ! Tabulky::je('user_settings')) {
             return [];
         }
 
@@ -182,7 +182,7 @@ class Formulare
             ])->all(),
         ]];
 
-        if ($uzivatel !== null && Schema::hasTable('legacy_plans')) {
+        if ($uzivatel !== null && Tabulky::je('legacy_plans')) {
             $plan = DB::table('legacy_plans')->where('user_id', $uzivatel->id)->first();
 
             if ($plan !== null && $plan->contact_name) {

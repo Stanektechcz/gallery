@@ -3,10 +3,11 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 
 /**
@@ -28,7 +29,7 @@ use Illuminate\Support\Facades\URL;
  * Týden začíná pondělím. Fotky se počítají podle dne pořízení — „kolik fotek
  * je z tohohle týdne", ne kdy je kdo nahrál.
  */
-class Tyden implements PoskytovatelObsahu
+class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     private const DNY = ['neděle', 'pondělí', 'úterý', 'středa', 'čtvrtek', 'pátek', 'sobota'];
 
@@ -54,19 +55,70 @@ class Tyden implements PoskytovatelObsahu
         return ['WEEK', 'ROKVCISLECH', 'VYROCNI', 'SVET'];
     }
 
+    /**
+     * Prázdný týden — ne cizí.
+     *
+     * `uplne()` samo o sobě nestačí: kontroler smaže z úplných klíčů ty, které
+     * v datech nejsou, takže když `kolekce()` vrátí `[]` (galerie bez tabulky
+     * médií, výjimka v dotazu), zůstala dvojici na obrazovce ukázka —
+     * „196 fotek, 11 z 16 úkolů, utraceno 6 840 Kč" a Chorvatsko 2026.
+     * Teď se místo toho pošle prázdný tvar a obrazovka řekne pravdu.
+     *
+     * @return array<string, mixed>
+     */
+    public function prazdne(): array
+    {
+        return [
+            'WEEK' => [
+                'now' => [
+                    'title' => 'Tenhle týden',
+                    'lead' => 'Z tohohle týdne zatím nic není — ani fotka, ani úkol, ani zápis.',
+                    'stats' => [],
+                    'moments' => [],
+                    'slipped' => [],
+                    'days' => array_fill(0, 7, 0),
+                    'daysNote' => 'Z tohohle týdne zatím nejsou žádné fotky.',
+                ],
+                'next' => [
+                    'title' => 'Příští týden',
+                    'lead' => 'Příští týden je zatím volný — nic v kalendáři ani úkoly s termínem.',
+                    'rows' => [],
+                ],
+                'past' => [
+                    'head' => 'Poslední '.$this->pocet(self::MINULYCH, 'týden', 'týdny', 'týdnů'),
+                    'note' => 'Zatím žádný z minulých týdnů nemá fotky.',
+                    'rows' => [],
+                ],
+            ],
+            'ROKVCISLECH' => new \stdClass,
+            'VYROCNI' => ['den' => '', 'rows' => []],
+            'SVET' => ['zeme' => [], 'chceme' => []],
+        ];
+    }
+
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('media_items')) {
+        if (! Tabulky::je('media_items')) {
             return [];
         }
 
         $jmena = System::jmenaClenu($prostor);
-        $pondeli = CarbonImmutable::now()->startOfWeek(CarbonImmutable::MONDAY)->startOfDay();
+
+        /*
+         * Týden začíná podle nástěnných hodin dvojice, ne podle serveru.
+         *
+         * `now()` je UTC; v pondělí v 01:30 pražského času je v Londýně ještě
+         * neděle, takže `startOfWeek()` vrátil pondělí **o týden zpět**. Fotky,
+         * úkoly i útraty minulého týdne se pak ukazovaly pod nadpisem tohohle
+         * a „Rok v číslech" si první hodinu nového roku myslel, že je pořád
+         * loni.
+         */
+        $pondeli = Cas::dnes()->startOfWeek(CarbonImmutable::MONDAY)->startOfDay();
         $od = $pondeli->subWeeks(self::MINULYCH);
         $fotky = $this->fotky($prostor, $od, $pondeli->addWeek());
         $ukoly = $this->ukoly($prostor, $od, $pondeli->addWeeks(2));
 
-        $rok = CarbonImmutable::now()->year;
+        $rok = Cas::ted()->year;
 
         return [
             'WEEK' => [
@@ -95,7 +147,7 @@ class Tyden implements PoskytovatelObsahu
      */
     private function vyrocniAlbum(GallerySpace $prostor): array
     {
-        $od = Schema::hasTable('relationship_milestones')
+        $od = Tabulky::je('relationship_milestones')
             ? DB::table('relationship_milestones')->where('gallery_space_id', $prostor->id)->where('visibility', '!=', 'private')->min('occurred_on')
             : null;
 
@@ -104,7 +156,7 @@ class Tyden implements PoskytovatelObsahu
         }
 
         $zacatek = CarbonImmutable::parse($od);
-        $dnes = CarbonImmutable::now();
+        $dnes = Cas::dnes();
         $radky = [];
 
         for ($rok = $zacatek->year; $rok <= $dnes->year; $rok++) {
@@ -143,16 +195,32 @@ class Tyden implements PoskytovatelObsahu
      */
     private function svet(GallerySpace $prostor): array
     {
+        /*
+         * Kód země je na albech, ne na fotkách.
+         *
+         * `media_items` má `location_name`, `location_country` a `location_source` —
+         * `location_country_code` je sloupec alba. Dotaz si o něj přesto říkal:
+         * SQLite z neznámého jména tiše udělá řetězec, ale MySQL na produkci vrátí
+         * `Unknown column`, celá skupina spadne do prázdna a prototyp dokreslí
+         * ukázkové Chorvatsko. Kód si proto bereme z alb dvojice a když ho nemají,
+         * zůstane prázdný — vlajka se nenakreslí, ale čísla sedí.
+         */
+        $kody = Tabulky::sloupec('albums', 'location_country_code')
+            ? DB::table('albums')->where('gallery_space_id', $prostor->id)
+                ->whereNotNull('location_country')->whereNotNull('location_country_code')
+                ->pluck('location_country_code', 'location_country')
+            : collect();
+
         // Bez trezoru: země ze skryté fotky by prozradila, kde vznikla.
         $zeme = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
             ->where('is_hidden', false)
             ->whereNotNull('location_country')->where('location_country', '!=', '')
-            ->get(['location_country', 'location_country_code', 'location_name', 'taken_at', 'uploaded_at'])
+            ->get(['location_country', 'location_name', 'taken_at', 'uploaded_at'])
             ->groupBy('location_country')
             ->map(fn (Collection $f, string $nazev) => [
                 $nazev,
-                (string) ($f->pluck('location_country_code')->filter()->first() ?? ''),
-                (int) $f->map(fn ($x) => CarbonImmutable::parse($x->taken_at ?? $x->uploaded_at)->year)->min(),
+                (string) ($kody[$nazev] ?? ''),
+                $this->prvniRok($f),
                 $f->count(),
                 $f->pluck('location_name')->filter()->countBy()->sortDesc()->keys()->take(5)->values()->all(),
             ])
@@ -162,7 +230,7 @@ class Tyden implements PoskytovatelObsahu
 
         $chceme = [];
 
-        if (Schema::hasColumn('places', 'lifecycle_status')) {
+        if (Tabulky::sloupec('places', 'lifecycle_status')) {
             DB::table('places')->where('gallery_space_id', $prostor->id)->whereIn('lifecycle_status', ['idea', 'planned'])
                 ->orderBy('name')->limit(30)->get(['name', 'city', 'country', 'lifecycle_status'])
                 ->each(function ($m) use (&$chceme) {
@@ -170,7 +238,7 @@ class Tyden implements PoskytovatelObsahu
                 });
         }
 
-        if (Schema::hasTable('trips')) {
+        if (Tabulky::je('trips')) {
             DB::table('trips')->where('gallery_space_id', $prostor->id)->whereDate('start_date', '>', CarbonImmutable::today()->toDateString())
                 ->orderBy('start_date')->limit(10)->get(['name', 'start_date'])
                 ->each(function ($c) use (&$chceme) {
@@ -179,6 +247,31 @@ class Tyden implements PoskytovatelObsahu
         }
 
         return ['zeme' => $zeme, 'chceme' => $chceme];
+    }
+
+    /**
+     * Rok první fotky ze země — podle pořízení, ne podle nahrání.
+     *
+     * `taken_at ?? uploaded_at` znamenalo, že jediná fotka bez data z EXIF
+     * (naskenovaná, přeposlaná) přepsala „poprvé 2018" na rok, kdy se nahrála.
+     * Datum nahrání se bere až tehdy, když v celé zemi není ani jedna fotka
+     * s časem pořízení.
+     *
+     * @param  Collection<int, object>  $fotky
+     */
+    private function prvniRok(Collection $fotky): int
+    {
+        $poridene = $fotky->pluck('taken_at')->filter()
+            ->map(fn ($d) => (int) CarbonImmutable::parse($d)->year);
+
+        if ($poridene->isNotEmpty()) {
+            return (int) $poridene->min();
+        }
+
+        $nahrane = $fotky->pluck('uploaded_at')->filter()
+            ->map(fn ($d) => (int) CarbonImmutable::parse($d)->year);
+
+        return $nahrane->isNotEmpty() ? (int) $nahrane->min() : Cas::ted()->year;
     }
 
     /**
@@ -218,7 +311,7 @@ class Tyden implements PoskytovatelObsahu
             ]))];
         }
 
-        if (Schema::hasTable('trips')) {
+        if (Tabulky::je('trips')) {
             $cesty = DB::table('trips')->where('gallery_space_id', $prostor->id)
                 ->whereDate('start_date', '<=', $do->toDateString())->whereDate('end_date', '>=', $od->toDateString())
                 ->get(['name', 'start_date', 'end_date']);
@@ -234,7 +327,7 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('shared_todos')) {
+        if (Tabulky::je('shared_todos')) {
             $hotove = DB::table('shared_todos')->where('gallery_space_id', $prostor->id)->where('status', 'completed')
                 ->whereBetween('completed_at', [$od, $do])->get(['completed_by']);
 
@@ -248,7 +341,7 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             $pohyby = DB::table('transactions')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
                 ->whereNotIn('state', ['draft', 'rejected'])->whereBetween('occurred_at', [$od->toDateString(), $do->toDateString()])
                 ->selectRaw('type, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka')->groupBy('type')->pluck('castka', 'type');
@@ -265,7 +358,7 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('recipe_cooking_sessions')) {
+        if (Tabulky::je('recipe_cooking_sessions')) {
             $vareni = DB::table('recipe_cooking_sessions as v')->join('recipes as r', 'r.id', '=', 'v.recipe_id')
                 ->where('r.gallery_space_id', $prostor->id)->whereBetween('v.cooked_at', [$od, $do])->count();
 
@@ -274,7 +367,7 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('watch_titles')) {
+        if (Tabulky::je('watch_titles')) {
             $tituly = DB::table('watch_titles')->where('gallery_space_id', $prostor->id)->where('status', 'seen')
                 ->whereBetween('updated_at', [$od, $do])->get(['kind']);
 
@@ -286,12 +379,12 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('journal_entries')) {
+        if (Tabulky::je('journal_entries')) {
             $ja = auth()->id();
             $zapisu = DB::table('journal_entries')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
                 ->where(fn ($q) => $q->where('visibility', '!=', 'private')->orWhere('created_by', $ja))
                 ->whereBetween('entry_date', [$od->toDateString(), $do->toDateString()])->count();
-            $hlasovky = Schema::hasTable('voice_notes')
+            $hlasovky = Tabulky::je('voice_notes')
                 ? DB::table('voice_notes')->where('gallery_space_id', $prostor->id)->whereBetween('created_at', [$od, $do])->get(['duration_ms'])
                 : collect();
 
@@ -304,7 +397,7 @@ class Tyden implements PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('relationship_milestones')) {
+        if (Tabulky::je('relationship_milestones')) {
             $milniky = DB::table('relationship_milestones')->where('gallery_space_id', $prostor->id)->where('visibility', '!=', 'private')
                 ->whereBetween('occurred_on', [$od->toDateString(), $do->toDateString()])->count();
 
@@ -340,7 +433,7 @@ class Tyden implements PoskytovatelObsahu
     private function tentoTyden(GallerySpace $prostor, CarbonImmutable $pondeli, Collection $fotky, Collection $ukoly, array $jmena): array
     {
         $konec = $pondeli->addWeek();
-        $dnes = CarbonImmutable::now();
+        $dnes = Cas::dnes();
         $tyden = $this->vTydnu($fotky, $pondeli);
         $minuly = $this->vTydnu($fotky, $pondeli->subWeek());
 
@@ -453,7 +546,7 @@ class Tyden implements PoskytovatelObsahu
      */
     private function zapisy(GallerySpace $prostor, CarbonImmutable $od, CarbonImmutable $do, array $jmena): array
     {
-        if (! Schema::hasTable('journal_entries')) {
+        if (! Tabulky::je('journal_entries')) {
             return [];
         }
 
@@ -482,7 +575,7 @@ class Tyden implements PoskytovatelObsahu
      */
     private function utraceno(GallerySpace $prostor, CarbonImmutable $od, CarbonImmutable $do): array
     {
-        if (! Schema::hasTable('transactions')) {
+        if (! Tabulky::je('transactions')) {
             return ['—', 'finance nejsou založené'];
         }
 
@@ -520,7 +613,7 @@ class Tyden implements PoskytovatelObsahu
         $konec = $pondeli->addWeek();
         $radky = collect();
 
-        if (Schema::hasTable('calendar_events')) {
+        if (Tabulky::je('calendar_events')) {
             $ucastnici = DB::table('event_participants as u')
                 ->join('calendar_events as e', 'e.id', '=', 'u.event_id')
                 ->where('e.gallery_space_id', $prostor->id)
@@ -661,7 +754,7 @@ class Tyden implements PoskytovatelObsahu
      */
     private function ukoly(GallerySpace $prostor, CarbonImmutable $od, CarbonImmutable $do): Collection
     {
-        if (! Schema::hasTable('shared_todos')) {
+        if (! Tabulky::je('shared_todos')) {
             return collect();
         }
 
@@ -782,7 +875,7 @@ class Tyden implements PoskytovatelObsahu
     {
         $id = array_values(array_diff(array_map('intval', $id), array_keys($this->nahledy)));
 
-        if (! $id || ! Schema::hasTable('media_variants')) {
+        if (! $id || ! Tabulky::je('media_variants')) {
             return;
         }
 

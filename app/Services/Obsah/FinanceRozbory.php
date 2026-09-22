@@ -5,10 +5,10 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Rozbory nad financemi: obálka pro sebe, vlastní inflace, sezónní fondy,
@@ -65,7 +65,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('transactions')) {
+        if (! Tabulky::je('transactions')) {
             return [];
         }
 
@@ -93,7 +93,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      *
      * Bez předpovědi se neposílají: samotné popisky nemají co ovládat.
      *
-     * @return list<array<string, string>>
+     * @return list<array<string, mixed>>
      */
     private function scenare(GallerySpace $prostor): array
     {
@@ -102,12 +102,52 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
          *
          * „Makinka jde na částečný úvazek" u výpočtu, který snižuje **všechny**
          * příjmy o pětinu, bylo tvrzení navíc — a ještě o cizím člověku.
+         *
+         * Dvě čísla v popiscích byla napsaná v kódu: splátka 4 900 a úspora
+         * 438 Kč. Ta druhá se tvářila jako spočítaná z jejich předplatných —
+         * teď z nich doopravdy je a jmenuje je. Splátka se vzít odkud nedá,
+         * takže je z ní kulatá modelová částka a popisek to říká.
          */
+        [$usporaKc, $usporaCo] = $this->dveNejmensiPlatby($prostor);
+
+        return array_values(array_filter([
+            ['key' => 'income', 'label' => 'Příjem o 20 % nižší', 'note' => 'Všechny pravidelné příjmy o pětinu níž.', 'amt' => 0],
+            ['key' => 'loan', 'label' => 'Modelová splátka 5 000 / měs.', 'note' => 'Zkušební částka, ne nabídka, kterou máte. Odejde dvakrát za dva měsíce.', 'amt' => 5000],
+            ['key' => 'parent', 'label' => 'Rodičovská za půl roku', 'note' => 'Nižší z pravidelných příjmů klesne na 40 %.', 'amt' => 0],
+            $usporaKc > 0
+                ? ['key' => 'save', 'label' => 'Zrušit dvě nejmenší platby', 'note' => $usporaCo.' — '.$usporaKc.' Kč měsíčně.', 'amt' => $usporaKc]
+                : null,
+        ]));
+    }
+
+    /**
+     * Dvě nejmenší pravidelné platby: `[kolik měsíčně, jak se jmenují]`.
+     *
+     * @return array{0: int, 1: string}
+     */
+    private function dveNejmensiPlatby(GallerySpace $prostor): array
+    {
+        if (! Tabulky::je('finance_recurring')) {
+            return [0, ''];
+        }
+
+        $platby = DB::table('finance_recurring')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->where('type', '!=', 'income')
+            ->orderBy('amount')
+            ->limit(2)
+            ->get(['name', 'amount']);
+
+        // Jedna platba není „dvě předplatná" — scénář se pak neposílá.
+        if ($platby->count() < 2) {
+            return [0, ''];
+        }
+
         return [
-            ['key' => 'income', 'label' => 'Příjem o 20 % nižší', 'note' => 'Všechny pravidelné příjmy o pětinu níž.'],
-            ['key' => 'loan', 'label' => 'Nová splátka 4 900 / měs.', 'note' => 'Dvakrát za dva měsíce ubude splátka.'],
-            ['key' => 'parent', 'label' => 'Rodičovská za půl roku', 'note' => 'Nižší z pravidelných příjmů klesne na 40 %.'],
-            ['key' => 'save', 'label' => 'Zrušit dvě předplatná', 'note' => 'Úspora 438 Kč měsíčně.'],
+            (int) round($platby->sum(fn ($p) => abs((float) $p->amount))),
+            $platby->pluck('name')->map(fn ($n) => (string) $n)->implode(' a '),
         ];
     }
 
@@ -128,7 +168,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function predpoved(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('finance_recurring') || ! Schema::hasTable('wallets')) {
+        if (! Tabulky::je('finance_recurring') || ! Tabulky::je('wallets')) {
             return [];
         }
 
@@ -167,7 +207,15 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             }
 
             for ($mesic = 0; $mesic <= 2; $mesic++) {
-                $den = $dnes->addMonths($mesic)->startOfMonth();
+                /*
+                 * Nejdřív na začátek měsíce, teprve pak přičíst měsíce.
+                 *
+                 * Opačné pořadí přetéká: 31. ledna + 1 měsíc je 3. března,
+                 * takže z ledna vyšly termíny leden, březen, březen — únorový
+                 * nájem i výplata z předpovědi zmizely a březnové se počítaly
+                 * dvakrát. `FinanceRecurring::terminy()` na to má poznámku.
+                 */
+                $den = $dnes->startOfMonth()->addMonths($mesic);
                 $splatnost = $den->addDays(min((int) $p->day_of_month, (int) $den->daysInMonth) - 1);
                 $poradi = (int) $dnes->diffInDays($splatnost, false);
 
@@ -223,7 +271,10 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $pohyby = DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
-            ->whereIn('state', ['approved', 'settled'])
+            ->whereIn('state', Transaction::ZAPSANE)
+            // `DB::table` obchází měkké mazání, takže smazaný zápis posouval
+            // výchozí zůstatek celé předpovědi.
+            ->whereNull('deleted_at')
             ->where(fn ($q) => $q->whereIn('wallet_from_id', $ids)->orWhereIn('wallet_to_id', $ids))
             ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount']);
 
@@ -258,7 +309,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('occurred_at', '>=', $od)
             ->sum('amount_from');
 
-        $pevne = Schema::hasTable('finance_recurring')
+        $pevne = Tabulky::je('finance_recurring')
             ? (float) DB::table('finance_recurring')
                 ->where('gallery_space_id', $prostor->id)
                 ->where('is_active', true)
@@ -284,7 +335,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function horizont(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('finance_recurring')) {
+        if (! Tabulky::je('finance_recurring')) {
             return [];
         }
 
@@ -341,7 +392,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cenaOdkladu(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('house_dues')) {
+        if (! Tabulky::je('house_dues')) {
             return [];
         }
 
@@ -390,7 +441,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $sLimitem = Schema::hasTable('budget_category_limits')
+        $sLimitem = Tabulky::je('budget_category_limits')
             ? DB::table('budget_category_limits as l')
                 ->join('budgets as r', 'r.id', '=', 'l.budget_id')
                 ->where('r.gallery_space_id', $prostor->id)
@@ -399,7 +450,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('occurred_at', '>=', CarbonImmutable::now()->startOfYear())
             // Výdaj se ukládá kladně a znaménko dělá `type`; záporná částka
             // je vratka, a ta je stejně velká událost jako nákup.
@@ -431,7 +482,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $castky = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('occurred_at', '>=', CarbonImmutable::now()->subYear())
             ->pluck('amount_from')
             ->map(fn ($c) => abs((float) $c))
@@ -457,7 +508,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function odhadySkutecnost(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('budget_category_limits')) {
+        if (! Tabulky::je('budget_category_limits')) {
             return [];
         }
 
@@ -510,7 +561,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $poKategoriich = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('occurred_at', '>=', $od)
             ->with('category:id,name,icon')
             ->get(['category_id', 'amount_from'])
@@ -559,7 +610,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->whereBetween('occurred_at', [$od, $do])
             ->selectRaw('category_id, SUM(ABS(amount_from)) AS castka')
             ->groupBy('category_id')
@@ -639,7 +690,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
+            ->utraty()
             ->where('occurred_at', '>=', CarbonImmutable::create($letos - 1, 1, 1))
             ->with('category:id,name')
             ->get();
@@ -687,7 +738,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function fondy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('budget_goals')) {
+        if (! Tabulky::je('budget_goals')) {
             return [];
         }
 
@@ -732,7 +783,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function cenyCest(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('trips') || ! Schema::hasTable('trip_expenses')) {
+        if (! Tabulky::je('trips') || ! Tabulky::je('trip_expenses')) {
             return [];
         }
 
@@ -753,7 +804,10 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             ->get()
             ->groupBy('trip_id');
 
-        $lidi = max(2, $prostor->members()->count());
+        // Kolik lidí na cestě doopravdy bylo. `max(2, …)` vymyslel druhého
+        // člověka i v prostoru, kde je jeden — a každé „na osobu a den"
+        // tím spadlo na polovinu.
+        $lidi = max(1, $prostor->members()->count());
         $vysledek = [];
         $predchozi = null;
 
@@ -803,7 +857,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public static function osobniKategorie(GallerySpace $prostor): ?object
     {
-        if (! Schema::hasTable('finance_categories')) {
+        if (! Tabulky::je('finance_categories')) {
             return null;
         }
 
@@ -820,7 +874,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function limitKategorie(GallerySpace $prostor, int $kategorie): float
     {
-        if (! Schema::hasTable('budget_category_limits')) {
+        if (! Tabulky::je('budget_category_limits')) {
             return 0;
         }
 
@@ -843,7 +897,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function dvojice(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('partners')) {
+        if (! Tabulky::je('partners')) {
             return [null, null];
         }
 

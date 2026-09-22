@@ -1,16 +1,25 @@
 <?php
 
+use App\Http\Middleware\EnsureModuleEnabled;
+use App\Http\Middleware\HandleInertiaRequests;
+use App\Http\Middleware\JenDvojice;
+use App\Http\Middleware\PreventRequestForgery;
+use App\Http\Middleware\RequireAdminRole;
+use App\Http\Middleware\SecurityHeaders;
+use App\Http\Middleware\TrackLastSeen;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
-        web: __DIR__ . '/../routes/web.php',
-        api: __DIR__ . '/../routes/api.php',
-        commands: __DIR__ . '/../routes/console.php',
+        web: __DIR__.'/../routes/web.php',
+        api: __DIR__.'/../routes/api.php',
+        commands: __DIR__.'/../routes/console.php',
         health: '/up',
         /*
          * Routy prototypu Galerie se přidávají bez prefixu — `api` si nesou samy.
@@ -20,20 +29,20 @@ return Application::configure(basePath: dirname(__DIR__))
         then: fn () => Route::middleware('web')->group(base_path('routes/galerie.php')),
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->append(\App\Http\Middleware\SecurityHeaders::class);
+        $middleware->append(SecurityHeaders::class);
         $middleware->web(append: [
-            \App\Http\Middleware\HandleInertiaRequests::class,
-            \App\Http\Middleware\TrackLastSeen::class,
-            \Illuminate\Http\Middleware\AddLinkHeadersForPreloadedAssets::class,
+            HandleInertiaRequests::class,
+            TrackLastSeen::class,
+            AddLinkHeadersForPreloadedAssets::class,
         ]);
 
         // The chat polls here, so presence stays current while someone reads it.
         $middleware->api(append: [
-            \App\Http\Middleware\TrackLastSeen::class,
+            TrackLastSeen::class,
         ]);
 
         $middleware->api(prepend: [
-            \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
+            EnsureFrontendRequestsAreStateful::class,
         ]);
 
         /*
@@ -53,15 +62,15 @@ return Application::configure(basePath: dirname(__DIR__))
         // `replaceInGroup`, ne `replace`: ochrana je ve skupině `web`, ne v globální řadě.
         $middleware->replaceInGroup(
             'web',
-            \Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
-            \App\Http\Middleware\PreventRequestForgery::class,
+            Illuminate\Foundation\Http\Middleware\PreventRequestForgery::class,
+            PreventRequestForgery::class,
         );
 
         $middleware->alias([
-            'can:admin' => \App\Http\Middleware\RequireAdminRole::class,
-            'module'    => \App\Http\Middleware\EnsureModuleEnabled::class,
-            'feature'   => \App\Http\Middleware\EnsureModuleEnabled::class,
-            'dvojice'   => \App\Http\Middleware\JenDvojice::class,
+            'can:admin' => RequireAdminRole::class,
+            'module' => EnsureModuleEnabled::class,
+            'feature' => EnsureModuleEnabled::class,
+            'dvojice' => JenDvojice::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -74,6 +83,6 @@ return Application::configure(basePath: dirname(__DIR__))
          * nesouhlasí". Ostatní cesty zůstávají, jak byly.
          */
         $exceptions->shouldRenderJsonWhen(
-            fn(Request $request) => $request->is('api/*') || $request->is('sanctum/*'),
+            fn (Request $request) => $request->is('api/*') || $request->is('sanctum/*'),
         );
     })->create();

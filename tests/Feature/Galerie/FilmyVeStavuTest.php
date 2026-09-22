@@ -221,7 +221,9 @@ class FilmyVeStavuTest extends TestCase
         $this->stav(['fmEp' => ['series-0' => 7]])->assertOk();
 
         $this->assertSame(7, (int) DB::table('watch_titles')->value('episodes_done'));
-        $this->assertStringContainsString('S1E7', $this->getJson('/api/data/pribeh')->assertOk()->json('data.AL.series.0.1'));
+        // Sérii aplikace nikde neeviduje, takže popisek počítá díly. Dřív
+        // tu stálo „S1E7" — tvrzení o první řadě u každého seriálu.
+        $this->assertStringContainsString('7 dílů z 10', $this->getJson('/api/data/pribeh')->assertOk()->json('data.AL.series.0.1'));
     }
 
     /** „Viděli jsme" změní stav titulu. */

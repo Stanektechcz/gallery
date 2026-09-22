@@ -3,10 +3,10 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Dárky a přání ve tvaru, ve kterém je kreslí prototyp.
@@ -50,7 +50,7 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
 
     public function kolekce(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('gift_ideas')) {
+        if (! Tabulky::je('gift_ideas')) {
             return [];
         }
 
@@ -123,7 +123,7 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
     private function polozky(GallerySpace $prostor): Collection
     {
         $ja = auth()->id();
-        $maSoukromi = Schema::hasColumn('gift_ideas', 'private_to_user_id');
+        $maSoukromi = Tabulky::sloupec('gift_ideas', 'private_to_user_id');
 
         return DB::table('gift_ideas')
             ->where('gallery_space_id', $prostor->id)
@@ -224,7 +224,7 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function prilezitosti(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('gift_budgets')) {
+        if (! Tabulky::je('gift_budgets')) {
             return [];
         }
 
@@ -283,7 +283,7 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @param  array<int, string>  $jmena */
     private function proKoho(object $d, array $jmena): string
     {
-        if (! isset($d->person_id) || ! $d->person_id || ! Schema::hasTable('people')) {
+        if (! isset($d->person_id) || ! $d->person_id || ! Tabulky::je('people')) {
             // Bez určené osoby je to pro toho druhého z dvojice — dárek sám
             // sobě se v téhle sekci nevede.
             return collect($jmena)->reject(fn ($j, $id) => (int) $id === (int) $d->created_by)->first() ?? '—';

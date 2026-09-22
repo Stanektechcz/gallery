@@ -118,12 +118,14 @@ class ObsahDnesTest extends TestCase
     {
         foreach (range(1, 4) as $i) {
             DB::table('audit_logs')->insert([
-                'user_id' => $this->maki->id, 'action' => 'media.upload', 'payload' => json_encode(['filename' => 'IMG_'.$i.'.jpg']),
+                'user_id' => $this->maki->id, 'gallery_space_id' => $this->prostor->id,
+                'action' => 'media.upload', 'payload' => json_encode(['filename' => 'IMG_'.$i.'.jpg']),
                 'created_at' => '2026-09-16 12:0'.$i.':00',
             ]);
         }
         DB::table('audit_logs')->insert([
-            'user_id' => $this->adri->id, 'action' => 'share.create', 'payload' => null, 'created_at' => '2026-09-15 20:00:00',
+            'user_id' => $this->adri->id, 'gallery_space_id' => $this->prostor->id,
+            'action' => 'share.create', 'payload' => null, 'created_at' => '2026-09-15 20:00:00',
         ]);
 
         $aktivita = $this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.aktivita');
@@ -134,6 +136,28 @@ class ObsahDnesTest extends TestCase
         $this->assertSame('Adrian · nový sdílený odkaz', $aktivita[1][1]);
         // 20:00 UTC je ve 22:00 v Praze.
         $this->assertSame('včera ve 22:00', $aktivita[1][2]);
+    }
+
+    /**
+     * Co se stalo v jiné galerii, do téhle nepatří.
+     *
+     * `audit_logs` prostor nenesly a filtrovalo se jen podle členů, takže
+     * kdo je ve dvou galeriích, viděl v jedné jména souborů z druhé.
+     */
+    public function test_aktivita_z_jine_galerie_se_neukazuje(): void
+    {
+        $druha = GallerySpace::create(['name' => 'Jiná galerie', 'owner_id' => $this->adri->id]);
+        $druha->members()->syncWithoutDetaching([$this->adri->id => ['role' => 'owner']]);
+
+        DB::table('audit_logs')->insert([
+            'user_id' => $this->adri->id, 'gallery_space_id' => $druha->id,
+            'action' => 'media.upload', 'payload' => json_encode(['filename' => 'CIZI.jpg']),
+            'created_at' => '2026-09-16 12:00:00',
+        ]);
+
+        $aktivita = $this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.aktivita');
+
+        $this->assertSame([], $aktivita);
     }
 
     /**
@@ -155,7 +179,8 @@ class ObsahDnesTest extends TestCase
                 'path' => 'nahledy/'.$m->uuid.'.jpg', 'created_at' => now(), 'updated_at' => now(),
             ]);
             DB::table('audit_logs')->insert([
-                'user_id' => $this->adri->id, 'action' => 'media.upload', 'subject_type' => MediaItem::class,
+                'user_id' => $this->adri->id, 'gallery_space_id' => $this->prostor->id,
+                'action' => 'media.upload', 'subject_type' => MediaItem::class,
                 'subject_id' => $m->id, 'payload' => null, 'created_at' => '2026-09-16 '.$hodina.':00:00',
             ]);
         }

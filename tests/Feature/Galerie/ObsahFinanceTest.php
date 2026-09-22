@@ -47,6 +47,34 @@ class ObsahFinanceTest extends TestCase
     }
 
     /**
+     * Osobní rozpočet druhého z dvojice se nekreslí.
+     *
+     * Obrazovka brala prostě poslední rozpočet v prostoru, takže nesdílený
+     * „Makinčin rozpočet na Německo" viděl i ten, komu nepatří — i s limity
+     * a příjmem. Pravidlo, kdo na co vidí, je `FinanceAccess::viditelne()`.
+     */
+    public function test_cizi_nesdileny_rozpocet_se_nekresli(): void
+    {
+        $maki = User::factory()->create(['name' => 'Makinka']);
+        $this->prostor->members()->syncWithoutDetaching([$maki->id => ['role' => 'editor']]);
+
+        $cizi = $this->regensburg();
+        $cizi->forceFill(['owner_user_id' => $maki->id, 'is_shared' => false])->save();
+
+        $data = $this->getJson('/api/data/finance')->assertOk()->json('data');
+
+        $this->assertSame([], $data['BUD']['cats']);
+        $this->assertSame(0, $data['BUD']['plan']);
+        $this->assertSame('', $data['MENA'], 'Měna cizího rozpočtu prozradí, že tam nějaký je.');
+
+        // Vlastníkovi se týž rozpočet ukáže celý.
+        Sanctum::actingAs($maki);
+        $jeji = $this->getJson('/api/data/finance')->assertOk()->json('data');
+
+        $this->assertNotSame([], $jeji['BUD']['cats']);
+    }
+
+    /**
      * Kategorie k zařazení jsou ty, které dvojice opravdu má.
      *
      * Prototyp je měl napsané v souboru s ukázkovými daty, takže nabízel cizí

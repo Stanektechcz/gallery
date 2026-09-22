@@ -6,10 +6,10 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Sdílení a systém ve tvaru, ve kterém je kreslí prototyp.
@@ -93,7 +93,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function odkazy(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('shared_links')) {
+        if (! Tabulky::je('shared_links')) {
             return [];
         }
 
@@ -152,7 +152,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
 
     private function obsahOdkazu(object $o): string
     {
-        if ($o->target_type === 'album' && $o->target_id && Schema::hasTable('albums')) {
+        if ($o->target_type === 'album' && $o->target_id && Tabulky::je('albums')) {
             $nazev = DB::table('albums')->where('id', $o->target_id)->value('title');
 
             return $nazev ? 'Album '.$nazev : 'Album';
@@ -175,7 +175,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function hoste(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('guest_uploads')) {
+        if (! Tabulky::je('guest_uploads')) {
             return [];
         }
 
@@ -219,7 +219,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function kapsle(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('time_capsules')) {
+        if (! Tabulky::je('time_capsules')) {
             return [];
         }
 

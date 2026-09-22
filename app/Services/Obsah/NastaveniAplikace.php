@@ -4,8 +4,8 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Nastavení aplikace ze skutečného stavu — co se dá změnit a co o sobě ví.
@@ -86,8 +86,8 @@ class NastaveniAplikace
     /** @return array<string, mixed> */
     private function profil(?User $ja): array
     {
-        $dvaFaktory = $ja !== null && Schema::hasColumn('users', 'two_factor_confirmed_at') && $ja->two_factor_confirmed_at !== null;
-        $fotka = $ja !== null && (! empty($ja->avatar_path) || (Schema::hasColumn('users', 'avatar_preset') && ! empty($ja->avatar_preset)));
+        $dvaFaktory = $ja !== null && Tabulky::sloupec('users', 'two_factor_confirmed_at') && $ja->two_factor_confirmed_at !== null;
+        $fotka = $ja !== null && (! empty($ja->avatar_path) || (Tabulky::sloupec('users', 'avatar_preset') && ! empty($ja->avatar_preset)));
 
         return [
             'title' => 'Profil', 'sub' => 'Jak vás galerie zná a čím se do ní přihlašujete.',
@@ -148,7 +148,7 @@ class NastaveniAplikace
         $aktivni = 0;
         $neplatne = 0;
 
-        if (Schema::hasTable('shared_links')) {
+        if (Tabulky::je('shared_links')) {
             $odkazy = DB::table('shared_links')->where('gallery_space_id', $prostor->id)->get(['is_active', 'expires_at']);
             $aktivni = $odkazy->filter(fn (object $o) => $o->is_active && ($o->expires_at === null || now()->lt($o->expires_at)))->count();
             $neplatne = $odkazy->count() - $aktivni;

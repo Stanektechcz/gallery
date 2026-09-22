@@ -18132,7 +18132,9 @@ class Component extends DCLogic {
     return {
       hrBig: Math.round((lateReg / Math.max(1, lateN)) * 100) + ' %',
       hrHead: 'Co vzniklo po desáté večer, litovali jste ' + factor.toFixed(1).replace('.', ',') + '× častěji než to, co vzniklo za světla.',
-      hrNote: 'Do grafu jde všechno, co má v aplikaci čas vzniku a pozdější osud: nákupy, rozvahy, rozhodnutí, zapsané spory. „Litovali“ znamená vrácené, zrušené, přeplacené nebo označené v antimuzeu.',
+      // Věta říká přesně to, co server počítá. Dřív slibovala rozvahy
+      // i zapsané spory a přitom do grafu chodily počty fotek.
+      hrNote: 'Do grafu jde to, co má v aplikaci čas zápisu a pozdější osud: útraty a společná rozhodnutí. „Litovali“ znamená útratu, ke které se vrátily peníze nebo se smazala, a rozhodnutí, které jste později označili za změněné.',
       hrRows: rows.map(h => ({
         label: h.label,
         n: String(h.n),
@@ -20085,7 +20087,15 @@ class Component extends DCLogic {
 
   p60Calc(o) {
     o = o || {};
-    const inc = o.income ? 0.8 : 1, loan = o.loan ? 4900 : 0, save = o.save ? 438 : 0;
+    /*
+     * Částky scénářů chodí ze serveru.
+     *
+     * Tady byly napsané dvě konstanty — 4 900 a 438 — a v popiscích vedle nich
+     * tatáž čísla. Úspora se přitom tváří, že vyšla z jejich předplatných;
+     * teď z nich vyšla doopravdy a graf počítá přesně s tím, co je v popisku.
+     */
+    const scAmt = k => { const x = SCEN.filter(s => s.key === k)[0]; return x && x.amt ? Number(x.amt) : 0; };
+    const inc = o.income ? 0.8 : 1, loan = o.loan ? scAmt('loan') : 0, save = o.save ? scAmt('save') : 0;
     const parentFrom = o.parent ? 30 : 9999;
     /*
      * Rodičovská snižuje **jeden** příjem, ne ten, který se jmenuje Makinka.

@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -44,28 +45,60 @@ class ObsahOdvozeneTest extends TestCase
     }
 
     /**
-     * Kdy fotíme: `n` je snímků, `reg` kolik různých dnů.
+     * Pozdní večery počítají věci, které mají pozdější osud — ne fotky.
      *
-     * Jedno odpoledne se sto snímky není zvyk; deset odpolední po deseti ano.
+     * Obrazovka z `reg / n` píše „X % věcí odtud skončilo špatně". Dostávala
+     * přitom počty snímků a počty dnů, kdy se fotilo, takže dvojici, která
+     * fotí jednu fotku denně, vyšlo sto procent lítosti. Teď jsou to útraty,
+     * ke kterým se vrátily peníze, a rozhodnutí označená za změněná.
      */
-    public function test_hodiny_rozlisi_zvyk_od_jedne_serie(): void
+    public function test_pozdni_vecery_pocitaji_utraty_a_rozhodnuti(): void
     {
-        // Tři snímky jednoho odpoledne.
+        // Fotka ve dvě odpoledne do grafu nepatří.
         $this->fotka(['taken_at' => '2026-08-01 14:00:00'], 1);
-        $this->fotka(['taken_at' => '2026-08-01 14:20:00'], 2);
-        $this->fotka(['taken_at' => '2026-08-01 15:00:00'], 3);
-        // Dva večery po jednom.
-        $this->fotka(['taken_at' => '2026-08-02 21:00:00'], 4);
-        $this->fotka(['taken_at' => '2026-08-03 21:30:00'], 5);
 
-        $h = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.HOURS'))->keyBy('label');
+        $vecerni = $this->utrata('2026-08-01 22:30:00');
+        $this->utrata('2026-08-02 22:40:00');
+        $this->utrata('2026-08-03 10:00:00');
 
-        $this->assertSame(3, $h['12–17']['n']);
-        $this->assertSame(1, $h['12–17']['reg']);
-        $this->assertSame(2, $h['20–22']['n']);
-        $this->assertSame(2, $h['20–22']['reg']);
-        // Pásmo, ve kterém se nefotí, se neposílá.
-        $this->assertArrayNotHasKey('do 12:00', $h);
+        // K večerní útratě se vrátily peníze — ta „skončila špatně".
+        $this->utrata('2026-08-10 09:00:00', $vecerni);
+
+        $h = collect($this->getJson('/api/data/mechanismy')->assertOk()->json('data.HOURS'))->keyBy('label');
+
+        $this->assertSame(2, $h['22–24']['n']);
+        $this->assertSame(1, $h['22–24']['reg'], 'Vrácená útrata je jediná, která skončila špatně.');
+        // Ranní vrácení je samo o sobě útrata, která nic nevrátila.
+        $this->assertSame(2, $h['do 12:00']['n']);
+        $this->assertSame(0, $h['do 12:00']['reg']);
+        // Fotky se sem nepočítají vůbec.
+        $this->assertArrayNotHasKey('12–17', $h);
+    }
+
+    /**
+     * Útrata zapsaná v daný okamžik **podle hodin dvojice**; `$vraci` z ní dělá vratku.
+     *
+     * Databáze nese UTC, obrazovka se ptá „v kolik hodin jsme to zapsali" —
+     * proto se pražský čas uloží převedený. Bez toho by zápis ve 22:30 spadl
+     * do pásma „do 12:00" a graf by měřil něco jiného, než co tvrdí.
+     */
+    private function utrata(string $pragueTime, ?int $vraci = null): int
+    {
+        $kdy = CarbonImmutable::parse($pragueTime, 'Europe/Prague')->setTimezone('UTC');
+
+        return DB::table('transactions')->insertGetId([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'type' => 'expense',
+            'occurred_at' => $kdy->toDateString(),
+            'amount_from' => 250,
+            'currency_from' => 'CZK',
+            'state' => 'approved',
+            'refund_of_id' => $vraci,
+            'created_by' => $this->adri->id,
+            'created_at' => $kdy->toDateTimeString(),
+            'updated_at' => $kdy->toDateTimeString(),
+        ]);
     }
 
     /**

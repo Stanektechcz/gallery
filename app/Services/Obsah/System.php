@@ -2,6 +2,8 @@
 
 namespace App\Services\Obsah;
 
+use App\Models\Budget;
+use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
@@ -14,11 +16,11 @@ use App\Services\Provoz\UlozisteGalerie;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Co aplikace ví o sobě: jak tvrdá jsou její čísla, kdo které sekce živí
@@ -291,7 +293,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->orderByDesc('last_used_at')
             ->get(['name', 'last_used_at']);
 
-        $sezeni = Schema::hasTable('sessions')
+        $sezeni = Tabulky::je('sessions')
             ? DB::table('sessions')
                 ->where('user_id', $clovek->id)
                 // Sezení bez aktivity za poslední dva týdny je mrtvé; počítat
@@ -450,13 +452,13 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $ja = auth()->user();
 
-        if (! $ja instanceof User || ! Schema::hasTable('notifications')) {
+        if (! $ja instanceof User || ! Tabulky::je('notifications')) {
             return [];
         }
 
         $dotaz = $ja->unreadNotifications();
 
-        if (Schema::hasColumn('notifications', 'archived_at')) {
+        if (Tabulky::sloupec('notifications', 'archived_at')) {
             $dotaz->whereNull('archived_at')
                 ->where(fn ($q) => $q->whereNull('snoozed_until')->orWhere('snoozed_until', '<=', now()));
         }
@@ -680,7 +682,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $fotky = $bajtu('photo');
         $videa = $bajtu('video');
 
-        $nahledy = Schema::hasTable('media_variants')
+        $nahledy = Tabulky::je('media_variants')
             ? (int) DB::table('media_variants')
                 ->join('media_items', 'media_items.id', '=', 'media_variants.media_item_id')
                 ->where('media_items.gallery_space_id', $prostor->id)
@@ -749,7 +751,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rozbityDisk(GallerySpace $prostor): ?StorageConnection
     {
-        if (! Schema::hasTable('storage_connections')) {
+        if (! Tabulky::je('storage_connections')) {
             return null;
         }
 
@@ -804,7 +806,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rozpory(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('drive_conflicts') || ! Schema::hasTable('storage_connections')) {
+        if (! Tabulky::je('drive_conflicts') || ! Tabulky::je('storage_connections')) {
             return [];
         }
 
@@ -849,10 +851,10 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     private function popisRozporu(string $druh, int $id): string
     {
         $nazev = match ($druh) {
-            'media_item' => Schema::hasTable('media_items')
+            'media_item' => Tabulky::je('media_items')
                 ? DB::table('media_items')->where('id', $id)->value('original_filename')
                 : null,
-            'album' => Schema::hasTable('albums')
+            'album' => Tabulky::je('albums')
                 ? DB::table('albums')->where('id', $id)->value('title')
                 : null,
             default => null,
@@ -973,7 +975,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $zustatky = $this->kniha->walletBalances($prostor)->keyBy('uuid');
         $celkem = $penezenky->sum(fn (object $p) => (float) ($zustatky[$p->uuid]['balance'] ?? $p->opening_balance ?? 0));
 
-        $napojeni = Schema::hasTable('bank_connections')
+        $napojeni = Tabulky::je('bank_connections')
             ? DB::table('bank_connections')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('revoked_at')
@@ -1043,7 +1045,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function radekOdhadnutaData(GallerySpace $prostor): ?array
     {
-        if (! Schema::hasColumn('media_items', 'taken_at_estimated')) {
+        if (! Tabulky::sloupec('media_items', 'taken_at_estimated')) {
             return null;
         }
 
@@ -1076,8 +1078,25 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array<string, mixed>|null */
     private function radekRozpocet(GallerySpace $prostor): ?array
     {
-        $rozpocet = DB::table('budgets')
-            ->where('gallery_space_id', $prostor->id)
+        $ja = auth()->id();
+
+        if (! $ja) {
+            return null;
+        }
+
+        /*
+         * Cizí osobní rozpočet do přehledu nepatří.
+         *
+         * `budgets` nese `owner_user_id` a `FinanceAccess::viditelne()` je to
+         * pravidlo napsané jednou pro rozpočty i cesty. Tady se vybíralo jen
+         * podle prostoru, takže se do „čemu se dá věřit" mohl dostat rozpočet,
+         * který druhý z dvojice nesdílel — i s limity a částkou. Smazané řádky
+         * se taky počítaly.
+         */
+        $rozpocet = FinanceAccess::viditelne(
+            Budget::withoutGlobalScope(SpaceContext::SCOPE)->where('gallery_space_id', $prostor->id),
+            'budget', $ja,
+        )
             ->orderByDesc('starts_on')
             ->first(['id', 'currency']);
 
@@ -1124,12 +1143,25 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array<string, mixed>|null */
     private function radekCyklus(GallerySpace $prostor): ?array
     {
-        if (! Schema::hasTable('cycle_days')) {
+        $ja = auth()->id();
+
+        if (! $ja || ! Tabulky::je('cycle_days')) {
             return null;
         }
 
+        /*
+         * Jen vlastní záznamy.
+         *
+         * `Zdravi::dny()` řeší `cycle_settings.share_level` do detailu — bez
+         * výslovného souhlasu se partnerovy dny neposílají vůbec a u „jen
+         * termíny" se odřezávají příznaky, nálada i poznámka. Tenhle řádek
+         * se ptal jen na prostor, takže „Délka cyklu · poslední začátek 3. 9."
+         * obešel celé to nastavení. A když zapisují oba, prokládaly se dva
+         * cykly do jednoho průměru, ze kterého nevyšlo nic.
+         */
         $zacatky = DB::table('cycle_days')
             ->where('gallery_space_id', $prostor->id)
+            ->where('user_id', $ja)
             ->where('is_cycle_start', true)
             ->where('is_predicted', false)
             ->orderBy('day')
@@ -1169,7 +1201,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array<string, mixed>|null */
     private function radekCesta(GallerySpace $prostor): ?array
     {
-        if (! Schema::hasTable('trip_expenses')) {
+        if (! Tabulky::je('trip_expenses')) {
             return null;
         }
 
@@ -1229,7 +1261,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $sekce = [];
 
         foreach (self::SEKCE as [$id, $nazev, $tabulka, $autor, $cas]) {
-            if (! Schema::hasTable($tabulka)) {
+            if (! Tabulky::je($tabulka)) {
                 continue;
             }
 
@@ -1289,7 +1321,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $radky = [];
 
         foreach (self::SEKCE as [, $nazev, $tabulka, , $cas]) {
-            if (! Schema::hasTable($tabulka)) {
+            if (! Tabulky::je($tabulka)) {
                 continue;
             }
 
@@ -1349,17 +1381,20 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $jednaKopie = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
-            ->where('storage_status', 'local_only')
+            // Jedna kopie znamená „nemá to na Disku své id". Ptát se na
+            // `storage_status = 'local_only'` míjelo řádky, které mají
+            // `local` nebo výchozí `pending` — tři zápisy téhož.
+            ->whereNull('drive_file_id')
             ->selectRaw('COUNT(*) AS pocet, SUM(size_bytes) AS bajtu')
             ->first();
 
         // Fronta je serverová, ne párová — a záložka „Zdraví systému" se na
         // server taky ptá. Stejná čísla ukazuje i široké rozvržení.
-        $chybne = Schema::hasTable('failed_jobs')
+        $chybne = Tabulky::je('failed_jobs')
             ? DB::table('failed_jobs')->where('failed_at', '>=', now()->subWeek())->count()
             : 0;
 
-        $ceka = Schema::hasTable('jobs') ? DB::table('jobs')->count() : 0;
+        $ceka = Tabulky::je('jobs') ? DB::table('jobs')->count() : 0;
 
         return [
             'health' => [
@@ -1384,7 +1419,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array{0: string, 1: string, 2: int, 3: int}|null */
     private function radekPosledniKopie(GallerySpace $prostor): ?array
     {
-        if (! Schema::hasTable('storage_operations') || ! Schema::hasTable('storage_connections')) {
+        if (! Tabulky::je('storage_operations') || ! Tabulky::je('storage_connections')) {
             return null;
         }
 
@@ -1547,7 +1582,16 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ];
         }
 
-        $nezalohovane = (clone $fotky)->where('storage_status', '!=', 'mirrored')->count();
+        /*
+         * Bez kopie je to, co nemá na Disku své id.
+         *
+         * Stálo tu `storage_status != 'mirrored'` — jenže `mirrored` nikdo
+         * v aplikaci nezapisuje, takže podmínka platila úplně pro všechno
+         * a schránka hlásila „čeká na přenos" i u snímků, které jsou na
+         * Disku dávno. (Navíc `!=` v SQL nevrátí řádky s `NULL`, takže
+         * zrovna ty bez stavu tiše vypadávaly.)
+         */
+        $nezalohovane = (clone $fotky)->whereNull('drive_file_id')->count();
 
         if ($nezalohovane > 0 && $this->disky->forSpace($prostor->id)) {
             $radky[] = [
@@ -1558,7 +1602,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ];
         }
 
-        if (Schema::hasTable('transactions')) {
+        if (Tabulky::je('transactions')) {
             $bezKategorie = DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('category_id')
@@ -1574,7 +1618,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             }
         }
 
-        if (Schema::hasTable('travel_inbox_items')) {
+        if (Tabulky::je('travel_inbox_items')) {
             // Čeká jen to, co ještě není v cestě ani v archivu.
             $cesty = DB::table('travel_inbox_items')
                 ->where('gallery_space_id', $prostor->id)
@@ -1611,7 +1655,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rozhodnutiInboxu(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('inbox_states')) {
+        if (! Tabulky::je('inbox_states')) {
             return [];
         }
 
@@ -1637,7 +1681,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function inboxRozhodnute(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('inbox_states')) {
+        if (! Tabulky::je('inbox_states')) {
             return ['snoozed' => [], 'inboxDone' => []];
         }
 

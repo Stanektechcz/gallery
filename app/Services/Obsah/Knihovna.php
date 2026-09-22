@@ -8,11 +8,11 @@ use App\Models\MediaItem;
 use App\Models\Person;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
@@ -102,7 +102,6 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'APEOPLE' => ['ok' => [], 'sug' => [], 'hidden' => []],
             'ATAGS' => ['all' => [], 'sug' => []],
             'YBCH' => [],
-            'HOURS' => [],
             'FOTODNY' => new \stdClass,
             'LIBSTATS' => self::PRAZDNE_STATISTIKY,
             'MAPBODY' => [],
@@ -151,8 +150,6 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'APEOPLE' => $this->osobyDoZalozek($lide),
             'ATAGS' => $this->stitkyKnihovny($prostor),
             'YBCH' => $this->roky($prostor),
-            // Kdy dvojice fotí — z hodiny v EXIF, ne z odhadu.
-            'HOURS' => $this->hodiny($media),
             'FOTODNY' => (object) $this->fotekPoDnech($prostor),
             'LIBSTATS' => $this->statistiky($prostor),
             // Čísla u položek postranního panelu a součet na úvodní obrazovce.
@@ -218,7 +215,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $ja = auth()->id();
 
-        if ($ja === null || ! Schema::hasTable('user_favorites')) {
+        if ($ja === null || ! Tabulky::je('user_favorites')) {
             return;
         }
 
@@ -286,10 +283,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $stitky = $this->stitky($media);
         $lideNaFotce = $this->lideNaFotkach($media);
         $vAlbu = $this->vazbyAlb($media);
+        $vOdkazech = $this->vSdilenych($media);
         $this->zjistiNahledy($media->pluck('id')->map(fn ($i) => (int) $i)->all());
         $poradi = 0;
 
-        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, &$poradi) {
+        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, &$poradi) {
             $poradi++;
             $klic = $this->den($m)->format('Y-m-d');
             $den = $dny[$klic];
@@ -300,11 +298,20 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'day' => $klic,
                 'dayLabel' => $den['label'],
                 'dateShort' => $den['short'],
-                'place' => $m->location_name ?: $den['place'],
-                // Album, do kterého fotka patří. Kromě `primary_album_id` se
-                // počítá i členství přes spojovací tabulku — jinak by fotka
-                // vložená do alba ručně hlásila „Bez alba".
-                'album' => $m->primaryAlbum?->title ?: ($vAlbu[$m->id] ?? $den['album']),
+                /*
+                 * Místo a album fotky, ne fotky vedle ní.
+                 *
+                 * Chybějící hodnota se brala z **prvního snímku toho dne**,
+                 * takže fotka bez GPS a bez alba o sobě tvrdila „Zadar" a
+                 * „Chorvatsko 2026" — a v témže dlaždicovém řádku se přitom
+                 * hlásila jako snímek bez místa. Na telefonu to bylo horší:
+                 * obsah alba se skládá porovnáním tohohle popisku, takže se
+                 * do alba připletly fotky, které do něj nikdo nedal.
+                 */
+                'place' => $m->location_name ?: 'Bez místa',
+                // Kromě `primary_album_id` se počítá i členství přes spojovací
+                // tabulku — jinak by fotka vložená do alba ručně hlásila „Bez alba".
+                'album' => $m->primaryAlbum?->title ?: ($vAlbu[$m->id] ?? 'Bez alba'),
                 'y' => $den['y'],
                 'isVideo' => $video,
                 'orient' => $this->orientace($m),
@@ -318,14 +325,24 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                  * které jste si označili". Kdo si fotku označil, viděl ji dál
                  * neoznačenou a v Oblíbených prázdno.
                  *
-                 * Příznak na fotce se bere jako druhý zdroj: může ho nastavit
-                 * import a zahodit ho by znamenalo ztratit, co dvojice měla.
+                 * Příznak `media_items.is_favorite` se **nebere**: přepisuje ho
+                 * `FavoritesController` na „označil to aspoň jeden z nás", takže
+                 * `||` sem vracel zpátky přesně to, co tenhle zápis odstraňoval —
+                 * partnerovo srdíčko na mojí fotce. Jediný zdroj je `user_favorites`.
                  */
-                'fav' => isset($this->oblibene[$m->id]) || (bool) $m->is_favorite,
+                'fav' => isset($this->oblibene[$m->id]),
                 // Stav zpracování, ne výmysl: co ještě nemá náhled, se pozná.
                 'pending' => $m->status !== 'ready',
                 'error' => $m->status === 'failed',
-                'shared' => (bool) $m->is_archived === false && $m->storage_status === 'mirrored',
+                /*
+                 * „Je ve sdílení" se ptá na sdílení, ne na zálohu.
+                 *
+                 * Četlo se `storage_status === 'mirrored'` — stav, který
+                 * v celé aplikaci nikdo nezapisuje, takže odznak nesvítil
+                 * nikdy. A i kdyby, byla by to odpověď na jinou otázku.
+                 * Členství fotky v odkazu je v `shared_link_media`.
+                 */
+                'shared' => isset($vOdkazech[$m->id]),
                 'author' => $m->uploader?->name ?? '—',
                 /*
                  * Přístroj z EXIFu, ne z autora.
@@ -449,6 +466,38 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
+     * Které fotky leží v nějakém sdíleném odkazu — jedním dotazem.
+     *
+     * Odkaz, kterému vypršela platnost nebo se zrušil, už nesdílí nic;
+     * odznak „Je ve sdílení" by u něj byl planý poplach.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @return array<int, bool>
+     */
+    private function vSdilenych(Collection $media): array
+    {
+        if (! Tabulky::je('shared_link_media') || ! Tabulky::je('shared_links')) {
+            return [];
+        }
+
+        $dotaz = DB::table('shared_link_media as sm')
+            ->join('shared_links as s', 's.id', '=', 'sm.shared_link_id')
+            ->whereIn('sm.media_item_id', $media->pluck('id'));
+
+        if (Tabulky::sloupec('shared_links', 'is_active')) {
+            $dotaz->where('s.is_active', true);
+        }
+
+        if (Tabulky::sloupec('shared_links', 'expires_at')) {
+            $dotaz->where(fn ($q) => $q->whereNull('s.expires_at')->orWhere('s.expires_at', '>', now()));
+        }
+
+        return $dotaz->pluck('sm.media_item_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])
+            ->all();
+    }
+
+    /**
      * Štítky k fotkám — jedním dotazem, ne po jedné.
      *
      * @param  Collection<int, MediaItem>  $media
@@ -456,7 +505,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function stitky(Collection $media): array
     {
-        if (! Schema::hasTable('media_tag')) {
+        if (! Tabulky::je('media_tag')) {
             return [];
         }
 
@@ -478,7 +527,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function lideNaFotkach(Collection $media): array
     {
-        if (! Schema::hasTable('media_person')) {
+        if (! Tabulky::je('media_person')) {
             return [];
         }
 
@@ -497,7 +546,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Umí databáze archiv alb (sloupec `archived_at`)? */
     private function archivAlb(): bool
     {
-        return Schema::hasColumn('albums', 'archived_at');
+        return Tabulky::sloupec('albums', 'archived_at');
     }
 
     /**
@@ -928,7 +977,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function duplicity(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('duplicate_groups')) {
+        if (! Tabulky::je('duplicate_groups')) {
             return [];
         }
 
@@ -1018,7 +1067,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->orWhere(fn ($v) => $v->whereNull('location_name')->whereNull('latitude')))
             ->count();
 
-        $nalezy = Schema::hasTable('duplicate_groups')
+        $nalezy = Tabulky::je('duplicate_groups')
             ? DB::table('duplicate_groups')->where('gallery_space_id', $prostor->id)->whereNull('resolved_at')->count()
             : 0;
 
@@ -1040,12 +1089,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'x-uklid' => $chybi + $nalezy,
                 'trash' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)->whereNotNull('trashed_at')->count(),
-                'shared' => Schema::hasTable('shared_links') ? DB::table('shared_links')
+                'shared' => Tabulky::je('shared_links') ? DB::table('shared_links')
                     ->where('gallery_space_id', $prostor->id)->where('is_active', true)
                     ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
                     ->count() : 0,
                 // Co je dnes nebo po termínu a ještě neudělané.
-                'x-plan' => Schema::hasTable('shared_todos') ? DB::table('shared_todos')
+                'x-plan' => Tabulky::je('shared_todos') ? DB::table('shared_todos')
                     ->where('gallery_space_id', $prostor->id)
                     ->whereNotIn('status', ['completed', 'cancelled'])
                     ->whereNotNull('due_at')->where('due_at', '<=', $dnes->endOfDay())
@@ -1054,7 +1103,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ],
         );
 
-        $cesta = Schema::hasTable('trips') ? DB::table('trips')
+        $cesta = Tabulky::je('trips') ? DB::table('trips')
             ->where('gallery_space_id', $prostor->id)
             ->whereDate('start_date', '<=', $dnes)->whereDate('end_date', '>=', $dnes)
             ->orderBy('start_date')->first(['start_date']) : null;
@@ -1156,7 +1205,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'nahrano' => $f['nahrano'] ?? null,
                 'place' => $f['place'],
                 'video' => $f['isVideo'],
-                'dur' => $f['dur'] ?? '0:20',
+                // `fotky()` schválně vrací `null`, když délku videa neznáme —
+                // tohle za ni dosazovalo „0:20" a telefon tak u každého videa
+                // bez metadat (a jednou i u fotky) tvrdil dvacet vteřin.
+                'dur' => $f['dur'] ?? null,
                 'fav' => $f['fav'],
                 'seed' => $f['n'],
                 'bg' => $f['bg'],
@@ -1350,7 +1402,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
          * k originálu zase adresu z doby před úpravou — a tu si prohlížeč mezitím
          * uložil i s upraveným obrázkem.
          */
-        if (Schema::hasTable('media_edits')) {
+        if (Tabulky::je('media_edits')) {
             DB::table('media_edits')->whereIn('media_item_id', $id)
                 ->groupBy('media_item_id')
                 ->selectRaw('media_item_id, MAX(created_at) as naposledy')
@@ -1363,11 +1415,17 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             DB::table('media_edits')->whereIn('media_item_id', $id)->where('is_current', true)
                 ->get(['media_item_id', 'operations_json'])
                 ->each(function ($r) {
-                    $operace = json_decode((string) $r->operations_json, true) ?: [];
+                    // `?: []` propustí skalár — `foreach` přes řetězec je varování,
+                    // z varování výjimka a z výjimky pětistovka celé knihovny.
+                    $operace = json_decode((string) $r->operations_json, true);
+                    $operace = is_array($operace) ? $operace : [];
                     $uhel = 0;
                     $vyrez = false;
 
                     foreach ($operace as $o) {
+                        if (! is_array($o)) {
+                            continue;
+                        }
                         if (($o['type'] ?? null) === 'rotate') {
                             $uhel = (int) ($o['degrees'] ?? 0);
                         }
@@ -1478,7 +1536,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $ja = auth()->id();
-        $oblibene = $ja !== null && Schema::hasTable('user_favorites')
+        $oblibene = $ja !== null && Tabulky::je('user_favorites')
             ? DB::table('user_favorites')->where('user_id', $ja)->pluck('media_item_id')->flip()->all()
             : [];
         $jmena = DB::table('users')->whereIn('id', $radky->pluck('uploaded_by')->filter()->unique())->pluck('name', 'id');
@@ -1656,58 +1714,15 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             : $od->format('j. n. Y').' – '.$do->format('j. n. Y');
     }
 
-    /** Číslo s mezerou po tisících — prototyp je tak píše všude. */
-    /**
-     * Kdy fotíme: `[{ label, n, reg }]`.
+    /*
+     * `HOURS` se odtud odstěhovalo do `Mechanismy::pozdniVecery()`.
      *
-     * `n` je kolik snímků v tom pásmu vzniklo, `reg` kolik z nich je
-     * pravidelných — tedy kolik různých dnů se v tom pásmu fotilo. Jedno
-     * odpoledne se sto snímky není zvyk; deset odpolední po deseti ano.
-     *
-     * @param  Collection<int, MediaItem>  $media
-     * @return list<array<string, mixed>>
+     * Obrazovka „Pozdní večery" z toho čte podíl `reg / n` a píše k němu
+     * „100 % věcí odtud skončilo špatně". Dostávala ale počty fotek a počty
+     * dnů, kdy se fotilo — dvojici, která fotí jednu fotku denně ráno, tak
+     * vyšlo sto procent lítosti. Kolik se kdy fotí, kreslí knihovna sama
+     * z `LIBSTATS.hours`; lítost patří k věcem, které mají pozdější osud.
      */
-    private function hodiny(Collection $media): array
-    {
-        $pasma = [
-            ['do 12:00', 0, 12],
-            ['12–17', 12, 17],
-            ['17–20', 17, 20],
-            ['20–22', 20, 22],
-            ['po 22:00', 22, 24],
-        ];
-
-        $sCasem = $media->filter(fn (MediaItem $m) => $m->taken_at !== null);
-
-        if ($sCasem->isEmpty()) {
-            return [];
-        }
-
-        $radky = [];
-
-        foreach ($pasma as [$popis, $od, $do]) {
-            $vPasmu = $sCasem->filter(function (MediaItem $m) use ($od, $do) {
-                $hodina = (int) CarbonImmutable::parse($m->taken_at)->hour;
-
-                return $hodina >= $od && $hodina < $do;
-            });
-
-            if ($vPasmu->isEmpty()) {
-                continue;
-            }
-
-            $radky[] = [
-                'label' => $popis,
-                'n' => $vPasmu->count(),
-                'reg' => $vPasmu
-                    ->map(fn (MediaItem $m) => CarbonImmutable::parse($m->taken_at)->format('Y-m-d'))
-                    ->unique()
-                    ->count(),
-            ];
-        }
-
-        return $radky;
-    }
 
     /**
      * Štítky knihovny: `{ all: [[název, počet]], sug: [] }`.
@@ -1773,7 +1788,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function slucitelneStitky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('tags')) {
+        if (! Tabulky::je('tags')) {
             return [];
         }
 

@@ -4,9 +4,9 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Pravidla, vzpomínky a jejich historie.
@@ -81,7 +81,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pravidla(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('automation_rules')) {
+        if (! Tabulky::je('automation_rules')) {
             return [];
         }
 
@@ -134,7 +134,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function historie(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('automation_runs')) {
+        if (! Tabulky::je('automation_runs')) {
             return [];
         }
 
@@ -171,7 +171,7 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vzpominky(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('generated_memories')) {
+        if (! Tabulky::je('generated_memories')) {
             return [];
         }
 

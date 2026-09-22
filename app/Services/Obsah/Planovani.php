@@ -7,10 +7,10 @@ use App\Models\GallerySpace;
 use App\Models\LifeEvent;
 use App\Models\SharedTodo;
 use App\Support\Cas;
+use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Kalendář, úkoly a „až budeme mít čas" ve tvaru, ve kterém je kreslí prototyp.
@@ -99,7 +99,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         $jmena = $this->jmena($prostor);
 
-        if (Schema::hasTable('shared_todo_lists')) {
+        if (Tabulky::je('shared_todo_lists')) {
             $this->seznamyUkolu = DB::table('shared_todo_lists')
                 ->where('gallery_space_id', $prostor->id)
                 ->orderBy('sort_order')
@@ -247,7 +247,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function pripomenuti(GallerySpace $prostor): array
     {
-        if (! Schema::hasTable('event_reminders')) {
+        if (! Tabulky::je('event_reminders')) {
             return [];
         }
 
@@ -485,7 +485,7 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function stopa(GallerySpace $prostor, array $jmena): array
     {
-        if (! Schema::hasTable('life_events')) {
+        if (! Tabulky::je('life_events')) {
             return [];
         }
 
