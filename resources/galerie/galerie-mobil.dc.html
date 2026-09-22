@@ -2103,6 +2103,70 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
           </sc-if>
 
+          <!-- ZPRÁVY -->
+          <sc-if value="{{ isChat }}">
+            <div data-screen-label="Mobil — Zprávy" style="animation:mIn .2s ease; padding:0 14px 8px">
+              <div style="font-size:12px; color:var(--g-ink3); padding:0 4px 12px">{{ chatHead }}</div>
+              <sc-if value="{{ chatEmpty }}">
+                <div style="padding:48px 10px; text-align:center">
+                  <i class="ph-duotone ph-chat-circle-dots" style="font-size:32px; color:var(--g-ink3)"></i>
+                  <div style="font-size:16.5px; margin-top:10px">Zatím žádná zpráva</div>
+                  <div style="font-size:13px; color:var(--g-ink3); margin-top:4px">Napište první — uvidíte ji oba.</div>
+                </div>
+              </sc-if>
+              <sc-for list="{{ chatGroups }}" as="g" hint-placeholder-count="2">
+                <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:14px">
+                  <div style="align-self:center; font-size:11px; letter-spacing:.06em; text-transform:uppercase; color:var(--g-ink3); padding:2px 0">{{ g.day }}</div>
+                  <sc-for list="{{ g.items }}" as="m" hint-placeholder-count="3">
+                    <div style="display:flex; flex-direction:column; align-items:{{ m.align }}; opacity:{{ m.op }}">
+                      <div style="max-width:84%; min-width:0; border-radius:3px; padding:8px 11px 9px; background:{{ m.bg }}">
+                        <div style="display:flex; align-items:center; gap:6px; font-size:10.5px; color:var(--g-ink3)">
+                          <span style="flex:1; min-width:0">{{ m.who }} · {{ m.time }}</span>
+                          <sc-if value="{{ m.canDel }}">
+                            <button onClick="{{ m.toggle }}" aria-label="Možnosti zprávy" aria-expanded="{{ m.selected }}" style="flex:none; width:32px; height:24px; margin:-4px -6px -4px 0; display:grid; place-items:center; border:0; background:transparent; color:var(--g-ink3); cursor:pointer"><i class="ph-duotone ph-dots-three" style="font-size:16px"></i></button>
+                          </sc-if>
+                        </div>
+                        <sc-if value="{{ m.isPhoto }}">
+                          <img sc-camel-src="{{ m.photoUrl }}" alt="{{ m.photoAlt }}" loading="lazy" onClick="{{ m.openPhoto }}" style="display:block; max-width:100%; max-height:320px; width:auto; height:auto; margin-top:6px; border-radius:2px; background:var(--g-panel)" />
+                        </sc-if>
+                        <sc-if value="{{ m.isVoice }}">
+                          <audio sc-camel-src="{{ m.audioSrc }}" controls="{{ m.hasAudio }}" preload="none" style="display:block; width:230px; max-width:100%; height:34px; margin-top:6px"></audio>
+                          <sc-if value="{{ m.voiceWait }}">
+                            <div style="font-size:11.5px; color:var(--g-ink3); margin-top:4px">{{ m.voiceNote }}</div>
+                          </sc-if>
+                        </sc-if>
+                        <sc-if value="{{ m.showText }}">
+                          <div style="font-size:14.5px; line-height:1.45; margin-top:3px; white-space:pre-wrap; overflow-wrap:anywhere; text-wrap:pretty">{{ m.text }}</div>
+                        </sc-if>
+                        <sc-if value="{{ m.hasExtra }}">
+                          <div style="font-size:11.5px; color:var(--g-ink3); margin-top:4px">{{ m.extra }}</div>
+                        </sc-if>
+                      </div>
+                      <sc-if value="{{ m.selected }}">
+                        <button onClick="{{ m.del }}" style="margin-top:6px; min-height:40px; padding:0 12px; border:1px solid {{ m.delBd }}; border-radius:2px; background:transparent; color:var(--g-mag); cursor:pointer; font-family:inherit; font-size:12.5px"><i class="ph-duotone ph-trash" style="font-size:14px; margin-right:5px; vertical-align:-2px"></i>{{ m.delLabel }}</button>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-for>
+              <div ref="{{ chatEndRef }}" style="height:1px"></div>
+              <div style="position:sticky; bottom:0; margin:0 -14px; padding:10px 14px calc(10px + env(safe-area-inset-bottom)); background:var(--g-bg); border-top:1px solid var(--g-line2)">
+                <sc-if value="{{ chatRecOn }}">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:8px">
+                    <button onClick="{{ chatRec }}" style="flex:1; min-height:44px; display:flex; align-items:center; justify-content:center; gap:7px; border:1px solid var(--g-mag); border-radius:2px; background:transparent; color:var(--g-mag); cursor:pointer; font-family:inherit; font-size:13.5px"><i class="ph-duotone ph-stop-circle" style="font-size:18px"></i>{{ chatRecLabel }}</button>
+                    <button onClick="{{ chatRecCancel }}" aria-label="Zrušit nahrávání" style="flex:none; width:44px; min-height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; color:var(--g-ink2); cursor:pointer"><i class="ph-duotone ph-x" style="font-size:17px"></i></button>
+                  </div>
+                </sc-if>
+                <div style="display:flex; align-items:flex-end; gap:6px">
+                  <button onClick="{{ chatPhoto }}" aria-label="Poslat fotku" style="flex:none; width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; color:var(--g-ink2); cursor:pointer"><i class="ph-duotone ph-image" style="font-size:19px"></i></button>
+                  <button onClick="{{ chatRec }}" aria-label="{{ chatRecLabel }}" aria-pressed="{{ chatRecOn }}" style="flex:none; width:44px; height:44px; display:grid; place-items:center; border:1px solid var(--g-line); border-radius:2px; background:transparent; color:{{ chatRecColor }}; cursor:pointer"><i class="ph-duotone {{ chatRecIcon }}" style="font-size:19px"></i></button>
+                  <textarea value="{{ chatDraft }}" onInput="{{ chatSetDraft }}" rows="1" placeholder="Zpráva…" aria-label="Napsat zprávu" style="flex:1; min-width:0; min-height:44px; max-height:120px; resize:none; box-sizing:border-box; padding:11px 10px; border:1px solid var(--g-line); border-radius:2px; background:var(--g-raise); color:inherit; font-family:inherit; font-size:15px; line-height:1.35"></textarea>
+                  <button onClick="{{ chatSend }}" disabled="{{ chatCant }}" aria-label="Odeslat zprávu" class="btn btn-primary" style="flex:none; width:44px; height:44px; padding:0; display:grid; place-items:center"><i class="ph-duotone ph-paper-plane-tilt" style="font-size:19px"></i></button>
+                </div>
+              </div>
+            </div>
+          </sc-if>
+
           <!-- SDÍLENÉ ODKAZY -->
           <sc-if value="{{ isShares }}">
             <div data-screen-label="Mobil — Sdílené odkazy" style="animation:mIn .2s ease; padding:0 18px">
@@ -6094,6 +6158,7 @@ class Component extends DCLogic {
   componentDidUpdate() {
     this.syncTabStrips();
     this.persistSave();
+    this.chatHlidej();
     const S = window.GalerieStore;
     if (!S || !this._last) return;
     const patch = {};
@@ -6136,6 +6201,9 @@ class Component extends DCLogic {
     window.removeEventListener('galerie-odhlaseno', this._odhlaseno);
     window.removeEventListener('galerie-odmitnuto', this._odmitnuto);
     window.removeEventListener('galerie-stret', this._stret);
+    clearInterval(this._chatI);
+    clearInterval(this._mRecI);
+    if (this._mRec) { try { this._mRec.proud.getTracks().forEach(t => t.stop()); } catch (e) {} this._mRec = null; }
     window.removeEventListener('resize', this._vitrina);
     window.removeEventListener('orientationchange', this._vitrina);
     ['pointerdown', 'keydown'].forEach(e => window.removeEventListener(e, this._actH));
@@ -6949,7 +7017,7 @@ class Component extends DCLogic {
   // (HOUSE_CHORES, DEC_LIST, GIFT_WISHES) neměl odkud brát. Nikde jinde se
   // nepřesměrovává: řádek musí doručit právě ty záložky, které inzeruje.
   ownScreenMap() {
-    return { 'x-domacnost': 'house', 'x-rozhodnuti': 'dec', 'x-darky': 'gifts', 'x-admin': 'admin' };
+    return { 'x-domacnost': 'house', 'x-rozhodnuti': 'dec', 'x-darky': 'gifts', 'x-admin': 'admin', 'x-zpravy': 'chat' };
   }
   // Trasy hlavní navigace, které nejsou v katalogu APP — ty mají vlastní
   // obrazovku a žádné záložky, takže se u nich nic neslibuje ani nezamlčuje.
@@ -6968,7 +7036,8 @@ class Component extends DCLogic {
       'x-naklady': 'cost', 'x-zmeny': 'chg', 'x-denik': 'diary', 'x-plan': 'tasks',
       'x-inbox': 'inbox', 'x-darky': 'gifts', 'x-trezor': 'vault', 'x-mista': 'places',
       'x-cesty': 'trips', 'x-finance': 'finance', 'x-transakce': 'finance', 'x-rozpocty': 'finance',
-      'x-statistiky': 'stats', 'x-lide': 'sec', 'x-vzpominky': 'memories', 'x-admin': 'admin'
+      'x-statistiky': 'stats', 'x-lide': 'sec', 'x-vzpominky': 'memories', 'x-admin': 'admin',
+      'x-zpravy': 'chat'
     };
   }
   allVals(screen) {
@@ -9574,6 +9643,218 @@ class Component extends DCLogic {
       this.toast((res && res.zprava) || 'Trvale odstraněno', { icon: 'ph-trash' });
     }).catch(e => this.toast(((e && e.body) || {}).zprava || 'Odstranění se nepodařilo', { icon: 'ph-warning' }));
   }
+  /*
+   * Zprávy — vlastní obrazovka telefonu.
+   *
+   * Hovor dvojice byl na telefonu jen náhledem ve „Všech obrazovkách":
+   * posledních čtrnáct bublin, bez psaní, bez hlasovek k poslechu a bez
+   * fotek. Přitom se zprávy píšou hlavně z telefonu. Posílá se stejně jako
+   * na počítači — `/v1/chat`, hlasovka napřed jako záznam — a vlákno se pak
+   * načte znovu ze serveru, takže obě zařízení ukazují totéž.
+   */
+  chatNaServeru() { const api = window.GalerieApi; return !!(api && api.mode === 'http'); }
+  chatObnov() { return window.GalerieObnovit ? window.GalerieObnovit('zpravy') : Promise.resolve(false); }
+  chatCas() { const d = new Date(); return d.getHours() + ':' + String(d.getMinutes()).padStart(2, '0'); }
+  // Proud hlasovky je za přihlášením: stáhne se do `blob:` a adresa se drží (viz počítač, `hlasSrc`).
+  chatHlas(uuid) {
+    if (!uuid) return null;
+    this._mHlasy = this._mHlasy || {};
+    if (this._mHlasy[uuid] !== undefined) return this._mHlasy[uuid];
+    const api = window.GalerieApi;
+    if (!api || !api.adresaHlasu) return null;
+    this._mHlasy[uuid] = null;
+    api.adresaHlasu(uuid).then(url => { this._mHlasy[uuid] = url; this.forceUpdate(); });
+    return null;
+  }
+  /** Odeslání s bublinou „odesílá se", dokud server nevrátí vlákno. */
+  chatOdesli(akce, popis) {
+    const ceka = { id: 'ceka-' + Date.now(), text: popis, time: this.chatCas() };
+    const pryc = () => this.setState(st => ({ mChatCeka: (st.mChatCeka || []).filter(x => x.id !== ceka.id) }));
+    this.setState(st => ({ mChatCeka: (st.mChatCeka || []).concat([ceka]) }));
+    return akce()
+      .then(() => this.chatObnov())
+      .then(pryc)
+      .catch(e => {
+        pryc();
+        const b = (e && e.body) || {};
+        this.toast(b.message || (b.errors && Object.values(b.errors)[0] && Object.values(b.errors)[0][0]) || 'Zprávu se nepodařilo odeslat', { icon: 'ph-warning', silent: true });
+        throw e;
+      });
+  }
+  chatPosliText() {
+    const t = (this.state.mChatDraft || '').trim();
+    if (!t) { this.toast('Nejdřív napište zprávu', { icon: 'ph-pencil-simple', silent: true }); return; }
+    // Bez serveru (ukázka) zůstane zpráva jen v tomhle telefonu — a nikdo za druhého neodpoví.
+    if (!this.chatNaServeru()) {
+      this.setState(st => ({ mChatDraft: '', mChatMistni: (st.mChatMistni || []).concat([{ id: 'l' + Date.now(), text: t, time: this.chatCas() }]) }));
+      return;
+    }
+    this.setState({ mChatDraft: '' });
+    this.chatOdesli(() => window.GalerieApi.post('v1/chat', { body: t }), t).catch(() => this.setState({ mChatDraft: t }));
+  }
+  chatNahravej() {
+    if (this._mRec) { this.chatNahravkaKonec(false); return; }
+    if (!this.chatNaServeru()) { this.toast('Hlasovky se ukládají na server — bez něj se nahrávka nikam nedostane', { icon: 'ph-microphone-slash', silent: true }); return; }
+    if (!navigator.mediaDevices || !window.MediaRecorder) { this.toast('Tenhle prohlížeč neumí nahrávat zvuk', { icon: 'ph-microphone-slash', silent: true }); return; }
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(proud => {
+      const kusy = [];
+      const rec = new MediaRecorder(proud);
+      rec.ondataavailable = e => { if (e.data && e.data.size) kusy.push(e.data); };
+      this._mRec = { rec, kusy, proud, od: Date.now() };
+      rec.start();
+      this.setState({ mChatRec: Date.now() });
+      clearInterval(this._mRecI);
+      this._mRecI = setInterval(() => this.forceUpdate(), 1000);
+    }).catch(() => this.toast('Bez přístupu k mikrofonu nahrát nejde', { icon: 'ph-microphone-slash', silent: true }));
+  }
+  chatNahravkaKonec(zrusit) {
+    const n = this._mRec;
+    this._mRec = null;
+    clearInterval(this._mRecI);
+    this.setState({ mChatRec: 0 });
+    if (!n) return;
+    n.rec.onstop = () => {
+      n.proud.getTracks().forEach(t => t.stop());
+      if (zrusit) { this.toast('Nahrávání zrušeno', { icon: 'ph-x', silent: true }); return; }
+      const blob = new Blob(n.kusy, { type: n.rec.mimeType || 'audio/webm' });
+      if (!blob.size) { this.toast('Nahrávka je prázdná', { icon: 'ph-warning', silent: true }); return; }
+      const vteriny = Math.max(1, Math.round((Date.now() - n.od) / 1000));
+      const nazev = 'Hlasovka z ' + this.chatCas();
+      const api = window.GalerieApi;
+      this.chatOdesli(
+        () => api.nahrajHlas(blob, vteriny, nazev).then(h => api.post('v1/chat', { voice_note: (h && (h.uuid || h.id)) || '' })),
+        nazev + ' · ' + Math.floor(vteriny / 60) + ':' + String(vteriny % 60).padStart(2, '0')
+      ).catch(() => {});
+    };
+    try { n.rec.stop(); } catch (e) { n.proud.getTracks().forEach(t => t.stop()); }
+  }
+  chatFotka() {
+    if (!this.chatNaServeru()) { this.toast('Fotky do zpráv jdou přes server — bez něj se neodešlou', { icon: 'ph-image', silent: true }); return; }
+    const vstup = document.createElement('input');
+    vstup.type = 'file';
+    vstup.accept = 'image/*';
+    vstup.style.display = 'none';
+    vstup.onchange = () => {
+      const f = vstup.files && vstup.files[0];
+      vstup.remove();
+      if (!f) return;
+      if (!/^image\//.test(f.type || '')) { this.toast('Do zpráv jde poslat jen obrázek', { icon: 'ph-warning', silent: true }); return; }
+      const text = (this.state.mChatDraft || '').trim();
+      this.setState({ mChatDraft: '' });
+      this.chatOdesli(() => window.GalerieApi.nahrajDoChatu(f, text), 'Fotka · ' + f.name).catch(() => this.setState({ mChatDraft: text }));
+    };
+    vstup.oncancel = () => vstup.remove();
+    document.body.appendChild(vstup);
+    vstup.click();
+  }
+  // Smazat jde jen vlastní zprávu (server cizí nedovolí); ptá se dvojím klepnutím, zmizí u obou.
+  chatSmaz(m) {
+    if (this.state.mChatPotvrd !== m.id) {
+      this.setState({ mChatPotvrd: m.id });
+      this.toast('Klepněte znovu — zpráva zmizí u obou', { icon: 'ph-warning', silent: true });
+      return;
+    }
+    this.setState({ mChatPotvrd: null, mChatSel: null });
+    window.GalerieApi.del('v1/chat/' + m.id)
+      .then(() => this.chatObnov())
+      .then(() => this.toast('Zpráva smazána u obou', { icon: 'ph-trash', silent: true }))
+      .catch(e => this.toast(((e && e.body) || {}).message || 'Zprávu se nepodařilo smazat', { icon: 'ph-warning', silent: true }));
+  }
+  // Dokud je obrazovka otevřená, vlákno se obnovuje (každých 20 s, ne se schovanou kartou ani při nahrávání).
+  chatHlidej() {
+    const s = this.state;
+    const screen = s.stack.length ? s.stack[s.stack.length - 1] : s.tab;
+    if (screen === 'chat' && !this._chatI) {
+      if (this.chatNaServeru()) this.chatObnov();
+      this._chatI = setInterval(() => { if (!document.hidden && !this._mRec && this.chatNaServeru()) this.chatObnov(); }, 20000);
+    } else if (screen !== 'chat' && this._chatI) {
+      clearInterval(this._chatI);
+      this._chatI = null;
+      if (this._mRec) this.chatNahravkaKonec(true);
+    }
+  }
+  chatVals() {
+    const s = this.state;
+    const D = window.GalerieData || {};
+    const naServeru = this.chatNaServeru();
+    const [ja, druhy] = this.dva();
+    const zeServeru = (D.MSGS || []).map(m => ({ id: m[0], who: m[1], day: m[2], time: m[3], type: m[4], text: m[5], extra: m[6] || '', audio: m[7] || '', img: m[8] || '', ref: m[9] || '' }));
+    const mistni = (naServeru ? [] : (s.mChatMistni || [])).map(x => ({ id: x.id, who: 'A', day: 'Dnes', time: x.time, type: 't', text: x.text, extra: '', audio: '', img: '', ref: '' }));
+    const ceka = (s.mChatCeka || []).map(x => ({ id: x.id, who: 'A', day: 'Dnes', time: x.time, type: 't', text: x.text, extra: 'odesílá se…', audio: '', img: '', ref: '', ceka: true }));
+    const vse = zeServeru.concat(mistni, ceka);
+    const skupiny = [];
+    vse.forEach(m => {
+      const g = skupiny[skupiny.length - 1];
+      if (!g || g.day !== m.day) skupiny.push({ day: m.day, items: [m] }); else g.items.push(m);
+    });
+    const rec = s.mChatRec ? Math.max(0, Math.round((Date.now() - s.mChatRec) / 1000)) : 0;
+    const bublina = m => {
+      const moje = m.who === 'A';
+      const vybrana = s.mChatSel === m.id;
+      const smazatelna = moje && naServeru && /^[0-9a-f-]{36}$/.test(String(m.id));
+      const zvuk = m.type === 'v' ? this.chatHlas(m.audio) : null;
+      return {
+        id: m.id, text: m.text, time: m.time,
+        who: this.krestni(moje ? ja : druhy),
+        align: moje ? 'flex-end' : 'flex-start',
+        bg: moje ? 'var(--g-acc-soft)' : 'var(--g-panel)',
+        op: m.ceka ? '.6' : '1',
+        showText: m.type === 't' || m.type === 'f' || (m.type === 'p' && !!m.text && m.text !== 'Fotka'),
+        isVoice: m.type === 'v',
+        hasAudio: !!zvuk, audioSrc: zvuk || '',
+        voiceNote: m.audio ? 'Nahrávka se načítá…' : 'K téhle zprávě nahrávka není — zůstal jen popisek.',
+        voiceWait: m.type === 'v' && !zvuk,
+        isPhoto: m.type === 'p' && !!m.img, photoUrl: m.img || '',
+        photoAlt: 'Fotka ve zprávě' + (m.extra ? ' — ' + m.extra : ''),
+        extra: m.type === 'v' || m.type === 'p' || m.ceka ? m.extra : '',
+        hasExtra: !!(m.type === 'v' || m.type === 'p' || m.ceka) && !!m.extra,
+        openPhoto: () => { if (m.ref && PHOTOS.some(p => p.id === m.ref)) this.setState({ lb: m.ref }); },
+        toggle: () => { if (!m.ceka) this.setState({ mChatSel: vybrana ? null : m.id, mChatPotvrd: null }); },
+        selected: vybrana && smazatelna,
+        canDel: smazatelna,
+        delLabel: s.mChatPotvrd === m.id ? 'Opravdu smazat' : 'Smazat',
+        delBd: s.mChatPotvrd === m.id ? 'var(--g-mag)' : 'var(--g-line)',
+        del: () => this.chatSmaz(m)
+      };
+    };
+    return {
+      chatGroups: skupiny.map(g => ({ day: g.day, items: g.items.map(bublina) })),
+      chatEmpty: vse.length === 0,
+      chatHead: (druhy ? 'S ' + this.krestni(druhy) + ' · ' : '') + this.pl(zeServeru.length, 'zpráva', 'zprávy', 'zpráv')
+        + (naServeru ? ' · vidíte je oba' : ' · ukázka bez serveru'),
+      chatDraft: s.mChatDraft || '',
+      chatSetDraft: e => this.setState({ mChatDraft: e.target.value }),
+      chatSend: () => this.chatPosliText(),
+      chatCant: !(s.mChatDraft || '').trim(),
+      chatRecOn: !!s.mChatRec,
+      chatRecLabel: s.mChatRec ? 'Nahrávám · ' + Math.floor(rec / 60) + ':' + String(rec % 60).padStart(2, '0') + ' — klepnutím odešlete' : 'Nahrát hlasovku',
+      chatRecIcon: s.mChatRec ? 'ph-stop-circle' : 'ph-microphone',
+      chatRecColor: s.mChatRec ? 'var(--g-mag)' : 'var(--g-ink2)',
+      chatRec: () => this.chatNahravej(),
+      chatRecCancel: () => this.chatNahravkaKonec(true),
+      chatPhoto: () => this.chatFotka(),
+      /*
+       * Konec vlákna do zorného pole, kdykoli přibude zpráva.
+       *
+       * Posouvá se celá oblast až na konec, ne jen značka k jejímu okraji:
+       * dole je přilepená lišta pro psaní a pod ní navigace, takže by
+       * poslední zprávy zůstaly schované pod nimi.
+       */
+      chatEndRef: el => {
+        if (!el || this._chatN === vse.length) return;
+        this._chatN = vse.length;
+        setTimeout(() => {
+          let sc = el.parentElement;
+          while (sc && sc !== document.body) {
+            const oy = getComputedStyle(sc).overflowY;
+            if ((oy === 'auto' || oy === 'scroll') && sc.scrollHeight > sc.clientHeight) break;
+            sc = sc.parentElement;
+          }
+          try { if (sc && sc !== document.body) sc.scrollTop = sc.scrollHeight; else el.scrollIntoView({ block: 'end' }); } catch (e) {}
+        }, 0);
+      }
+    };
+  }
   push(k, extra) { this.setState(Object.assign({ stack: this.state.stack.concat([k]), sheet: null, sel: [], selectMode: false }, extra || {})); }
   goTab(t, extra) { this.setState(Object.assign({ tab: t, stack: [], sheet: null, sel: [], selectMode: false }, extra || {})); }
 
@@ -11760,6 +12041,7 @@ class Component extends DCLogic {
         mkIdx('kalendar', 'Kalendář', 'ph-calendar-blank', 'more', ['kalendar']),
         mkIdx('cook', 'Co dnes uvařit', 'ph-cooking-pot', 'more', ['cook']),
         mkIdx('nudge', 'Žádosti mezi námi', 'ph-hand-heart', 'more', ['nudge']),
+        mkIdx('chat', 'Zprávy', 'ph-chat-circle-dots', 'more', ['chat']),
         mkIdx('chg', 'Co se změnilo', 'ph-clock-counter-clockwise', 'more', ['chg']),
         mkIdx('ritual', 'Roční rituály', 'ph-confetti', 'more', ['ritual']),
         mkIdx('cost', 'Co to znamená', 'ph-scales', 'more', ['cost']),
@@ -11822,6 +12104,7 @@ class Component extends DCLogic {
       sec: [this.section(s.secId).g, this.section(s.secId).label],
       cook: ['Společně', 'Co dnes uvařit'],
       nudge: ['Společně', 'Žádosti mezi námi'],
+      chat: ['Společně', 'Zprávy'],
       chg: ['Systém', 'Co se změnilo'],
       ritual: ['Společně', 'Roční rituály'],
       cost: ['Peníze', 'Co to znamená'],
@@ -11872,6 +12155,8 @@ class Component extends DCLogic {
       isCyklus: screen === 'cyklus', isKalendar: screen === 'kalendar', isSec: screen === 'sec',
       isPlaces: screen === 'places', isSettings: screen === 'settings', isVault: screen === 'vault',
       isAlbums: screen === 'albums', isAlbum: screen === 'album', isTrash: screen === 'trash', isShares: screen === 'shares',
+      isChat: screen === 'chat',
+      ...(screen === 'chat' ? this.chatVals() : {}),
       isGuests: screen === 'guests',
       isGifts: screen === 'gifts',
       isHouse: screen === 'house', isDec: screen === 'dec',

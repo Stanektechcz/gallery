@@ -213,12 +213,36 @@ class ChatController extends Controller
             'gif_height' => 'nullable|integer|max:4000',
             // The message being answered, by uuid so the client never sees our ids.
             'reply_to' => 'nullable|string|max:64',
+            /*
+             * Hlasovka nahraná napřed jako záznam (`POST /v1/voice-notes`).
+             *
+             * Galerie přehrává hlasovku v hovoru podle záznamu hlasovky, ne podle
+             * souboru u zprávy. Telefon ji tak posílá stejně jako počítač: nahraje
+             * záznam a do hovoru pošle odkaz na něj.
+             */
+            'voice_note' => 'nullable|string|max:64',
         ]);
 
         $body = trim((string) ($data['body'] ?? ''));
         $upload = $request->file('image') ?? $request->file('audio');
         $isVoice = $request->hasFile('audio');
         $gif = $this->safeGifUrl($data['gif_url'] ?? null);
+
+        $hlasovka = ! empty($data['voice_note'])
+            ? VoiceNote::withoutGlobalScopes()
+                ->where('gallery_space_id', $space->id)
+                ->where('created_by', $request->user()->id)
+                ->where('uuid', $data['voice_note'])
+                ->first()
+            : null;
+        abort_if(! empty($data['voice_note']) && $hlasovka === null, 422, 'Tahle hlasovka tu není.');
+
+        if ($hlasovka !== null) {
+            $isVoice = true;
+            $data['attachment_ref'] = $hlasovka->uuid;
+            $data['duration_ms'] = $hlasovka->duration_ms;
+            $body = $body !== '' ? $body : (string) ($hlasovka->title ?: 'Hlasovka');
+        }
 
         abort_if($body === '' && ! $upload && ! $gif, 422, 'Prázdnou zprávu odeslat nelze.');
 

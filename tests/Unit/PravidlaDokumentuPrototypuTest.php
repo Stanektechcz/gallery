@@ -158,6 +158,26 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertMatchesRegularExpression('/this\._pSkip = \{.*?\blockInfo: 1\b/s', self::dokument('galerie-desktop.dc.html'));
     }
 
+    /**
+     * Telefon má vlastní Zprávy a počítač maže zprávu doopravdy.
+     *
+     * Telefon ukazoval hovor jen jako náhled bez psaní; počítač „mazal" jen
+     * v místním seznamu a hlásil „smazána u obou".
+     */
+    public function test_zpravy_na_telefonu_a_mazani_na_serveru(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $this->assertStringContainsString('data-screen-label="Mobil — Zprávy"', $telefon);
+        $this->assertStringContainsString("'x-zpravy': 'chat'", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.post('v1/chat', { body: t })", $telefon);
+        $this->assertStringContainsString("api.post('v1/chat', { voice_note:", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.del('v1/chat/' + m.id)", $telefon);
+
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $this->assertStringContainsString("api.del('v1/chat/' + m.id)", $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ m.canDel }}">', $pocitac);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

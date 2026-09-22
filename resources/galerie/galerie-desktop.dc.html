@@ -5580,7 +5580,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                               </span>
                               <button class="btn btn-icon" onClick="{{ m.pin }}" aria-label="{{ m.pinLabel }}" title="{{ m.pinLabel }}" style="width:22px; height:22px"><i class="ph-duotone {{ m.pinIcon }}" style="font-size:12px"></i></button>
                               <button class="btn btn-icon" onClick="{{ m.toDiary }}" aria-label="Do deníku" title="Do deníku" style="width:22px; height:22px"><i class="ph-duotone ph-notebook" style="font-size:12px"></i></button>
-                              <button class="btn btn-icon" onClick="{{ m.del }}" aria-label="Smazat" title="Smazat" style="width:22px; height:22px"><i class="ph-duotone ph-trash" style="font-size:12px"></i></button>
+                              <sc-if value="{{ m.canDel }}">
+                                <button class="btn btn-icon" onClick="{{ m.del }}" aria-label="Smazat" title="Smazat" style="width:22px; height:22px"><i class="ph-duotone ph-trash" style="font-size:12px"></i></button>
+                              </sc-if>
                             </div>
                           </div>
                         </sc-for>
@@ -21783,10 +21785,35 @@ class Component extends DCLogic {
           this.setState({ route: 'x-denik', appTab: 0, dnDlg: { mode: 'new', key: 'diary', orig: null, date: this.czTs(m.day) ? m.day : this.dnesCesky(), title: m.type === 'v' ? m.text : 'Ze zprávy', text: m.type === 'v' ? 'Z hlasovky „' + m.text + '“' : m.text, mood: this.ukazka() ? 'radost' : '', priv: !this.ukazka(), letter: false, openAt: this.vychoziOtevreni(), who: s.lockWho || 'A' } });
           this.toast('Zápis ze zprávy je připravený — upravte ho a uložte', { icon: 'ph-notebook' });
         },
+        /*
+         * Smazat zprávu — doopravdy a jen vlastní.
+         *
+         * Mazalo se jen z místního seznamu a hláška tvrdila „smazána u obou";
+         * server odebrání ze stavu nezná, takže se zpráva po obnovení vrátila
+         * — a u druhého nezmizela nikdy. Cizí zprávu server smazat nedovolí,
+         * proto u ní tlačítko není.
+         */
+        canDel: mine || this.ukazka(),
         del: () => {
+          const api = window.GalerieApi;
+          if (api && api.mode === 'http' && /^[0-9a-f-]{36}$/.test(String(m.id))) {
+            this.setState({ confirm: {
+              title: 'Smazat zprávu?',
+              body: (m.type === 't' ? '„' + String(m.text || '').slice(0, 80) + '“' : 'Zpráva') + ' zmizí u obou.',
+              cta: 'Smazat', btnBg: 'var(--g-mag)',
+              go: () => {
+                this.setState({ confirm: null });
+                api.del('v1/chat/' + m.id).then(() => {
+                  this.chatZeServeru();
+                  this.toast('Zpráva smazána u obou', { icon: 'ph-trash' });
+                }).catch(e => this.toast(((e && e.body) || {}).message || 'Zprávu se nepodařilo smazat', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+              }
+            } });
+            return;
+          }
           const prev = all;
           this.msgsSet(all.filter(x => x.id !== m.id));
-          this.toast('Zpráva smazána u obou', { icon: 'ph-trash', undo: () => this.msgsSet(prev) });
+          this.toast('Zpráva smazána', { icon: 'ph-trash', undo: () => this.msgsSet(prev) });
         }
       };
     };
