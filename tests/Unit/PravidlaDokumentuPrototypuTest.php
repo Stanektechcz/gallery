@@ -250,6 +250,12 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("fetch(base + '/finance/import'", $api);
         $this->assertStringContainsString("telo.append('vypis', soubor", $api);
         $this->assertStringNotContainsString('Import z Revolutu ústí sem.', $data);
+
+        // Telefon: výpis se stahuje právě tam (aplikace banky), nahrát jde z Financí.
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $this->assertStringContainsString('onClick="{{ txImport }}"', $telefon);
+        $this->assertStringContainsString('api.nahrajVypis(soubor, ucet[8])', $telefon);
+        $this->assertStringContainsString('<sc-if value="{{ sheetIsVypis }}">', $telefon);
     }
 
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */

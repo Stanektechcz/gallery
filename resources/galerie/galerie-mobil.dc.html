@@ -574,8 +574,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <sc-if value="{{ txEmpty }}">
                 <div style="padding:40px 26px; text-align:center; font-size:14px; color:var(--g-ink2)">Ve filtru není žádná transakce.</div>
               </sc-if>
-              <div style="padding:16px 18px 0">
+              <div style="padding:16px 18px 0; display:flex; flex-direction:column; gap:8px">
                 <button onClick="{{ txAdd }}" class="btn btn-secondary btn-block" style="min-height:44px">Zapsat platbu ručně</button>
+                <sc-if value="{{ txImportOn }}">
+                  <button onClick="{{ txImport }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px"><i class="ph-duotone ph-file-arrow-up" style="font-size:16px"></i>Nahrát výpis z banky</button>
+                </sc-if>
               </div>
             </div>
           </sc-if>
@@ -4896,6 +4899,20 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <i class="ph-duotone {{ o.icon }}" style="flex:none; font-size:20px; color:{{ o.color }}"></i>
                       <span style="flex:1; min-width:0; font-size:14.5px">{{ o.label }}</span>
                       <sc-if value="{{ o.on }}"><i class="ph-bold ph-check" style="flex:none; font-size:15px; color:var(--g-acc)"></i></sc-if>
+                    </button>
+                  </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sheetIsVypis }}">
+                <div style="margin-top:12px">
+                  <sc-for list="{{ vypisUcty }}" as="o" hint-placeholder-count="2">
+                    <button onClick="{{ o.go }}" style="display:flex; align-items:center; gap:14px; width:100%; min-height:56px; padding:14px 2px; border:0; border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
+                      <i class="ph-duotone {{ o.icon }}" style="flex:none; font-size:23px; color:var(--g-acc)"></i>
+                      <span style="flex:1; min-width:0">
+                        <span style="display:block; font-size:15px">{{ o.label }}</span>
+                        <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ o.note }}</span>
+                      </span>
                     </button>
                   </sc-for>
                 </div>
@@ -9655,6 +9672,32 @@ class Component extends DCLogic {
     const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
     this.toast(t.zprava || t.message || prvni || vychozi, { icon: 'ph-warning' });
   }
+  /*
+   * Výpis z banky na účet — tam, kde si ho člověk stáhne.
+   *
+   * Aplikace Revolut výpis (Excel/CSV) ukládá v telefonu, ale nahrát ho šlo
+   * jen na počítači. `ucet` je řádek `FIN.accounts` (identifikátor na [8]).
+   */
+  nahratVypis(ucet) {
+    const api = window.GalerieApi;
+    if (!this.galerieNaServeru() || !api.nahrajVypis || !ucet || !ucet[8]) return;
+    const vstup = document.createElement('input');
+    vstup.type = 'file';
+    vstup.accept = '.csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    vstup.onchange = () => {
+      const soubor = vstup.files && vstup.files[0];
+      if (!soubor) return;
+      this.setState({ sheet: null });
+      this.toast('Čtu výpis pro účet ' + ucet[0] + '…', { icon: 'ph-file-arrow-up', silent: true });
+      api.nahrajVypis(soubor, ucet[8]).then(res => {
+        if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        this.toast((res && res.zprava) || 'Výpis zpracován', { icon: res && res.zapsano ? 'ph-check-circle' : 'ph-info' });
+        // Nové platby jsou bez kategorie — rovnou tam, kde se zařazují.
+        if (res && res.zapsano) this.goTab('finance', { txCat2: 'Nezařazeno', txTrip: null });
+      }).catch(e => this.chybaServeru(e, 'Výpis se nepodařilo nahrát'));
+    };
+    vstup.click();
+  }
   sdiletNaServeru(cil, nazev) {
     window.GalerieApi.post('sdileni', Object.assign({
       name: nazev, expirace: '7', stahovani: true, metadata: false, komentare: false, hoste: false
@@ -12949,6 +12992,18 @@ class Component extends DCLogic {
       })),
       txEmpty: txFiltered.length === 0,
       txAdd: () => this.setState({ sheet: 'add', addKind: 'tx', addA: '', addB: '' }),
+      // Výpis z banky: s jedním účtem rovnou výběr souboru, s více nejdřív účet.
+      ...(() => {
+        const ucty = (((window.GalerieData || {}).FIN || {}).accounts || []).filter(a => a && a[8]);
+        return {
+          txImportOn: this.galerieNaServeru() && !!(window.GalerieApi || {}).nahrajVypis && ucty.length > 0,
+          txImport: () => ucty.length === 1 ? this.nahratVypis(ucty[0]) : this.setState({ sheet: 'vypis' }),
+          vypisUcty: ucty.map(a => ({
+            label: a[0], note: a[1] + ' · ' + this.kc(a[2] || 0), icon: a[3] || 'ph-bank',
+            go: () => this.nahratVypis(a)
+          }))
+        };
+      })(),
       txDetail: txOpen ? {
         amount: (txOpen.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(txOpen.amount)),
         color: txOpen.amount > 0 ? 'var(--g-ok)' : 'var(--g-ink)',
@@ -13550,14 +13605,15 @@ class Component extends DCLogic {
 
       // sheety
       sheetOn: !!s.sheet,
-      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : '',
+      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : '',
       sheetNote: s.sheet === 'upload' ? 'Originály se přenesou na server, jen když je Wi-Fi nebo to povolíte.'
+        : s.sheet === 'vypis' ? 'Na který účet? Pak vyberete soubor z banky (CSV, XLS nebo XLSX) — co už v knize je, se nezdvojí.'
         : s.sheet === 'sort' ? ({ memories: 'Vzpomínky', finance: 'Transakce', trips: 'Cesty', places: 'Místa', albums: 'Alba' }[screen] || null)
         : s.sheet === 'export' ? 'Připraví se na serveru, odkaz přijde do e-mailu.' : null,
       closeSheet: () => this.setState({ sheet: null }),
       sheetIsFilter: s.sheet === 'filter', sheetIsUpload: s.sheet === 'upload',
       sheetIsSearch: s.sheet === 'search', sheetIsTx: s.sheet === 'tx', sheetIsAdd: s.sheet === 'add',
-      sheetIsCyc: s.sheet === 'cyc',
+      sheetIsCyc: s.sheet === 'cyc', sheetIsVypis: s.sheet === 'vypis',
       filterChips: [['all', 'Vše'], ['fav', 'Oblíbené'], ['video', 'Videa']].concat(DAYS.map(d => [d[1], d[1]])).map(c => ({
         label: c[1],
         bg: s.filter === c[0] ? 'var(--g-ink)' : 'transparent',
