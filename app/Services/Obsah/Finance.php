@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Finance\LedgerService;
+use App\Services\Finance\ZarazeniPodlePopisu;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
@@ -40,7 +41,10 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private const PEVNE = 10;
 
-    public function __construct(private readonly LedgerService $kniha) {}
+    public function __construct(
+        private readonly LedgerService $kniha,
+        private readonly ZarazeniPodlePopisu $zarazeni,
+    ) {}
 
     public function skupina(): string
     {
@@ -146,6 +150,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
                 'accounts' => $ucty = $this->ucty($prostor, $penezenky),
                 // Nadcházející platby z předpisů (nájem, telefon) na dva měsíce dopředu.
                 'upcoming' => $this->nadchazejici($prostor),
+                // Podle čeho import výpisu zařazuje: obchod → kategorie z poslední platby.
+                'rules' => $this->zarazeni->pravidla($prostor),
             ],
             /*
              * Tytéž účty jako seznam.

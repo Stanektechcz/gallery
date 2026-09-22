@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Testing\TestResponse;
@@ -105,6 +106,38 @@ class ImportVypisuTest extends TestCase
         // Poslední zařazení Alberta bylo do Domácnosti.
         $this->assertSame($domacnost->id, Transaction::where('description', 'Albert 1180 Praha')->value('category_id'));
         $this->assertNull(Transaction::where('description', 'Lékárna U Anděla')->value('category_id'));
+    }
+
+    /**
+     * Pravidla zařazování ve Financích jsou tatáž, podle kterých zařazuje import.
+     *
+     * Dvojice u nich dřív četla, že import výpisů galerie nemá. Obchod
+     * zaplacený jen jednou pravidlem není; kategorie je z poslední platby.
+     */
+    public function test_pravidla_zarazovani_jsou_z_plateb(): void
+    {
+        CarbonImmutable::setTestNow('2026-09-22 12:00:00');
+        $ucet = $this->ucet('Společný účet');
+        $potraviny = FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Potraviny', 'kind' => 'expense']);
+        $domacnost = FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Domácnost', 'kind' => 'expense']);
+
+        foreach ([
+            ['ALBERT 0712 PRAHA', $potraviny, '2025-12-30'],
+            ['Albert 0655 Praha', $potraviny, '2026-08-01'],
+            ['Albert 1180 Praha', $domacnost, '2026-08-20'],
+            ['Lékárna U Anděla', $domacnost, '2026-08-21'],
+        ] as [$popis, $kategorie, $den]) {
+            Transaction::create([
+                'gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => $den,
+                'wallet_from_id' => $ucet->id, 'amount_from' => 100, 'currency_from' => 'CZK',
+                'description' => $popis, 'category_id' => $kategorie->id, 'state' => 'approved', 'created_by' => $this->adri->id,
+            ]);
+        }
+
+        $pravidla = $this->getJson('/api/data/finance')->assertOk()->json('data.FIN.rules');
+
+        $this->assertSame([['Albert Praha', 'Domácnost', 2]], $pravidla);
+        CarbonImmutable::setTestNow();
     }
 
     /** Opakovaný a překrývající se výpis nic nezdvojí. */

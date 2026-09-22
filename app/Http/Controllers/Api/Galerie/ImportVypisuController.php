@@ -12,13 +12,13 @@ use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Banking\RevolutStatementImportService;
+use App\Services\Finance\ZarazeniPodlePopisu;
 use App\Services\Obsah\Finance;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 
 /**
@@ -49,6 +49,7 @@ class ImportVypisuController extends Controller
     public function __construct(
         private readonly RevolutStatementImportService $vypisy,
         private readonly Finance $obsah,
+        private readonly ZarazeniPodlePopisu $zarazeni,
     ) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -97,7 +98,7 @@ class ImportVypisuController extends Controller
         $mena = strtoupper((string) ($ucet->currency ?: 'CZK'));
         $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0, 'zarazeno' => 0];
         $jineMeny = [];
-        $podleDriv = $this->kategoriePodlePopisu($prostor);
+        $podleDriv = $this->zarazeni->mapa($prostor);
 
         DB::transaction(function () use ($pohyby, $prostor, $ucet, $mena, $request, $podleDriv, &$pocty, &$jineMeny) {
             foreach ($pohyby as $pohyb) {
@@ -135,7 +136,7 @@ class ImportVypisuController extends Controller
 
                 // Stejný obchodník jako u dřív zařazené platby → stejná kategorie.
                 // Převod mezi vlastními účty se nezařazuje, do rozpočtu nepatří.
-                $kategorie = $pohyb->is_internal_transfer ? null : ($podleDriv[$this->klicPopisu($popis)] ?? null);
+                $kategorie = $pohyb->is_internal_transfer ? null : ($podleDriv[$this->zarazeni->klic($popis)] ?? null);
 
                 if ($kategorie !== null) {
                     $pocty['zarazeno']++;
@@ -187,51 +188,6 @@ class ImportVypisuController extends Controller
             'uz' => $pocty['uz'],
             'jinaMena' => $pocty['mena'],
         ] + $this->obsahPoAkci($this->obsah, $prostor), $pocty['zapsano'] ? 201 : 200);
-    }
-
-    /**
-     * Kategorie podle popisu z dřív zařazených plateb dvojice.
-     *
-     * Rozhoduje poslední zařazení: když se „Albert" přesunul z Potravin do
-     * Domácnosti, další Albert z výpisu jde do Domácnosti. Smazaná kategorie
-     * se nepoužije.
-     *
-     * @return array<string, int> `{klíč popisu: id kategorie}`
-     */
-    private function kategoriePodlePopisu(GallerySpace $prostor): array
-    {
-        $mapa = [];
-
-        DB::table('transactions as t')
-            ->join('finance_categories as k', 'k.id', '=', 't.category_id')
-            ->where('t.gallery_space_id', $prostor->id)
-            ->whereNull('t.deleted_at')
-            ->whereNull('k.deleted_at')
-            ->orderByDesc('t.occurred_at')
-            ->orderByDesc('t.id')
-            ->limit(3000)
-            ->get(['t.description', 't.category_id'])
-            ->each(function (object $t) use (&$mapa) {
-                $klic = $this->klicPopisu((string) $t->description);
-
-                if ($klic !== '' && ! isset($mapa[$klic])) {
-                    $mapa[$klic] = (int) $t->category_id;
-                }
-            });
-
-        return $mapa;
-    }
-
-    /**
-     * Popis bez čísel a interpunkce: „ALBERT 0712 Praha" a „Albert 1180 Praha"
-     * je týž obchod, číslo pobočky ani karty na zařazení nemá vliv.
-     */
-    private function klicPopisu(string $popis): string
-    {
-        $t = Str::lower(Str::ascii($popis));
-        $t = trim((string) preg_replace('/\s+/', ' ', (string) preg_replace('/[^a-z ]+/', ' ', $t)));
-
-        return mb_substr($t, 0, 40);
     }
 
     /**

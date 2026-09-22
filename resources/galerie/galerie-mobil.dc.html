@@ -1923,9 +1923,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <sc-if value="{{ r.tag }}">
                         <span style="flex:none; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--g-ink2); border:1px solid var(--g-line); border-radius:2px; padding:3px 6px">{{ r.tag }}</span>
                       </sc-if>
-                      <button onClick="{{ r.act }}" style="flex:none; display:flex; align-items:center; gap:6px; min-height:44px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">
-                        <i class="ph-duotone {{ r.actIcon }}" style="font-size:15px; color:var(--g-acc)"></i>{{ r.actLabel }}
-                      </button>
+                      <sc-if value="{{ r.hasAct }}">
+                        <button onClick="{{ r.act }}" style="flex:none; display:flex; align-items:center; gap:6px; min-height:44px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">
+                          <i class="ph-duotone {{ r.actIcon }}" style="font-size:15px; color:var(--g-acc)"></i>{{ r.actLabel }}
+                        </button>
+                      </sc-if>
                     </div>
                   </sc-for>
                 </div>
@@ -7338,6 +7340,8 @@ class Component extends DCLogic {
     // Travel inbox dvojice má skutečné akce (přidat, archivovat), ne přeškrtnutí v telefonu.
     const inboxNaServeru = key === 'travelInbox' && this.galerieNaServeru();
     const tkNaServeru = key === 'ticket' && this.galerieNaServeru();
+    // Seznamy, kde „hotovo" nemá co znamenat — účet, zapečetěná kapsle, zapsané rozhodnutí.
+    const bezHotovo = ['accounts', 'kapSealed', 'zprDec', 'zprGone', 'klAsk'].indexOf(key) >= 0;
     const mob = map[s.allRoute];
     // Grafické záložky mají tady vlastní podobu, ne zmenšenou verzi té velké.
     // Sloupce leží (na 390 px se čtou lépe než stojící), tabulka je dvouřádková,
@@ -8418,7 +8422,7 @@ class Component extends DCLogic {
       count: this.pl(rows.length, 'položka', 'položky', 'položek'),
       rows: rows.map(r => (tkNaServeru && r.klic ? {
         // Jízdenka dvojice: smazat dvojím klepnutím (jako v sekci Jízdenky).
-        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1,
+        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1, hasAct: true,
         actLabel: s.mTkPotvrd === r.klic ? 'opravdu smazat' : 'smazat', actIcon: 'ph-trash',
         act: () => {
           if (s.mTkPotvrd !== r.klic) { this.setState({ mTkPotvrd: r.klic }); this.toast('Klepněte znovu — „' + r.t + '“ zmizí z jízdenek u obou', { icon: 'ph-warning', silent: true }); return; }
@@ -8433,14 +8437,14 @@ class Component extends DCLogic {
          * Travel inbox dvojice: „hotovo" jen přeškrtlo řádek v telefonu, na
          * serveru položka dál čekala. Teď ji archivuje (`state: archived`).
          */
-        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1,
+        title: r.t, meta: r.m, tag: r.g || '', strike: 'none', dim: 1, hasAct: true,
         actLabel: 'archivovat', actIcon: 'ph-archive',
         act: () => window.GalerieApi.patch('v1/calendar/inbox/' + r.klic, { state: 'archived' }).then(() => {
           if (window.GalerieObnovit) window.GalerieObnovit('cesty');
           this.toast('„' + r.t + '“ archivováno — z travel inboxu zmizí', { icon: 'ph-archive' });
         }).catch(e => this.chybaServeru(e, 'Archivovat se nepodařilo'))
       } : {
-        title: r.t, meta: r.m, tag: r.g || '',
+        title: r.t, meta: r.m, tag: r.g || '', hasAct: !bezHotovo,
         strike: done[r.id] ? 'line-through' : 'none',
         dim: done[r.id] ? .5 : 1,
         actLabel: done[r.id] ? 'zpět' : 'hotovo',

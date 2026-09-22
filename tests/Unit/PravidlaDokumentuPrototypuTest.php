@@ -443,6 +443,16 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("'nahráno ' + (lbP.nahrano || lbP.day || '')", self::dokument('galerie-mobil.dc.html'));
     }
 
+    /** Pravidla zařazování netvrdí, že import výpisů není; „Upravit" otevře platby obchodu. */
+    public function test_pravidla_zarazovani_odpovidaji_importu(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringNotContainsString('importu výpisů z banky, který galerie zatím nemá', $pocitac);
+        $this->assertStringContainsString("this.setState({ route: 'x-transakce', appTab: 0, txQuery: r[0],", $pocitac);
+        $this->assertStringContainsString('if (!q.split(/\\s+/).every(slovo => kde.includes(slovo))) return false;', $pocitac);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {

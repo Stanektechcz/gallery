@@ -15880,7 +15880,11 @@ class Component extends DCLogic {
       if (filt === 'trip' && !r.f.trip) return false;
       if (filt === 'in' && r.amount < 0) return false;
       if (s.txPickCat && r.cat !== s.txPickCat) return false;
-      if (q && !(r.name + ' ' + r.cat + ' ' + r.account + ' ' + r.note).toLowerCase().includes(q)) return false;
+      // Po slovech: „albert praha" najde i „ALBERT 0712 Praha" (číslo pobočky mezi nimi).
+      if (q) {
+        const kde = (r.name + ' ' + r.cat + ' ' + r.account + ' ' + r.note).toLowerCase();
+        if (!q.split(/\s+/).every(slovo => kde.includes(slovo))) return false;
+      }
       return true;
     });
     const income = rows.filter(r => r.amount > 0).reduce((a, r) => a + r.amount, 0);
@@ -16202,15 +16206,26 @@ class Component extends DCLogic {
       finAddPayment: () => this.financeNaServeru()
         ? this.setState({ xaOpen: true, xaMode: 'platba', xaCtx: null, xaA: '', xaB: '', xaC: String(this.dnes().getDate()), xaD: '' })
         : this.zatimNeumime('plánované platby bez připojeného serveru'),
+      /*
+       * Pravidla zařazování dvojice jsou platby samy: import výpisu dá obchod
+       * tam, kam šla jeho poslední zařazená platba (ZarazeniPodlePopisu).
+       * „Upravit" proto otevře platby toho obchodu — přezařazením poslední
+       * se pravidlo změní. Dřív tu stálo, že import výpisů galerie nemá.
+       */
       finRules: FIN.rules.map(r => ({
         pattern: r[0], cat: r[1], count: r[2] + '× letos',
         go: () => this.setState({ route: 'x-rozpocty', budTab: 1 }),
-        edit: () => this.zatimNeumime('úpravu pravidla importu')
+        edit: () => {
+          if (this.ukazka()) { this.zatimNeumime('úpravu pravidla importu'); return; }
+          this.setState({ route: 'x-transakce', appTab: 0, txQuery: r[0], txFilter: 'all', txPickCat: null, txOpen: null, txSel: [] });
+          this.toast('Přezařaďte poslední platbu u „' + r[0] + '“ — příští výpis se zařadí podle ní', { icon: 'ph-tag', silent: true });
+        }
       })),
-      // U dvojice pravidla nejsou: zařazování podle pravidel patří k importu výpisů, který galerie nemá.
       finRulesNote: this.ukazka()
         ? 'Zařazování běží při každém importu. Co pravidla nepokryjí, skončí v Nezařazených.'
-        : 'Pravidla zařazování patří k importu výpisů z banky, který galerie zatím nemá. Kategorii vybíráte při zápisu platby; co zůstane bez ní, najdete v Nezařazených.',
+        : FIN.rules.length
+          ? 'Import výpisu dá platbu u známého obchodu do kategorie, kam jste naposledy zařadili jinou platbu u téhož obchodu. Co nepozná, najdete v Nezařazených.'
+          : 'Zatím žádná pravidla: vzniknou sama, jakmile u stejného obchodu zařadíte aspoň dvě platby. Import výpisu pak další platby u něj zařadí stejně.',
       finImports: FIN.imports.map(i => ({
         when: i[0], bank: i[1], detail: i[2], state: i[3],
         color: i[3] === 'čeká' ? 'var(--g-warn)' : 'var(--g-ok)',
