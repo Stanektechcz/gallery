@@ -526,7 +526,7 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString("'srSaved coolLimit whOk').split(' ')", $telefon);
         $this->assertStringContainsString("window.GalerieApi.post('kalendar/udalost', { nazev: a, datum: this.calVybrany(), cas: cas || null })", $telefon);
         $this->assertStringContainsString("window.GalerieApi.post('denik', { nadpis: a, text: b, datum: s.dayNoteIso, soukromy: true })", $telefon);
-        $this->assertStringContainsString("api.save({ xRows: { gifts: ideas.map(x => ({ t: 'Nápad: ' + x.title", $telefon);
+        $this->assertStringContainsString("if (ideas.length) xRows.gifts = ideas.map(x => ({ t: 'Nápad: ' + x.title", $telefon);
         $this->assertStringContainsString("if (kam === 'done' || odkud === 'done') { this.ukolNaServeru([it.t, '', '', 0, it.id], kam === 'done'); return true; }", $telefon);
         $this->assertStringContainsString("if (this.galerieNaServeru()) return [];\n    const t = this.dnes();", $telefon);
         $this->assertStringContainsString("window.GalerieApi.post('domacnost/spiz', { polozky })", $telefon);
