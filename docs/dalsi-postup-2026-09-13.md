@@ -804,6 +804,40 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2t. Dvacáté kolo — mechanismy pro dva: konec prázdných obrazovek (22. 9.)
+
+Audit souboru s mechanismy (`public/galerie-mechanismy-logika.js`) a kontrola
+očima **úplně prázdné dvojice** (zkušební prostor bez jediného řádku).
+
+- **Ukázka místo dat při výpadku**: `/api/mechanisms` posílá sbírky prázdné,
+  jenže při 503 (chybí `mechanismy.json` v nasazení) nebo výpadku sítě si
+  klient nechával data ze souboru — tedy postoj ukázkové dvojice k dětem,
+  zdraví jejích rodičů a jmenovitě lidi, co se o ně bojí. Hlavička teď sbírky
+  vyprázdní sama, jakmile ví, že jde o přihlášenou dvojici.
+- **Zakládání tam, kde nebylo co číst**: Arbitr (rozpory + výběr mechanismu +
+  rozhodnutí do Paměti rozhodnutí) a Začátek hádky (spouštěč a protilék).
+  Z protiléku jde udělat vypršovací domluvu — ta teď existuje doopravdy
+  (`expExtra`) a vyhodnocuje ji i noční `galerie:expire`.
+- **Hluchá tlačítka**: „na nedělní desetiminutovku" zapíše téma na agendu,
+  „Co z rozhovoru vyšlo" zapíše větu do „Až budeme mít čas", „přesunuto do
+  vyhrazených částek" už netvrdí přesun, který se nekonal, „na měsíc přebírá"
+  neslibuje měsíc, který nikdo nepočítá, a „Vyrovnat podíly" se ukazuje jen
+  tam, kde je co vyrovnávat. Blízkost po zápisu ukáže tento týden místo
+  nehybné nuly.
+- **Prázdné seznamy**: Záznam verzí bez rozhodnutí neukazuje formulář, který
+  by zapsal verzi „k ničemu"; Děti snesou jednoho člena prostoru; Arbitr,
+  spouštěče a Blízkost mají poctivé nadpisy pro nulu.
+- **Server**: `galerie:expire` četl pravidla ukázkové dvojice z `mechanismy.json`
+  a zapisoval `expDead` s cizími id do stavu **každé** dvojice (a hlásil
+  „Vypršelo N domluv", které neexistují). Teď vyhodnocuje jen domluvy té které
+  dvojice.
+
+Ověřeno v prohlížeči na prázdné dvojici: 55 tras počítače a 149 záložek
+telefonu bez chyby, bez „undefined" a bez jediného ukázkového jména; celý
+průchod Arbitrem (zapsat rozpor → vybrat mechanismus → rozhodnout → zápis
+v Paměti rozhodnutí) i Začátkem hádky (spouštěč → protilék → vypršovací
+domluva s odpočtem 364 dní). Zkušební dvojice je z databáze smazaná.
+
 ## 2s. Devatenácté kolo — dvoufázové přihlášení, tiché hodiny, klíče stavu (22. 9.)
 
 Druhý audit počítače a audit klíčů, které si telefon a počítač posílají.
