@@ -25027,9 +25027,10 @@ class Component extends DCLogic {
   // ——— Roční rituály ———
   rtOn() {
     const s = this.state;
-    if (s.rtOn) return s.rtOn;
+    // Chybějící rituál má výchozí hodnotu — starší telefon ukládal jen ten přepnutý.
+    const ulozene = s.rtOn || {};
     const o = {};
-    RITUALS.forEach(r => { o[r[0]] = !!r[5]; });
+    RITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });
     return o;
   }
   ritualVals(key) {

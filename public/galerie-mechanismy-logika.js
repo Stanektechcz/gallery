@@ -449,8 +449,9 @@
           run: () => run(r),
           settled: !!v,
           verdict: v ? v.pick : '',
-          verdictWhy: v ? v.why : '',
-          verdictMech: v ? 'Rozhodl ' + v.mech.toLowerCase() + ' · ' + v.when : '',
+          verdictWhy: v ? v.why || '' : '',
+          // Starší záznam z telefonu neměl `why` ani `when`.
+          verdictMech: v ? 'Rozhodl ' + String(v.mech || 'mechanismus').toLowerCase() + (v.when ? ' · ' + v.when : '') : '',
           open: () => this.setState({ route: 'x-rozhodnuti', dcTab: 'mem' })
         };
       }),

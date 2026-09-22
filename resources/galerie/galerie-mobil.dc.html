@@ -7065,7 +7065,7 @@ class Component extends DCLogic {
        'trustCalled trustTold svedAdj exitOff exitWho exitMade dayBonus dayGiven dayShift ' +
        'blizAdd blizWA blizWM blizBlock kidsStance kidsYear kidsFixed kidsTalks ' +
        // `navHide memPrefs setVals lockIdle lockSecs lockBio lockStart` ne: patří zařízení, viz `zarizeniKlice()`.
-       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDone klHelpOn evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
+       'mineInc mineEven parDone mechLog rowDone sw rules memSaved memLater curVotesM evUndone annFmtM kapOpened nedDoneM klHelpOn evPick rtOnM ndStateM whLogM offPackM lbTags lbVers edits cycDays wishes ideas buys ' +
        // Domácnost, rozhodnutí, sliby, rodina, žádosti a kapsle: server je zapisuje do tabulek.
        // Bez nich telefon hlásil „hotovo" a „žádost odeslána" a změna žila jen do obnovení.
        'chores choreLog dues inv decs cools proms fam nudges kapsules ' +
@@ -7621,14 +7621,17 @@ class Component extends DCLogic {
 
     // ——— Watchlist seriálů ———
     const serRows = kind === 'ser' ? (AL.series || []).map((r, i) => {
-      const done = stDone['series-' + i];
+      // Id titulu ze serveru (`series-<uuid>`) jako na počítači; pořadí se posune,
+      // jakmile se titul vrátí mezi sledované, a odškrtnutí by padlo na jiný.
+      const rid = r[7] || ('series-' + i);
+      const done = stDone[rid];
       return { title: r[0], meta: r[1],
         state: done ? 'dokoukáno' : (r[2] || ''),
         color: done ? 'var(--g-ok)' : r[2] === 'probíhá' ? 'var(--g-acc)' : 'var(--g-ink3)',
         strike: done ? 'line-through' : 'none',
         toggle: () => {
           const prev = stDone;
-          this.setState({ rowDone: Object.assign({}, stDone, { ['series-' + i]: !done }) });
+          this.setState({ rowDone: Object.assign({}, stDone, { [rid]: !done }) });
           this.toast(r[0] + (done ? ' — zpět mezi sledované' : ' — dokoukáno'), { icon: 'ph-television', undo: () => this.setState({ rowDone: prev }) });
         } };
     }) : [];
@@ -7791,7 +7794,12 @@ class Component extends DCLogic {
         track: on ? 'var(--g-acc)' : 'var(--g-line)', knob: on ? '20px' : '2px',
         toggle: () => {
           const prev = rtOn;
-          this.setState({ [rtKlic]: Object.assign({}, rtOn, { [r[0]]: !on }) });
+          // Celá mapa s výchozími hodnotami: počítač bere uloženou mapu doslova
+          // a z `{kniha: false}` by vypnul i rituály, které jsou zapnuté od začátku.
+          const plna = {};
+          RITUALS.forEach(x => { plna[x[0]] = rtOn[x[0]] === undefined ? !!x[5] : !!rtOn[x[0]]; });
+          plna[r[0]] = !on;
+          this.setState({ [rtKlic]: plna });
           this.toast(r[1] + (on ? ' — vypnuto' : ' — zapnuto'), { icon: r[4], undo: () => this.setState({ [rtKlic]: prev }) });
         } };
     }).filter(r => key === 'rtList' ? true : false) : [];
@@ -8092,8 +8100,11 @@ class Component extends DCLogic {
     const isZprStats = zprStats.length > 0, isZprDec = zprDec.length > 0, isZprGone = zprGone.length > 0;
 
     const KL_TASKS = D.KL_TASKS || [], KL_QUESTIONS = D.KL_QUESTIONS || [];
-    const nedDone = s.nedDone || {};
-    const nedRows = (key === 'nedAgenda' || key === 'nedRest') ? KL_TASKS.map((t, i) => ({ t: t, i: i }))
+    // Vlastní klíč a klíč podle úkolu, ne podle pořadí: `nedDone` má počítač pro
+    // položky své agendy — odškrtnutí úkolu 0 tady odškrtlo jinou věc tam.
+    const nedDone = s.nedDoneM || {};
+    const nedKey = t => String(t.id || t.name);
+    const nedRows = (key === 'nedAgenda' || key === 'nedRest') ? KL_TASKS.map((t, i) => ({ t: t, i: nedKey(t) }))
       .filter(x => key === 'nedRest' ? !!nedDone[x.i] : !nedDone[x.i]).map(x => {
       const t = x.t, i = x.i;
       return {
@@ -8103,8 +8114,8 @@ class Component extends DCLogic {
         done: !!nedDone[i], strike: nedDone[i] ? 'line-through' : 'none',
         toggle: () => {
           const prev = nedDone;
-          this.setState({ nedDone: Object.assign({}, nedDone, { [i]: !nedDone[i] }) });
-          this.toast(t.name + (nedDone[i] ? ' — zpět na dnes' : ' — hotovo'), { icon: 'ph-check-circle', undo: () => this.setState({ nedDone: prev }) });
+          this.setState({ nedDoneM: Object.assign({}, nedDone, { [i]: !nedDone[i] }) });
+          this.toast(t.name + (nedDone[i] ? ' — zpět na dnes' : ' — hotovo'), { icon: 'ph-check-circle', undo: () => this.setState({ nedDoneM: prev }) });
         }
       };
     }) : [];
@@ -8307,7 +8318,8 @@ class Component extends DCLogic {
      * někdo jiný a tlačítkem druhého šlo hlasovat za něj.
      */
     const hlasyNaServeru = this.galerieNaServeru();
-    const [jaJm, druhyJm] = [this.dva()[0], this.dva()[1]];
+    // Kdo hlasuje, určuje přihlášený (`meWho`), ne pořadí dvojice ze serveru.
+    const [jaJm, druhyJm] = hlasyNaServeru ? [this.meWho(), this.otherWho()] : [this.dva()[0], this.dva()[1]];
     const votes = hlasyNaServeru ? (s.curVotes || {}) : (s.curVotesM || {});
     const curCand = (key === 'curVote' || key === 'curMatch' || key === 'curSplit' || key === 'curDone')
       ? (this.library ? this.library().slice(0, 12) : []) : [];
@@ -9375,9 +9387,25 @@ class Component extends DCLogic {
               : mid === 'last' ? (r.owner === this.dva()[1] ? r.optM : r.optA)
               : mid === 'minimax' ? (r.lossM > r.lossA ? r.optM : r.optA)
               : 'Odloženo o sedm dní';
-            const prev = arbDone;
-            this.setState({ arbDone: Object.assign({}, arbDone, { [r.id]: { pick: pick, mech: mName(mid) } }) });
-            this.toast('Rozhodl ' + mName(mid).toLowerCase() + ': ' + pick, { icon: 'ph-scales', undo: () => this.setState({ arbDone: prev }) });
+            // Celý záznam jako na počítači (`why`, `when`) i s řádkem v Paměti rozhodnutí —
+            // počítač jinak u rozporu rozhodnutého v telefonu psal „Rozhodl los · undefined".
+            const dva = this.dva(), kr = j => this.krestni(j);
+            const why = mid === 'los' ? 'Los padl na „' + pick + '“. Druhá varianta byla stejně snesitelná — právě proto tohle los rozhodnout mohl.'
+              : mid === 'last' ? kr(r.owner) + ' má v oblasti „' + r.area + '“ poslední slovo. Dohodnuto předem, ne teď.'
+              : mid === 'minimax' ? 'Menší škoda: ' + (r.lossM > r.lossA ? kr(dva[0]) + ' — ' + r.lossA + ' z 5' : kr(dva[1]) + ' — ' + r.lossM + ' z 5') + '. Vyhrává varianta, u které ten druhý bolí méně.'
+              : 'Nerozhodlo se nic. Za týden se to otevře znovu a odklad už použít nelze.';
+            const prev = arbDone, prevDecs = s.decs;
+            const decs = s.decs === null || s.decs === undefined ? (typeof DEC_LIST !== 'undefined' ? DEC_LIST : []) : s.decs;
+            const patch = { arbDone: Object.assign({}, arbDone, { [r.id]: { pick: pick, why: why, mech: mName(mid), when: 'právě teď' } }) };
+            if (mid !== 'delay') {
+              patch.decs = [{
+                id: 'r' + Date.now(), title: r.what + ' → ' + pick, date: 'dnes', by: 'Arbitr · ' + mName(mid), status: 'platí',
+                why: [why, 'Rozhodl mechanismus dohodnutý předem. Nikdo z vás nemusel druhého přesvědčit.'],
+                rejected: [pick === r.optA ? r.optM : r.optA], review: 'za rok'
+              }].concat(decs);
+            }
+            this.setState(patch);
+            this.toast(mid === 'delay' ? '„' + r.what + '“ odloženo o týden' : 'Rozhodl ' + mName(mid).toLowerCase() + ': ' + pick + ' · zapsáno do Paměti rozhodnutí', { icon: 'ph-scales', undo: () => this.setState({ arbDone: prev, decs: prevDecs }) });
           }));
       })
     });

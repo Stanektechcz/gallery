@@ -584,6 +584,34 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         }
     }
 
+    /**
+     * Sdílené klíče mají na telefonu i počítači stejný tvar a význam.
+     *
+     * Telefon a počítač si posílají celý stav; stejný klíč v jiném tvaru
+     * shodil obrazovku druhého zařízení nebo odškrtl jinou věc.
+     */
+    public function test_sdilene_klice_stejneho_tvaru(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $logika = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-mechanismy-logika.js');
+
+        // klQuiet: počítač 24 hodin, telefon své přepínače pod klHelpOn.
+        $this->assertStringContainsString("this.setState({ klHelpOn: Object.assign({}, klQuiet, { [i]: !klQuiet[i] }) });", $telefon);
+        $this->assertStringContainsString('Array.isArray(s.klQuiet) && s.klQuiet.length === 24', $pocitac);
+        // arbDone: celý záznam i z telefonu, počítač snese starý.
+        $this->assertStringContainsString("{ [r.id]: { pick: pick, why: why, mech: mName(mid), when: 'právě teď' } }", $telefon);
+        $this->assertStringContainsString("(v.when ? ' · ' + v.when : '')", $logika);
+        // nedDone patří agendě počítače, telefon má nedDoneM podle úkolu.
+        $this->assertStringContainsString('const nedDone = s.nedDoneM || {};', $telefon);
+        $this->assertStringNotContainsString(' nedDone klHelpOn ', $telefon);
+        // rtOn: celá mapa z telefonu, výchozí hodnoty na počítači.
+        $this->assertStringContainsString('plna[r[0]] = !on;', $telefon);
+        $this->assertStringContainsString("RITUALS.forEach(r => { o[r[0]] = ulozene[r[0]] === undefined ? !!r[5] : !!ulozene[r[0]]; });", $pocitac);
+        // Seriály podle id titulu ze serveru.
+        $this->assertStringContainsString("const rid = r[7] || ('series-' + i);", $telefon);
+    }
+
     /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
     public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
     {
