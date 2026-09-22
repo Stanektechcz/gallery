@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -121,7 +122,13 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             // vyhození všech fotek do koše) — bez nich by nové album nebylo vidět.
             $alba = $this->alba($prostor);
 
-            return $alba ? ['ALBUMS' => $alba, 'ATREE' => $this->strom($alba)] : [];
+            // Odznaky nabídky jdou i bez fotek: Koš, Sdílené nebo Plánování
+            // mají svoje počty a jinak by u nich zůstala čísla z ukázky.
+            return array_filter([
+                'ALBUMS' => $alba,
+                'ATREE' => $alba ? $this->strom($alba) : [],
+                'NAVCNT' => $this->navPocty($prostor),
+            ]);
         }
 
         $this->nactiOblibene($media);
@@ -905,7 +912,15 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ? DB::table('duplicate_groups')->where('gallery_space_id', $prostor->id)->whereNull('resolved_at')->count()
             : 0;
 
-        return array_map(
+        /*
+         * Ostatní odznaky z katalogu nabídky byly taky z ukázky: Zprávy „2",
+         * Plánování „3", Sdílené „5", Koš „4", Cesta právě nyní „den 5" —
+         * i u dvojice, která nic z toho neměla. Každý má teď svůj počet,
+         * nebo prázdno (zprávy: aplikace nepřečtené nesleduje).
+         */
+        $dnes = Cas::dnes();
+
+        $pocty = array_map(
             fn (int $kolik) => $kolik ? $this->cislo($kolik) : '',
             [
                 'all' => (clone $vse)->count(),
@@ -913,8 +928,29 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'x-lide' => Person::withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)->count(),
                 'x-uklid' => $chybi + $nalezy,
+                'trash' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                    ->where('gallery_space_id', $prostor->id)->whereNotNull('trashed_at')->count(),
+                'shared' => Schema::hasTable('shared_links') ? DB::table('shared_links')
+                    ->where('gallery_space_id', $prostor->id)->where('is_active', true)
+                    ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
+                    ->count() : 0,
+                // Co je dnes nebo po termínu a ještě neudělané.
+                'x-plan' => Schema::hasTable('shared_todos') ? DB::table('shared_todos')
+                    ->where('gallery_space_id', $prostor->id)
+                    ->whereNotIn('status', ['completed', 'cancelled'])
+                    ->whereNotNull('due_at')->where('due_at', '<=', $dnes->endOfDay())
+                    ->count() : 0,
+                'x-zpravy' => 0,
             ],
         );
+
+        $cesta = Schema::hasTable('trips') ? DB::table('trips')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereDate('start_date', '<=', $dnes)->whereDate('end_date', '>=', $dnes)
+            ->orderBy('start_date')->first(['start_date']) : null;
+        $pocty['x-teď'] = $cesta ? 'den '.((int) CarbonImmutable::parse($cesta->start_date)->diffInDays($dnes) + 1) : '';
+
+        return $pocty;
     }
 
     /** Součet na úvodní obrazovce: „24 316 vzpomínek · 7 let". */

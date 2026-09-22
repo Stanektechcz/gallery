@@ -32355,7 +32355,8 @@ class Component extends DCLogic {
     // serveru podle cesty (`NAVCNT`). Bez odpovědi zůstávají napsaná.
     const navPocty = (window.GalerieData || {}).NAVCNT || {};
     const navGroupDefs = NAV_GROUPS.map(g => [g[0], g[1].map(n =>
-      n[3] === '@memToday' ? [n[0], n[1], n[2], String(this.memTodayCount())]
+      // Nula se nekreslí — v panelu svítilo „Vzpomínky 0".
+      n[3] === '@memToday' ? [n[0], n[1], n[2], this.memTodayCount() ? String(this.memTodayCount()) : '']
         : navPocty[n[0]] !== undefined ? [n[0], n[1], n[2], String(navPocty[n[0]])] : n)]);
     const activeRoute = R === 'album' ? 'albums' : R === 'trip' ? 'x-cesty' : R === 'person' ? 'x-lide'
       : R === 'x-ucty' && (s.finTab || 0) !== 1 ? 'x-finance'

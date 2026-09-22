@@ -372,6 +372,59 @@ class ObsahKnihovnaTest extends TestCase
         $this->assertStringStartsWith('2 vzpomínky · ', $data['TOTAL']);
     }
 
+    /**
+     * Koš, Sdílené, Plánování a Cesta právě nyní mají svoje počty.
+     *
+     * V katalogu nabídky byla čísla z ukázky (Zprávy 2, Plánování 3,
+     * Sdílené 5, Koš 4, „den 5") a server je nepřepisoval — i dvojice bez
+     * jediného odkazu nebo úkolu je tak v nabídce viděla. Knihovna je tu
+     * záměrně bez fotek: odznaky musí přijít i tehdy.
+     */
+    public function test_ostatni_odznaky_nabidky_jsou_ze_skutecnych_dat(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-11 10:00:00', 'UTC'));
+
+        $this->fotka(['trashed_at' => now()]);
+        $this->fotka(['trashed_at' => now()], 2);
+        DB::table('shared_links')->insert([
+            ['uuid' => (string) Str::uuid(), 'token' => Str::random(40), 'created_by' => $this->adri->id, 'gallery_space_id' => $this->prostor->id, 'target_type' => 'album', 'is_active' => true, 'expires_at' => null],
+            // Zneplatněný a prošlý odkaz se nepočítá.
+            ['uuid' => (string) Str::uuid(), 'token' => Str::random(40), 'created_by' => $this->adri->id, 'gallery_space_id' => $this->prostor->id, 'target_type' => 'album', 'is_active' => false, 'expires_at' => null],
+            ['uuid' => (string) Str::uuid(), 'token' => Str::random(40), 'created_by' => $this->adri->id, 'gallery_space_id' => $this->prostor->id, 'target_type' => 'album', 'is_active' => true, 'expires_at' => '2026-10-01 00:00:00'],
+        ]);
+        foreach ([['2026-10-10 18:00:00', 'open'], ['2026-10-11 20:00:00', 'open'], ['2026-10-09 18:00:00', 'completed'], ['2026-10-20 18:00:00', 'open']] as [$termin, $stav]) {
+            DB::table('shared_todos')->insert([
+                'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id, 'created_by' => $this->adri->id,
+                'title' => 'Úkol', 'status' => $stav, 'due_at' => $termin,
+            ]);
+        }
+        DB::table('trips')->insert([
+            'gallery_space_id' => $this->prostor->id, 'created_by' => $this->adri->id,
+            'name' => 'Lisabon', 'start_date' => '2026-10-09', 'end_date' => '2026-10-14',
+        ]);
+
+        $pocty = $this->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT');
+
+        $this->assertSame('2', $pocty['trash']);
+        $this->assertSame('1', $pocty['shared']);
+        // Dnešní a zmeškaný úkol; hotový ani budoucí ne.
+        $this->assertSame('2', $pocty['x-plan']);
+        $this->assertSame('den 3', $pocty['x-teď']);
+        // Nepřečtené zprávy aplikace nesleduje — odznak zůstane schovaný.
+        $this->assertSame('', $pocty['x-zpravy']);
+        $this->assertSame('', $pocty['all']);
+    }
+
+    /** Bez cesty a bez koše odznaky zmizí, ukázková čísla nezůstanou. */
+    public function test_prazdna_nabidka_schova_odznaky(): void
+    {
+        $pocty = $this->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT');
+
+        foreach (['all', 'favorites', 'trash', 'shared', 'x-plan', 'x-zpravy', 'x-teď'] as $klic) {
+            $this->assertSame('', $pocty[$klic], $klic);
+        }
+    }
+
     /** Fotka v koši ani skrytá do knihovny nepatří. */
     public function test_kos_a_skryte_se_nepocitaji(): void
     {
