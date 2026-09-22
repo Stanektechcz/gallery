@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Darky;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -133,9 +134,9 @@ class DarkyVeStavu
         $radek = [
             'title' => $nazev,
             'budget' => (int) ($p['price'] ?? 0),
-            'source_url' => (string) ($p['note'] ?? $p['text'] ?? $p['where'] ?? ''),
+            'source_url' => Vejde::do($p['note'] ?? $p['text'] ?? $p['where'] ?? ''),
             'status' => $this->stav($p, $druh),
-            'occasion' => (string) ($p['occasion'] ?? ''),
+            'occasion' => Vejde::do($p['occasion'] ?? '', 120),
             'updated_at' => now(),
         ];
 

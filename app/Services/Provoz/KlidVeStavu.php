@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Klid;
 use App\Support\Cas;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -270,7 +271,7 @@ class KlidVeStavu
                 'name' => $r['name'],
                 'want' => (int) $r['want'],
                 'measure' => 'none',
-                'note' => $r['note'],
+                'note' => Vejde::neboNic($r['note']),
                 'route' => $r['route'],
                 'tab' => $r['tab'],
                 'sort_order' => $poradi,

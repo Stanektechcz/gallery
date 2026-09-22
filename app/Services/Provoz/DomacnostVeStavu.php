@@ -7,6 +7,7 @@ use App\Models\HouseChore;
 use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -192,11 +193,11 @@ class DomacnostVeStavu
             && ! $zname->has($prvni['id'])
             && ($prvni['when'] ?? '') === 'právě teď') {
             HouseChoreLogEntry::create([
-                'client_id' => (string) $prvni['id'],
+                'client_id' => Vejde::do($prvni['id'], 80),
                 'gallery_space_id' => $prostor->id,
                 'house_chore_id' => HouseChore::where('gallery_space_id', $prostor->id)
                     ->where('name', $prvni['chore'] ?? '')->value('id'),
-                'chore_name' => (string) ($prvni['chore'] ?? 'Práce'),
+                'chore_name' => Vejde::do($prvni['chore'] ?? 'Práce'),
                 'user_id' => $jmena[$prvni['who'] ?? ''] ?? null,
                 'minutes' => (int) ($prvni['mins'] ?? 0),
                 'done_at' => now(),
@@ -298,15 +299,15 @@ class DomacnostVeStavu
             }
 
             $zalozene[(string) $r['id']] = HouseChore::create([
-                'client_id' => (string) $r['id'],
+                'client_id' => Vejde::do($r['id'], 80),
                 'gallery_space_id' => $prostor->id,
-                'name' => (string) $r['name'],
-                'every' => (string) ($r['every'] ?? 'týdně'),
+                'name' => Vejde::do($r['name']),
+                'every' => Vejde::do($r['every'] ?? 'týdně', 40),
                 'assigned_to' => $jmena[$r['who'] ?? ''] ?? null,
                 'rotate' => (bool) ($r['rotate'] ?? true),
                 'minutes' => (int) ($r['mins'] ?? 30),
                 'day' => ($r['day'] ?? null) ?: null,
-                'icon' => (string) ($r['icon'] ?? 'ph-broom'),
+                'icon' => Vejde::do($r['icon'] ?? 'ph-broom', 60),
                 'sort_order' => $poradi,
             ]);
         }
@@ -376,17 +377,17 @@ class DomacnostVeStavu
         }
 
         HouseDue::create([
-            'client_id' => (string) $r['id'],
+            'client_id' => Vejde::do($r['id'], 80),
             'gallery_space_id' => $prostor->id,
-            'what' => (string) ($r['what'] ?? 'Závazek'),
-            'kind' => (string) ($r['kind'] ?? 'lhůta'),
+            'what' => Vejde::do($r['what'] ?? 'Závazek'),
+            'kind' => Vejde::do($r['kind'] ?? 'lhůta', 40),
             'due_on' => $kdy,
             'amount' => (int) ($r['amount'] ?? 0),
             'user_id' => $jmena[$r['who'] ?? ''] ?? null,
-            'note' => $r['note'] ?? null,
-            'delay_note' => $r['delayNote'] ?? null,
+            'note' => Vejde::neboNic($r['note'] ?? null),
+            'delay_note' => Vejde::neboNic($r['delayNote'] ?? null),
             'delay_cost' => isset($r['delayCost']) ? (int) $r['delayCost'] : null,
-            'change_note' => $r['change'] ?? null,
+            'change_note' => Vejde::neboNic($r['change'] ?? null),
         ]);
     }
 
@@ -441,11 +442,11 @@ class DomacnostVeStavu
             $zaruka = $this->mesic((string) ($r['warrantyTo'] ?? ''));
 
             $zalozene[(string) $r['id']] = HouseInventoryItem::create([
-                'client_id' => (string) $r['id'],
+                'client_id' => Vejde::do($r['id'], 80),
                 'gallery_space_id' => $prostor->id,
-                'name' => (string) $r['name'],
-                'subtitle' => $r['sub'] ?? null,
-                'room' => $r['room'] ?? null,
+                'name' => Vejde::do($r['name']),
+                'subtitle' => Vejde::neboNic($r['sub'] ?? null),
+                'room' => Vejde::neboNic($r['room'] ?? null, 120),
                 'bought_on' => $this->datum((string) ($r['bought'] ?? '')),
                 'warranty_to' => $zaruka,
                 'has_doc' => (bool) ($r['doc'] ?? false),

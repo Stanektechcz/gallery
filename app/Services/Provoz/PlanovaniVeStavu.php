@@ -8,6 +8,7 @@ use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Obsah\Planovani;
 use App\Support\Cas;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -196,7 +197,7 @@ class PlanovaniVeStavu
         }
 
         $u->update([
-            'title' => (string) $e['t'],
+            'title' => Vejde::do($e['t']),
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
             'activity_kind' => $this->cinnost($e),
@@ -222,7 +223,7 @@ class PlanovaniVeStavu
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
             'created_by' => $kdo->id,
-            'title' => (string) $e['t'],
+            'title' => Vejde::do($e['t']),
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
             'activity_kind' => $this->cinnost($e),
@@ -525,7 +526,7 @@ class PlanovaniVeStavu
     private function upravUkol(SharedTodo $u, array $r, string $sloupec, bool $hotovo, GallerySpace $prostor, User $kdo): void
     {
         $zmeny = [
-            'title' => (string) $r['t'],
+            'title' => Vejde::do($r['t']),
             'description' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
             'assigned_to' => $this->kdoMa($r, $prostor),
             'priority' => $this->priorita($r),
@@ -558,7 +559,7 @@ class PlanovaniVeStavu
             'created_by' => $kdo->id,
             'assigned_to' => $this->kdoMa($r, $prostor),
             'list_id' => $klic === 'home' ? $this->domaciSeznam($prostor, $kdo) : $this->seznamKategorie($klic, $prostor),
-            'title' => (string) $r['t'],
+            'title' => Vejde::do($r['t']),
             'description' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
             'status' => $hotovo ? 'completed' : 'open',
             'priority' => $this->priorita($r),
@@ -821,13 +822,13 @@ class PlanovaniVeStavu
             if ($u) {
                 $u->update(match ($stav) {
                     'done' => [
-                        'title' => (string) $r['text'],
+                        'title' => Vejde::do($r['text']),
                         // „Jde se to udělat“ — přesouvá se mezi úkoly na tento týden.
                         // Jednou: seznam chodí celý a termín by se jinak posouval.
                         'due_at' => $u->due_at ?? Cas::dnes()->addWeek()->endOfDay(),
                         'status' => 'open',
                     ],
-                    'dropped' => ['title' => (string) $r['text'], 'status' => 'cancelled'],
+                    'dropped' => ['title' => Vejde::do($r['text']), 'status' => 'cancelled'],
                     default => ['title' => (string) $r['text']],
                 });
 
@@ -838,7 +839,7 @@ class PlanovaniVeStavu
                 SharedTodo::create([
                     'gallery_space_id' => $prostor->id,
                     'created_by' => $kdo->id,
-                    'title' => (string) $r['text'],
+                    'title' => Vejde::do($r['text']),
                     'status' => $stav === 'dropped' ? 'cancelled' : 'open',
                     'priority' => 'normal',
                     'metadata' => ['source' => 'prototyp', 'klient_id' => (string) $r['id']],

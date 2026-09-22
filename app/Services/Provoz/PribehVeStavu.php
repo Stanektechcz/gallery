@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pribeh;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -135,7 +136,7 @@ class PribehVeStavu
                 'title' => $nazev,
                 'year' => (string) ($k['year'] ?? $k[2] ?? '') ?: null,
                 'status' => $this->stav((string) ($k['status'] ?? $k[3] ?? '')),
-                'body' => (string) ($k['text'] ?? $k[6] ?? ''),
+                'body' => Vejde::do($k['text'] ?? $k[6] ?? '', 20000),
                 'sort_order' => $poradi,
                 'updated_at' => now(),
             ];
@@ -215,8 +216,8 @@ class PribehVeStavu
                 'chapter_id' => $kapitoly[$kapitola] ?? null,
                 'happened_on' => $kdy->format('Y-m-d'),
                 'title' => $nazev,
-                'note' => (string) ($m['note'] ?? $m[4] ?? ''),
-                'icon' => (string) ($m['icon'] ?? $m[5] ?? '') ?: 'ph-sparkle',
+                'note' => Vejde::do($m['note'] ?? $m[4] ?? ''),
+                'icon' => Vejde::do($m['icon'] ?? $m[5] ?? '', 60) ?: 'ph-sparkle',
                 'updated_at' => now(),
             ];
 
@@ -377,7 +378,7 @@ class PribehVeStavu
 
             $radek = [
                 'label' => $popis,
-                'note' => (string) ($p['note'] ?? ''),
+                'note' => Vejde::do($p['note'] ?? ''),
                 'is_shared' => $sdilet,
                 'sort_order' => $poradi,
                 'updated_at' => now(),
@@ -448,7 +449,7 @@ class PribehVeStavu
 
             $radek = [
                 'label' => $popis,
-                'value' => (string) ($r['value'] ?? ''),
+                'value' => Vejde::do($r['value'] ?? ''),
                 'is_done' => (bool) ($r['on'] ?? false),
                 'changed' => (bool) ($r['changed'] ?? false),
                 'sort_order' => $poradi,

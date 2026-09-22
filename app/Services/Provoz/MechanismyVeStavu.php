@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Mechanismy;
 use App\Support\Cas;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -219,7 +220,7 @@ class MechanismyVeStavu
                 'name' => $jmeno,
                 'side_user_id' => $lide[(string) ($r['side'] ?? '')] ?? null,
                 'every_days' => max(1, (int) ($r['every'] ?? 7)),
-                'note' => (string) ($r['note'] ?? ''),
+                'note' => Vejde::do($r['note'] ?? ''),
                 'sort_order' => $poradi,
                 'updated_at' => now(),
             ];
@@ -285,11 +286,11 @@ class MechanismyVeStavu
 
             return $nadpis === '' ? null : [
                 'title' => $nadpis,
-                'context' => (string) ($p['when'] ?? ''),
+                'context' => Vejde::do($p['when'] ?? ''),
                 'first_user_id' => $prvni,
-                'first_version' => (string) ($p['a'] ?? ''),
+                'first_version' => Vejde::do($p['a'] ?? ''),
                 'second_user_id' => $druhy,
-                'second_version' => (string) ($p['m'] ?? ''),
+                'second_version' => Vejde::do($p['m'] ?? ''),
             ];
         });
     }

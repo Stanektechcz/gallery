@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Sdileni;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -90,7 +91,7 @@ class KapsleVeStavu
             'gallery_space_id' => $prostor->id,
             'created_by' => $jmena[(string) ($k['from'] ?? '')] ?? $uzivatel->id,
             'title' => $nadpis,
-            'message' => (string) ($k['body'] ?? ''),
+            'message' => Vejde::do($k['body'] ?? '', 5000),
             'deliver_at' => $kdy,
             'status' => 'sealed',
             'created_at' => now(),
