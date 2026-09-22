@@ -40,6 +40,9 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Dohledané položky knihovny, ať se totéž nehledá u každé bubliny znovu. */
     private array $polozky = [];
 
+    /** @var array<int, bool> které snímky mají zmenšeninu */
+    private array $zmenseniny = [];
+
     public function skupina(): string
     {
         return 'zpravy';
@@ -300,9 +303,21 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
+        /*
+         * `??=` schová jen nalezené, ne nenalezené.
+         *
+         * Zpráva odkazující na fotku, která mezitím zmizela, se tak ptala
+         * databáze při každém dalším čtení znovu — a v chatu se takové
+         * zprávy objevují v řadě za sebou. `array_key_exists` si pamatuje
+         * i to, že tam nic není.
+         */
+        if (array_key_exists($ref, $this->polozky)) {
+            return $this->polozky[$ref];
+        }
+
         // Fotka, která mezitím odešla do trezoru, v chatu přestane být vidět —
         // stejně jako vyhozená do koše nebo smazaná: náhled by vrátil 404.
-        return $this->polozky[$ref] ??= DB::table('media_items')
+        return $this->polozky[$ref] = DB::table('media_items')
             ->where('gallery_space_id', $this->prostorId)
             ->where('uuid', $ref)
             ->where('is_hidden', false)
@@ -311,9 +326,16 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
             ->first(['id', 'uuid', 'location_name', 'original_filename']);
     }
 
+    /**
+     * Má ten snímek zmenšeninu?
+     *
+     * Odpověď se pamatuje: `EXISTS` na každou fotku v chatu znamenalo u šedesáti
+     * fotek šedesát dotazů, a protože `polozka()` neukládala nenalezené, chodilo
+     * jich ještě dvakrát tolik.
+     */
     private function maZmensenina(int $id): bool
     {
-        return DB::table('media_variants')
+        return $this->zmenseniny[$id] ??= DB::table('media_variants')
             ->where('media_item_id', $id)
             ->whereIn('type', ['thumbnail', 'small', 'original'])
             ->exists();

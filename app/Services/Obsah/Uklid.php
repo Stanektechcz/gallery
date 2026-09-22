@@ -192,12 +192,7 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $sDatem = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereNotNull('taken_at')
-            ->get(['id', 'original_filename', 'taken_at', 'primary_album_id', 'camera_make', 'camera_model', 'uploaded_at']);
+        $sDatem = $this->stopyKolem($prostor, $bezData);
 
         return $bezData
             ->map(function (MediaItem $m) use ($sDatem) {
@@ -216,6 +211,79 @@ class Uklid implements MaPrazdneKolekce, PoskytovatelObsahu
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Datované snímky, které můžou o těch nedatovaných něco říct.
+     *
+     * Načítala se **celá knihovna** — každý snímek s datem, se všemi sloupci —
+     * a pak se pro každou nedatovanou fotku celá procházela znovu. Při dvaceti
+     * tisících fotkách to je dvacet tisíc řádků v paměti a osm set tisíc
+     * porovnání názvů kvůli jedné obrazovce.
+     *
+     * Stopy jsou přitom jen čtyři a všechny se dají vybrat dotazem: totéž
+     * album, týž přístroj, týž import (okno pěti minut) a sousední název
+     * souboru. Ten poslední se dá vyjmenovat přesně — `sken_0142` má souseda
+     * `sken_0141` a `sken_0143`, a nic jiného.
+     *
+     * @param  Collection<int, MediaItem>  $bezData
+     * @return Collection<int, MediaItem>
+     */
+    private function stopyKolem(GallerySpace $prostor, Collection $bezData): Collection
+    {
+        $alba = $bezData->pluck('primary_album_id')->filter()->unique()->values();
+        $pristroje = $bezData->pluck('camera_model')->filter()->unique()->values();
+        $sousedi = $bezData->flatMap(fn (MediaItem $m) => $this->sousedniNazvy((string) $m->original_filename))->unique()->values();
+        $okna = $bezData->pluck('uploaded_at')->filter()->map(fn ($d) => CarbonImmutable::parse($d))->values();
+
+        if ($alba->isEmpty() && $pristroje->isEmpty() && $sousedi->isEmpty() && $okna->isEmpty()) {
+            return collect();
+        }
+
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', false)
+            ->whereNotNull('taken_at')
+            ->where(function ($q) use ($alba, $pristroje, $sousedi, $okna) {
+                $q->when($alba->isNotEmpty(), fn ($w) => $w->orWhereIn('primary_album_id', $alba))
+                    ->when($pristroje->isNotEmpty(), fn ($w) => $w->orWhereIn('camera_model', $pristroje))
+                    ->when($sousedi->isNotEmpty(), fn ($w) => $w->orWhereIn('original_filename', $sousedi));
+
+                foreach ($okna as $kdy) {
+                    $q->orWhereBetween('uploaded_at', [$kdy->subMinutes(5), $kdy->addMinutes(5)]);
+                }
+            })
+            // Pojistka pro album s deseti tisíci fotkami: na odhad roku
+            // stačí zlomek, a rozsah let se z něj pozná stejně.
+            ->limit(3000)
+            ->get(['id', 'original_filename', 'taken_at', 'primary_album_id', 'camera_make', 'camera_model', 'uploaded_at']);
+    }
+
+    /**
+     * Jak se můžou jmenovat sousední soubory — `sken_0142` → `sken_0141`, `sken_0143`.
+     *
+     * Nula na začátku čísla se zachovává, jinak by se `IMG_0007` hledalo jako `IMG_8`.
+     *
+     * @return list<string>
+     */
+    private function sousedniNazvy(string $nazev): array
+    {
+        if (! preg_match('/^(.*?)(\d+)(\.[^.]+)$/', $nazev, $casti)) {
+            return [];
+        }
+
+        $cislo = (int) $casti[2];
+        $sirka = strlen($casti[2]);
+        $jmena = [];
+
+        foreach ([$cislo - 1, $cislo + 1] as $sousedni) {
+            if ($sousedni >= 0) {
+                $jmena[] = $casti[1].str_pad((string) $sousedni, $sirka, '0', STR_PAD_LEFT).$casti[3];
+            }
+        }
+
+        return $jmena;
     }
 
     /**

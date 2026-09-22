@@ -21,6 +21,9 @@ use Illuminate\Support\Facades\DB;
  */
 class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
 {
+    /** @var Collection<int, string>|null jména lidí, ať se nehledají u každého dárku znovu */
+    private ?Collection $lide = null;
+
     public function skupina(): string
     {
         return 'darky';
@@ -286,13 +289,28 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @param  array<int, string>  $jmena */
     private function proKoho(object $d, array $jmena): string
     {
-        if (! isset($d->person_id) || ! $d->person_id || ! Tabulky::je('people')) {
+        if (! isset($d->person_id) || ! $d->person_id) {
             // Bez určené osoby je to pro toho druhého z dvojice — dárek sám
             // sobě se v téhle sekci nevede.
             return collect($jmena)->reject(fn ($j, $id) => (int) $id === (int) $d->created_by)->first() ?? '—';
         }
 
-        return (string) (DB::table('people')->where('id', $d->person_id)->value('name') ?? '—');
+        return (string) ($this->lide()[$d->person_id] ?? '—');
+    }
+
+    /**
+     * Jména lidí, ke kterým se dárky váží — jedním dotazem.
+     *
+     * `proKoho()` se volá uvnitř mapy nad dárky, takže tady byl dotaz na
+     * `people` (a k tomu ještě kontrola existence tabulky) na každý řádek.
+     *
+     * @return Collection<int, string>
+     */
+    private function lide(): Collection
+    {
+        return $this->lide ??= Tabulky::je('people')
+            ? DB::table('people')->pluck('name', 'id')
+            : collect();
     }
 
     private function odkud(object $d): string

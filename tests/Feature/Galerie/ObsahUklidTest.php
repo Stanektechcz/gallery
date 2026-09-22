@@ -77,7 +77,32 @@ class ObsahUklidTest extends TestCase
     {
         $this->fotka(['is_archived' => true, 'purge_after' => null]);
 
-        $this->assertSame('bez lhůty', $this->getJson('/api/data/uklid')->assertOk()->json('data.QUAR.0.left'));
+        $data = $this->getJson('/api/data/uklid')->assertOk();
+
+        $this->assertSame('bez lhůty', $data->json('data.QUAR.0.left'));
+        // Větu skládá server: klient lepil „Pustíme sama za " + tuhle hodnotu
+        // a u položky bez lhůty z toho vycházelo „Pustíme sama za bez lhůty".
+        $this->assertSame('Lhůtu nemá — sama nezmizí.', $data->json('data.QUAR.0.leftSay'));
+    }
+
+    /**
+     * Nadpis fronty říká, kolik toho je — ne kolik se vešlo na obrazovku.
+     *
+     * Seznamy se ořezávají na čtyřicet položek a nadpis se skládal z délky
+     * toho seznamu, takže knihovna s pěti sty nedatovanými snímky hlásila
+     * „40 snímků bez data".
+     */
+    public function test_pocty_front_jsou_skutecne(): void
+    {
+        foreach (range(1, 42) as $i) {
+            $this->fotka(['taken_at' => null, 'original_filename' => 'sken_'.str_pad((string) $i, 4, '0', STR_PAD_LEFT).'.jpg']);
+        }
+
+        $data = $this->getJson('/api/data/uklid')->assertOk();
+
+        $this->assertCount(40, $data->json('data.DATING'), 'Na obrazovku jich jde čtyřicet.');
+        $this->assertSame(42, $data->json('data.AL.uklidPocty.dating'));
+        $this->assertSame(0, $data->json('data.AL.uklidPocty.quar'));
     }
 
     /** Neznámá velikost se mlčí — „0 kB“ by byla lež. */

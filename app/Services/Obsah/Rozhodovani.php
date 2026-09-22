@@ -167,6 +167,14 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $vybrane = $otevrena->first();
 
+        // Obavy k uzavřeným rozvahám naráz; jeden dotaz místo jednoho na každou.
+        $rizikaHistorie = $uzavrena->isEmpty()
+            ? collect()
+            : DB::table('couple_premortem_risks')
+                ->whereIn('couple_premortem_id', $uzavrena->pluck('id'))
+                ->get()
+                ->groupBy('couple_premortem_id');
+
         return array_filter([
             'PM_DEC' => $otevrena->map(fn (object $p) => [
                 'q' => $p->title,
@@ -176,10 +184,10 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
             'PM_MINE' => $vybrane && $prvni !== null ? $rizika((int) $vybrane->id, $prvni) : [],
             'PM_THEIRS' => $vybrane && $druhy !== null ? $rizika((int) $vybrane->id, $druhy) : [],
 
-            'PM_HIST' => $uzavrena->map(function (object $p) use ($prvni, $druhy) {
-                $rizika = DB::table('couple_premortem_risks')
-                    ->where('couple_premortem_id', $p->id)
-                    ->get();
+            // Obavy ke všem uzavřeným rozvahám jedním dotazem — dřív to byl
+            // jeden dotaz na každou, tedy až čtyřicet.
+            'PM_HIST' => $uzavrena->map(function (object $p) use ($prvni, $druhy, $rizikaHistorie) {
+                $rizika = $rizikaHistorie[$p->id] ?? collect();
 
                 $vrch = fn (?int $kdo) => $kdo === null
                     ? null

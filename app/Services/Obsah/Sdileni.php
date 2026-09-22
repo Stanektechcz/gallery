@@ -99,12 +99,22 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $dnes = CarbonImmutable::now();
 
-        return DB::table('shared_links')
+        $odkazy = DB::table('shared_links')
             ->where('gallery_space_id', $prostor->id)
             ->orderByDesc('created_at')
             ->limit(40)
-            ->get()
-            ->map(function (object $o) use ($dnes) {
+            ->get();
+
+        // Názvy alb jedním dotazem — `obsahOdkazu()` se jinak ptá u každého
+        // odkazu zvlášť.
+        $alba = Tabulky::je('albums')
+            ? DB::table('albums')
+                ->whereIn('id', $odkazy->where('target_type', 'album')->pluck('target_id')->filter())
+                ->pluck('title', 'id')
+            : collect();
+
+        return $odkazy
+            ->map(function (object $o) use ($dnes, $alba) {
                 $do = $o->expires_at ? CarbonImmutable::parse($o->expires_at) : null;
                 $vyprselo = $do && $do->lt($dnes);
 
@@ -125,7 +135,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
                      * data přihlášené dvojice, která odkaz sama založila.
                      */
                     'odkaz' => route('share.show', $o->token),
-                    'content' => $this->obsahOdkazu($o),
+                    'content' => $this->obsahOdkazu($o, $alba),
                     'created' => CarbonImmutable::parse($o->created_at)->format('j. n. Y'),
                     'expires' => match (true) {
                         ! $do => 'Bez expirace',
@@ -150,10 +160,11 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
             ->all();
     }
 
-    private function obsahOdkazu(object $o): string
+    /** @param  Collection<int, string>  $alba  názvy alb, načtené dopředu */
+    private function obsahOdkazu(object $o, Collection $alba): string
     {
-        if ($o->target_type === 'album' && $o->target_id && Tabulky::je('albums')) {
-            $nazev = DB::table('albums')->where('id', $o->target_id)->value('title');
+        if ($o->target_type === 'album' && $o->target_id) {
+            $nazev = $alba[$o->target_id] ?? null;
 
             return $nazev ? 'Album '.$nazev : 'Album';
         }

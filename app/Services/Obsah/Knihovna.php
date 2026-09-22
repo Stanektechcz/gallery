@@ -285,6 +285,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $vAlbu = $this->vazbyAlb($media);
         $vOdkazech = $this->vSdilenych($media);
         $this->zjistiNahledy($media->pluck('id')->map(fn ($i) => (int) $i)->all());
+        // Videa taky naráz: `prehrani()` se jinak doptává po jednom a knihovna
+        // s dvěma sty videi si tím přidala dvě stě dotazů.
+        $this->zjistiVidea($media->where('media_type', 'video')->pluck('id')->map(fn ($i) => (int) $i)->all());
         $poradi = 0;
 
         return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, &$poradi) {
@@ -610,6 +613,16 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
 
             return $d;
         };
+
+        /*
+         * Zmenšeniny obálek jedním dotazem, ne po jedné.
+         *
+         * `nahled($a->cover)` se ptá `maNahled()`, a ta pro neznámý snímek
+         * spustí `zjistiNahledy([$id])` — tedy tři až čtyři dotazy na album.
+         * Při dvou stech albech to bylo skoro osm set dotazů navíc jen kvůli
+         * obálkám. Načtou se proto všechny dopředu.
+         */
+        $this->zjistiNahledy($modely->pluck('cover.id')->filter()->map(fn ($i) => (int) $i)->all());
 
         $radky = $modely->map(fn (Album $a) => [
             'id' => $a->uuid,
@@ -1002,6 +1015,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'm.width', 'm.height', 'm.size_bytes', 'm.location_name',
             ])
             ->groupBy('duplicate_group_id');
+
+        // Zmenšeniny všech duplicit naráz — `nahled()` se jinak doptává
+        // po jedné a každý dotaz jsou tři další.
+        $this->zjistiNahledy($polozky->flatten(1)->pluck('id')->map(fn ($i) => (int) $i)->all());
 
         return $skupiny
             ->map(function (object $s) use ($polozky) {
