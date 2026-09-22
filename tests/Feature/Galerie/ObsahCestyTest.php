@@ -81,6 +81,36 @@ class ObsahCestyTest extends TestCase
         $this->assertTrue($cesty['Vídeň']['past']);
     }
 
+    /**
+     * Nová cesta z počítače i telefonu (`POST /v1/trips`) je hned v Cestách.
+     *
+     * Dialog na počítači ji dřív ukládal jen do sdíleného stavu — server ji
+     * neznal a zapsat k ní útratu nebo program nešlo. Celkový rozpočet z
+     * dialogu se ukáže, dokud cesta nemá limity po kategoriích.
+     */
+    public function test_nova_cesta_je_hned_v_cestach_i_s_rozpoctem(): void
+    {
+        $this->postJson('/api/v1/trips', [
+            'name' => 'Pálava', 'description' => 'Mikulov', 'start_date' => now()->addWeek()->toDateString(),
+            'end_date' => now()->addWeek()->addDays(2)->toDateString(), 'budget' => 6000, 'currency' => 'CZK', 'status' => 'planned',
+        ])->assertCreated();
+
+        $cesta = collect($this->getJson('/api/data/cesty')->assertOk()->json('data.TRIPS'))->firstWhere('title', 'Pálava');
+
+        $this->assertNotNull($cesta);
+        $this->assertSame('plánujeme', $cesta['tag']);
+        $this->assertContains(['Rozpočet', '6 000 Kč'], $cesta['stats']);
+
+        // Telefon dostane id a rozsah — z nich vybírá den pro bod programu.
+        $telefon = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava');
+        $this->assertSame($cesta['n'], $telefon['n']);
+        $this->assertSame(now()->addWeek()->toDateString(), $telefon['od']);
+
+        $this->postJson('/api/cesty/'.$telefon['n'].'/program', ['den' => 1, 'nazev' => 'Svatý Kopeček', 'cas' => '10:30'])->assertCreated();
+        $den = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava')['days'][0];
+        $this->assertSame([['Svatý Kopeček', '10:30', 0]], $den[2]);
+    }
+
     /** Rozsah se píše česky a měsíc se neopakuje, když je stejný. */
     public function test_rozsah_dat_se_pise_cesky(): void
     {

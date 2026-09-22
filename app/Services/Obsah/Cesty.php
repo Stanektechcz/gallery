@@ -236,6 +236,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                     default => 'jsme tam',
                 },
                 'n' => (int) $c->id,
+                'od' => $od->toDateString(),
+                'do' => $do->toDateString(),
                 'past' => $dnes->gt($do),
                 // Prototyp z toho dělá dotaz do knihovny, ne číslo: pruh fotek
                 // pod cestou vzniká hledáním.
@@ -263,7 +265,8 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
     private function cisla(object $c, CarbonImmutable $od, CarbonImmutable $do, int $delka, CarbonImmutable $dnes, Collection $utraty, Collection $limity, Collection $dny, Collection $program): array
     {
         $polozek = $dny->sum(fn ($d) => ($program[$d->id] ?? collect())->count());
-        $plan = (int) $limity->sum('amount');
+        // Limity kategorií mají přednost; bez nich platí celkový rozpočet z dialogu nové cesty.
+        $plan = (int) $limity->sum('amount') ?: (int) round((float) ($c->budget ?? 0));
         $utraceno = (int) $utraty->where('state', '!=', 'planned')->sum('amount');
 
         return array_values(array_filter([
@@ -707,6 +710,10 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             'tag' => $c['tag'],
             'place' => explode(' · ', (string) $c['where'])[0] ?? '',
             'seed' => $c['n'],
+            // Telefon zapisuje k cestě bod programu (`/cesty/{n}/program`) a den vybírá z rozsahu od–do.
+            'n' => $c['n'],
+            'od' => $c['od'],
+            'do' => $c['do'],
             'desc' => $c['desc'],
             'stats' => $c['stats'],
             'days' => array_map(fn (array $d) => [

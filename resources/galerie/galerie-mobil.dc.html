@@ -401,6 +401,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <!-- CESTY -->
           <sc-if value="{{ isTrips }}">
             <div data-screen-label="Mobil — Cesty" style="animation:mIn .2s ease; padding:0 18px">
+              <button onClick="{{ tripNewGo }}" class="btn btn-secondary btn-block" style="min-height:44px; gap:7px; margin-bottom:16px"><i class="ph-duotone ph-plus" style="font-size:17px"></i>Nová cesta</button>
+              <sc-if value="{{ tripEmpty }}">
+                <div style="padding:40px 10px 56px; text-align:center">
+                  <i class="ph-duotone ph-airplane-tilt" style="font-size:32px; color:var(--g-ink3)"></i>
+                  <div style="font-size:16.5px; margin-top:10px">Zatím žádná cesta</div>
+                  <div style="font-size:13.5px; color:var(--g-ink2); margin-top:6px; text-wrap:pretty">Založte první — k cestě pak půjdou útraty, program po dnech i fotky z ní.</div>
+                </div>
+              </sc-if>
               <sc-for list="{{ tripList }}" as="t" hint-placeholder-count="3">
                 <button onClick="{{ t.go }}" style="display:block; width:100%; text-align:left; border:0; background:transparent; padding:0 0 20px; cursor:pointer; font-family:inherit; color:inherit">
                   <div style="height:150px; border-radius:3px; background:{{ t.bg }}; position:relative; overflow:hidden">
@@ -2103,6 +2111,34 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
           </sc-if>
 
+          <!-- NOVÁ CESTA -->
+          <sc-if value="{{ isTripNew }}">
+            <div data-screen-label="Mobil — Nová cesta" style="animation:mIn .2s ease; padding:0 18px 20px">
+              <div class="field"><label>Kam jedeme</label>
+                <input class="input" value="{{ ntNazev }}" onInput="{{ ntSetNazev }}" placeholder="Například Beskydy na kole" aria-label="Název cesty" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:15px" />
+              </div>
+              <div class="field" style="margin-top:12px"><label>Destinace</label>
+                <input class="input" value="{{ ntKam }}" onInput="{{ ntSetKam }}" placeholder="Země, města, oblast" aria-label="Destinace" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:15px" />
+              </div>
+              <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-top:12px">
+                <div class="field"><label>Od</label>
+                  <input class="input" type="date" value="{{ ntOd }}" onInput="{{ ntSetOd }}" aria-label="Začátek cesty" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:15px" />
+                </div>
+                <div class="field"><label>Do</label>
+                  <input class="input" type="date" value="{{ ntDo }}" onInput="{{ ntSetDo }}" min="{{ ntOd }}" aria-label="Konec cesty" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:15px" />
+                </div>
+              </div>
+              <div class="field" style="margin-top:12px"><label>Rozpočet (Kč)</label>
+                <input class="input" inputMode="numeric" value="{{ ntRozpocet }}" onInput="{{ ntSetRozpocet }}" placeholder="38 000" aria-label="Rozpočet" style="width:100%; box-sizing:border-box; min-height:48px; font-family:inherit; font-size:15px" />
+              </div>
+              <div style="font-size:12.5px; line-height:1.5; color:{{ ntHintColor }}; margin-top:12px; text-wrap:pretty">{{ ntHint }}</div>
+              <div style="display:flex; gap:8px; margin-top:16px">
+                <button onClick="{{ ntCancel }}" class="btn btn-secondary" style="flex:1; min-height:48px">Zrušit</button>
+                <button onClick="{{ ntSave }}" disabled="{{ ntCant }}" class="btn btn-primary" style="flex:2; min-height:48px; gap:7px"><i class="ph-duotone ph-airplane-tilt" style="font-size:17px"></i>{{ ntCta }}</button>
+              </div>
+            </div>
+          </sc-if>
+
           <!-- ZPRÁVY -->
           <sc-if value="{{ isChat }}">
             <div data-screen-label="Mobil — Zprávy" style="animation:mIn .2s ease; padding:0 14px 8px">
@@ -2195,17 +2231,31 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div data-screen-label="Mobil — Reakce hostů" style="animation:mIn .2s ease; padding:0 18px">
               <div style="font-size:12px; color:var(--g-ink3); padding-bottom:12px">{{ guestMeta }}</div>
               <sc-for list="{{ guestRows }}" as="g" hint-placeholder-count="3">
-                <button onClick="{{ g.go }}" style="display:flex; align-items:flex-start; gap:12px; width:100%; padding:13px 2px; border:0; border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
-                  <i class="ph-duotone {{ g.icon }}" style="flex:none; font-size:20px; margin-top:2px; color:{{ g.color }}"></i>
-                  <span style="flex:1; min-width:0">
-                    <span style="display:flex; align-items:baseline; gap:8px">
-                      <span style="font-size:14.5px">{{ g.who }}</span>
-                      <span style="font-size:11.5px; color:var(--g-ink3); margin-left:auto">{{ g.when }}</span>
+                <div style="padding:13px 2px; border-bottom:1px solid var(--g-line2); opacity:{{ g.op }}">
+                  <button onClick="{{ g.go }}" style="display:flex; align-items:flex-start; gap:12px; width:100%; padding:0; border:0; background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
+                    <i class="ph-duotone {{ g.icon }}" style="flex:none; font-size:20px; margin-top:2px; color:{{ g.color }}"></i>
+                    <span style="flex:1; min-width:0">
+                      <span style="display:flex; align-items:baseline; gap:8px">
+                        <span style="font-size:14.5px">{{ g.who }}</span>
+                        <span style="font-size:11.5px; color:var(--g-ink3); margin-left:auto">{{ g.when }}</span>
+                      </span>
+                      <span style="display:block; font-size:13.5px; color:var(--g-ink2); margin-top:3px; line-height:1.55">{{ g.text }}</span>
+                      <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ g.share }}</span>
                     </span>
-                    <span style="display:block; font-size:13.5px; color:var(--g-ink2); margin-top:3px; line-height:1.55">{{ g.text }}</span>
-                    <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:3px">{{ g.share }}</span>
-                  </span>
-                </button>
+                  </button>
+                  <sc-if value="{{ g.hasAudio }}">
+                    <audio controls preload="none" sc-camel-src="{{ g.audio }}" style="display:block; width:100%; height:34px; margin:8px 0 0 32px; max-width:calc(100% - 32px)"></audio>
+                  </sc-if>
+                  <sc-if value="{{ g.canManage }}">
+                    <div style="display:flex; flex-wrap:wrap; gap:6px; margin:9px 0 0 32px">
+                      <button onClick="{{ g.toggle }}" style="min-height:40px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">{{ g.toggleLabel }}</button>
+                      <sc-if value="{{ g.canPin }}">
+                        <button onClick="{{ g.pin }}" style="min-height:40px; padding:0 11px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit">{{ g.pinLabel }}</button>
+                      </sc-if>
+                      <button onClick="{{ g.del }}" style="min-height:40px; padding:0 11px; border:1px solid {{ g.delBd }}; border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-mag)">{{ g.delLabel }}</button>
+                    </div>
+                  </sc-if>
+                </div>
               </sc-for>
               <sc-if value="{{ guestEmpty }}">
                 <div style="padding:56px 10px; text-align:center">
@@ -4805,6 +4855,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <sc-if value="{{ sheetIsAdd }}">
                 <div style="margin-top:14px; display:flex; flex-direction:column; gap:12px">
+                  <sc-if value="{{ addIsItin }}">
+                    <div>
+                      <span style="display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-ink2); margin-bottom:5px">Den cesty</span>
+                      <div style="display:flex; gap:6px; overflow-x:auto; padding-bottom:2px" data-tabstrip="1">
+                        <sc-for list="{{ addDays }}" as="dn" hint-placeholder-count="3">
+                          <button onClick="{{ dn.pick }}" style="flex:none; min-height:40px; padding:0 11px; border:1px solid {{ dn.bd }}; border-radius:2px; background:{{ dn.bg }}; color:{{ dn.fg }}; cursor:pointer; font-family:inherit; font-size:12.5px">{{ dn.label }}</button>
+                        </sc-for>
+                      </div>
+                    </div>
+                  </sc-if>
                   <label style="display:block">
                     <span style="display:block; font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--g-ink2); margin-bottom:5px">{{ addLabelA }}</span>
                     <input value="{{ addA }}" onInput="{{ setAddA }}" onKeyDown="{{ addKey }}" class="input" style="width:100%; box-sizing:border-box; min-height:44px; font-family:inherit" />
@@ -5466,8 +5526,9 @@ const MEMPTY = {
   watch: ['ph-film-strip', 'Watchlist je prázdný', 'Co chcete vidět, přidejte sem — objeví se to i v rozhodovacím kolečku.', 'Rozhodovací kolečko', 'ph-shuffle', 'wheel'],
   wkEvents: ['ph-calendar-dots', 'Týden je prázdný', 'Akce přijdou z kalendáře, z cest a z pravidel.', 'Kalendář', 'ph-calendar-blank', 'kalendar'],
   memToday: ['ph-clock-counter-clockwise', 'Dnes nic z archivu', 'Až budete mít fotky ze stejného dne v jiném roce, objeví se tady.', null, null, null],
-  peopleSug: ['ph-user-focus', 'Žádné návrhy tváří', 'Rozpoznávání běží v telefonu. Nová jména nabídne samo.', null, null, null],
-  dupes: ['ph-copy', 'Žádné duplicity', 'Knihovna je čistá. Kontrola běží každou noc.', null, null, null],
+  // Poctivě: tváře aplikace nerozpoznává a duplicity kontroluje jednou týdně (gallery:scan-duplicates).
+  peopleSug: ['ph-user-focus', 'Žádné návrhy tváří', 'Aplikace tváře nerozpoznává, takže návrhy nevznikají — osoby, které si založíte, najdete v Potvrzených.', null, null, null],
+  dupes: ['ph-copy', 'Žádné duplicity', 'Knihovna je čistá. Kontrola duplicit běží jednou týdně.', null, null, null],
   gifts: ['ph-gift', 'Žádné nápady na dárky', 'Nápad zapsaný teď se připomene týden před výročím.', null, null, null],
   datesSaved: ['ph-sparkle', 'Nic uloženého', 'Uložte, co se vám oběma zamlouvá — dostane se to i do kolečka.', 'Rozhodovací kolečko', 'ph-shuffle', 'wheel'],
   itinWish: ['ph-map-pin', 'Seznam přání je prázdný', 'Místa sem přidáte z mapy, z odkazu, nebo rychlým vstupem.', 'Místa', 'ph-map-trifold', 'places'],
@@ -9747,6 +9808,57 @@ class Component extends DCLogic {
     document.body.appendChild(vstup);
     vstup.click();
   }
+  // Formulář nové cesty (obrazovka `tripnew`): stejná data a endpoint jako dialog na počítači.
+  novaCestaVals() {
+    const d = this.state.mTrip || {};
+    const set = patch => this.setState({ mTrip: Object.assign({}, this.state.mTrip || {}, patch) });
+    const chyba = !(d.nazev || '').trim() ? 'Cesta potřebuje název'
+      : !d.od || !d.do ? 'Vyberte, od kdy do kdy'
+      : d.do < d.od ? 'Konec je dřív než začátek' : null;
+    return {
+      ntNazev: d.nazev || '', ntSetNazev: e => set({ nazev: e.target.value }),
+      ntKam: d.kam || '', ntSetKam: e => set({ kam: e.target.value }),
+      ntOd: d.od || '', ntSetOd: e => set({ od: e.target.value, do: d.do && d.do < e.target.value ? e.target.value : d.do }),
+      ntDo: d.do || '', ntSetDo: e => set({ do: e.target.value }),
+      ntRozpocet: d.rozpocet || '', ntSetRozpocet: e => set({ rozpocet: e.target.value.replace(/[^0-9 ]/g, '') }),
+      ntCant: !!chyba || !!d.busy,
+      ntHint: chyba || 'Útraty, program a doklady k ní pak přidáte v detailu cesty — na telefonu i na počítači.',
+      ntHintColor: chyba ? 'var(--g-ink3)' : 'var(--g-ink2)',
+      ntCta: d.busy ? 'Zakládám…' : 'Založit cestu',
+      ntSave: () => {
+        if (chyba || d.busy) return;
+        const rozpocet = parseInt(String(d.rozpocet || '').replace(/\s/g, ''), 10);
+        set({ busy: true });
+        window.GalerieApi.post('v1/trips', {
+          name: d.nazev.trim(), description: (d.kam || '').trim() || null,
+          start_date: d.od, end_date: d.do, budget: rozpocet > 0 ? rozpocet : null,
+          currency: 'CZK', status: 'planned'
+        }).then(() => {
+          const obnova = window.GalerieObnovit ? window.GalerieObnovit('cesty') : Promise.resolve();
+          return Promise.resolve(obnova).then(() => {
+            this.setState(st => ({ mTrip: null, stack: st.stack.filter(k => k !== 'tripnew') }));
+            this.toast('Cesta „' + d.nazev.trim() + '“ založena', { icon: 'ph-airplane-tilt', silent: true });
+          });
+        }).catch(e => {
+          set({ busy: false });
+          const b = (e && e.body) || {};
+          this.toast(b.message || (b.errors && Object.values(b.errors)[0] && Object.values(b.errors)[0][0]) || 'Cestu se nepodařilo založit', { icon: 'ph-warning', silent: true });
+        });
+      },
+      ntCancel: () => this.setState(st => ({ mTrip: null, stack: st.stack.filter(k => k !== 'tripnew') }))
+    };
+  }
+  // Úprava vzkazu hosta: odpověď serveru nese novou skupinu obsahu, obrazovka ji hned převezme.
+  vzkazHostaAkce(zadost, hlaska, sKnihovnou) {
+    zadost.then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (sKnihovnou && window.GalerieObnovit) window.GalerieObnovit('knihovna');
+      this.toast((res && res.zprava) || hlaska, { icon: 'ph-chat-teardrop-text', silent: true });
+    }).catch(e => {
+      const t = (e && e.body) || {};
+      this.toast(t.zprava || t.message || 'Vzkaz se nepodařilo upravit', { icon: 'ph-warning', silent: true });
+    });
+  }
   // Smazat jde jen vlastní zprávu (server cizí nedovolí); ptá se dvojím klepnutím, zmizí u obou.
   chatSmaz(m) {
     if (this.state.mChatPotvrd !== m.id) {
@@ -11832,10 +11944,27 @@ class Component extends DCLogic {
         this.toast(this.pl(ids.length, 'položka', 'položky', 'položek') + ' → album ' + a, { icon: 'ph-folder-plus', undo: () => this.setState({ albums: prev, stack: ['albums'] }) });
         return;
       }
-      // U dvojice zápis i úkol na server; itinerář telefon zapsat neumí a neříká opak.
+      // U dvojice zápis, úkol i bod programu cesty na server.
       if (this.galerieNaServeru() && (s.addKind === 'diary' || s.addKind === 'task' || s.addKind === 'itin')) {
-        if (s.addKind === 'itin') { this.toast('Do itineráře zatím přidáte jen na počítači v detailu cesty', { icon: 'ph-hourglass-medium' }); return; }
         const api = window.GalerieApi;
+        /*
+         * Bod programu do dne cesty — dřív „zatím jen na počítači".
+         *
+         * Den se vybírá z dnů cesty (od–do), čas je nepovinný. Stejný
+         * endpoint jako na počítači, takže bod vidí oba hned v programu.
+         */
+        if (s.addKind === 'itin') {
+          const cesta = TRIPS[tripKlic];
+          if (!cesta || !cesta.n) { this.toast('Nejdřív otevřete cestu', { icon: 'ph-info' }); return; }
+          if (b && !/^([01]?\d|2[0-3]):[0-5]\d$/.test(b)) { this.toast('Čas napište jako 10:30 — nebo ho nechte prázdný', { icon: 'ph-clock' }); return; }
+          api.post('cesty/' + cesta.n + '/program', { den: s.addDen || 0, nazev: a, cas: b || null }).then(res => {
+            if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+            if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+            this.setState({ sheet: null, addA: '', addB: '', addDen: 0, seq: n + 1 });
+            this.toast((res && res.zprava) || a + ' přidáno do programu', { icon: 'ph-list-plus' });
+          }).catch(e => this.chybaServeru(e, 'Bod programu se nepodařilo uložit'));
+          return;
+        }
         const zadost = s.addKind === 'diary' ? api.post('rychle/denik', { nadpis: a, text: b || a }) : api.post('rychle/ukol', { nazev: a, kdo: b });
         zadost.then(res => {
           if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
@@ -12105,6 +12234,7 @@ class Component extends DCLogic {
       cook: ['Společně', 'Co dnes uvařit'],
       nudge: ['Společně', 'Žádosti mezi námi'],
       chat: ['Společně', 'Zprávy'],
+      tripnew: ['Cesty', 'Nová cesta'],
       chg: ['Systém', 'Co se změnilo'],
       ritual: ['Společně', 'Roční rituály'],
       cost: ['Peníze', 'Co to znamená'],
@@ -12155,7 +12285,7 @@ class Component extends DCLogic {
       isCyklus: screen === 'cyklus', isKalendar: screen === 'kalendar', isSec: screen === 'sec',
       isPlaces: screen === 'places', isSettings: screen === 'settings', isVault: screen === 'vault',
       isAlbums: screen === 'albums', isAlbum: screen === 'album', isTrash: screen === 'trash', isShares: screen === 'shares',
-      isChat: screen === 'chat',
+      isChat: screen === 'chat', isTripNew: screen === 'tripnew',
       ...(screen === 'chat' ? this.chatVals() : {}),
       isGuests: screen === 'guests',
       isGifts: screen === 'gifts',
@@ -12168,20 +12298,43 @@ class Component extends DCLogic {
        * `guestMsgs` je schránka ukázkové stránky hosta v tomhle prohlížeči —
        * skutečný vzkaz od babičky do ní nikdy nedorazil.
        */
+      /*
+       * Vzkazy hostů se dají i spravovat — jako na počítači.
+       *
+       * Telefon je jen vypsal: hlasový vzkaz posílal „přehrát ve Sdílených
+       * na počítači" a skrýt nevhodný vzkaz nebo ho smazat šlo jen odtamtud.
+       */
       guestRows: (this.galerieNaServeru()
         ? ((window.GalerieData || {}).GV_C || []).slice().reverse().map(c => ({
           who: c.who, when: c.when,
-          text: c.text || (c.kind === 'voice' ? 'Hlasový vzkaz' + (c.len ? ' · ' + c.len : '') + ' — přehrajete ve Sdílených na počítači' : ''),
+          text: c.text || (c.kind === 'voice' ? 'Hlasový vzkaz' + (c.len ? ' · ' + c.len : '') : ''),
           icon: c.kind === 'voice' ? 'ph-microphone' : 'ph-chat-teardrop-text',
           color: c.hidden ? 'var(--g-ink3)' : 'var(--g-acc)',
-          share: 'odkaz „' + (c.share || 'bez názvu') + '“' + (c.photo ? ' · k fotce ' + c.photo : '') + (c.hidden ? ' · skrytý' : ''),
+          op: c.hidden ? '.6' : '1',
+          share: 'odkaz „' + (c.share || 'bez názvu') + '“' + (c.photo ? ' · k fotce ' + c.photo : '') + (c.hidden ? ' · skrytý — host ho nevidí' : '') + (c.pinned ? ' · přilepený jako popisek' : ''),
+          hasAudio: c.kind === 'voice' && !!c.audio, audio: c.audio || '',
+          canManage: !!c.id,
+          toggleLabel: c.hidden ? 'Zveřejnit' : 'Skrýt',
+          toggle: () => this.vzkazHostaAkce(window.GalerieApi.patch('vzkazy-hostu/' + c.id, { skryty: !c.hidden }), c.hidden ? 'Vzkaz je zase vidět' : 'Vzkaz skryt — host ho už nevidí'),
+          canPin: !!c.id && !!c.photo,
+          pinLabel: c.pinned ? 'Odlepit' : 'Přilepit k fotce',
+          pin: () => this.vzkazHostaAkce(window.GalerieApi.post('vzkazy-hostu/' + c.id + '/prilepit', { prilepit: !c.pinned }), c.pinned ? 'Popisek odlepen' : 'Vzkaz přilepen jako popisek fotky', true),
+          delLabel: s.mVzkazPotvrd === c.id ? 'Opravdu smazat' : 'Smazat',
+          delBd: s.mVzkazPotvrd === c.id ? 'var(--g-mag)' : 'var(--g-line)',
+          del: () => {
+            // Natrvalo, i s nahrávkou — proto dvojí klepnutí.
+            if (s.mVzkazPotvrd !== c.id) { this.setState({ mVzkazPotvrd: c.id }); this.toast('Klepněte znovu — vzkaz zmizí natrvalo' + (c.kind === 'voice' ? ' i s nahrávkou' : ''), { icon: 'ph-warning', silent: true }); return; }
+            this.setState({ mVzkazPotvrd: null });
+            this.vzkazHostaAkce(window.GalerieApi.del('vzkazy-hostu/' + c.id), 'Vzkaz smazán');
+          },
           go: () => this.push('shares')
         }))
         : (s.guestMsgs || []).slice().reverse().map(m => ({
           who: m.who, when: m.when, text: m.text,
           icon: m.kind === 'like' ? 'ph-heart-straight' : 'ph-chat-teardrop-text',
-          color: m.kind === 'like' ? 'var(--g-mag)' : 'var(--g-acc)',
+          color: m.kind === 'like' ? 'var(--g-mag)' : 'var(--g-acc)', op: '1',
           share: (this.sharesList().find(x => x.id === m.shareId) || { name: 'výchozí odkaz' }).name,
+          hasAudio: false, audio: '', canManage: false, canPin: false,
           go: () => this.push('shares')
         }))),
       guestEmpty: (this.galerieNaServeru() ? ((window.GalerieData || {}).GV_C || []) : (s.guestMsgs || [])).length === 0,
@@ -12623,6 +12776,20 @@ class Component extends DCLogic {
       ],
 
       // cesty
+      /*
+       * Prázdná záložka Cesty a nová cesta.
+       *
+       * Bez cest zůstala hlavní záložka bílá — žádná věta, žádné tlačítko —
+       * a založit cestu šlo jen na počítači. Zakládá se stejně jako tam
+       * (`/v1/trips`), takže ji hned vidí oba.
+       */
+      tripEmpty: tripIds.length === 0,
+      tripNewGo: () => {
+        if (!this.galerieNaServeru()) { this.toast('Cestu založíte s připojeným serverem', { icon: 'ph-airplane-tilt', silent: true }); return; }
+        this.setState({ mTrip: { nazev: '', kam: '', od: '', do: '', rozpocet: '' } });
+        this.push('tripnew');
+      },
+      ...(screen === 'tripnew' ? this.novaCestaVals() : {}),
       tripList: tripIds.map(id => ({
         title: TRIPS[id].title, when: TRIPS[id].when, tag: TRIPS[id].tag, bg: this.bg(TRIPS[id].seed),
         meta: TRIPS[id].stats.map(x => x[1] + ' ' + x[0].toLowerCase()).join(' · '),
@@ -12668,7 +12835,7 @@ class Component extends DCLogic {
             };
           }))
         })),
-        addItem: () => this.setState({ sheet: 'add', addKind: 'itin', addA: '', addB: '' }),
+        addItem: () => this.setState({ sheet: 'add', addKind: 'itin', addA: '', addB: '', addDen: 0 }),
         fcOn: !!tripFc,
         fcTitle: tripApplied ? 'Rozpočet podle minulých cest' : 'Odhad z minulých cest',
         fcNote: tripFc ? 'Základ: ' + this.pl(tripFc.basis, 'uzavřená cesta', 'uzavřené cesty', 'uzavřených cest') + '. Kategorie, které vám pravidelně utíkají, se do odhadu propíší silněji.' : '',
@@ -13388,7 +13555,25 @@ class Component extends DCLogic {
         });
         this.toast('Hledání uloženo', { icon: 'ph-bookmark-simple', undo: () => this.setState({ srSaved: prev }) });
       },
-      addLabelA: spec[1], addLabelB: spec[2], addCta: spec[3],
+      addLabelA: spec[1],
+      addLabelB: s.addKind === 'itin' && this.galerieNaServeru() ? 'Čas (nepovinný, třeba 10:30)' : spec[2],
+      addCta: spec[3],
+      // Bod programu cesty: den z rozsahu cesty (od–do ze serveru).
+      addIsItin: s.addKind === 'itin' && this.galerieNaServeru(),
+      addDays: (() => {
+        const cesta = TRIPS[tripKlic];
+        if (!(s.addKind === 'itin' && this.galerieNaServeru() && cesta && cesta.od && cesta.do)) return [];
+        const od = new Date(cesta.od + 'T12:00:00'), dnu = Math.min(60, Math.round((new Date(cesta.do + 'T12:00:00') - od) / 86400000) + 1);
+        return Array.from({ length: Math.max(1, dnu) }, (_, i) => {
+          const d = new Date(od.getTime() + i * 86400000);
+          const on = (s.addDen || 0) === i;
+          return {
+            label: 'Den ' + (i + 1) + ' · ' + d.getDate() + '. ' + (d.getMonth() + 1) + '.',
+            bg: on ? 'var(--g-ink)' : 'transparent', fg: on ? 'var(--g-bg)' : 'var(--g-ink2)', bd: on ? 'var(--g-ink)' : 'var(--g-line)',
+            pick: () => this.setState({ addDen: i })
+          };
+        });
+      })(),
       addA: s.addA, addB: s.addB,
       setAddA: e => this.setState({ addA: e.target.value }),
       setAddB: e => this.setState({ addB: e.target.value }),

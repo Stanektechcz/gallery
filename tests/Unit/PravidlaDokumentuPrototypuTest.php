@@ -178,6 +178,35 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('<sc-if value="{{ m.canDel }}">', $pocitac);
     }
 
+    /**
+     * Cesta se zakládá na serveru z obou rozvržení; vzkazy hostů jdou spravovat
+     * i z telefonu; prázdné stavy neslibují, co aplikace nedělá.
+     */
+    public function test_cesty_vzkazy_hostu_a_poctive_prazdne_stavy(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString("window.GalerieApi.post('v1/trips', {", $pocitac);
+        $this->assertStringContainsString('type="date" value="{{ trOd }}"', $pocitac);
+        $this->assertStringContainsString("window.GalerieApi.post('v1/trips', {", $telefon);
+        $this->assertStringContainsString('data-screen-label="Mobil — Nová cesta"', $telefon);
+        $this->assertStringContainsString('{{ tripEmpty }}', $telefon);
+
+        // Bod programu cesty z telefonu na server — dřív „zatím jen na počítači".
+        $this->assertStringContainsString("api.post('cesty/' + cesta.n + '/program', { den: s.addDen || 0, nazev: a, cas: b || null })", $telefon);
+        $this->assertStringNotContainsString('Do itineráře zatím přidáte jen na počítači', $telefon);
+
+        $this->assertStringContainsString("window.GalerieApi.patch('vzkazy-hostu/' + c.id, { skryty: !c.hidden })", $telefon);
+        $this->assertStringContainsString("window.GalerieApi.del('vzkazy-hostu/' + c.id)", $telefon);
+
+        $data = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-data.js');
+        foreach ([$telefon, $data] as $zdroj) {
+            $this->assertStringNotContainsString('Rozpoznávání běží', $zdroj);
+            $this->assertStringNotContainsString('Kontrola běží každou noc', $zdroj);
+        }
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

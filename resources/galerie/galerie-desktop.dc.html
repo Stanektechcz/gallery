@@ -13477,22 +13477,37 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <div class="field"><label>Destinace</label>
           <input class="input" value="{{ trWhere }}" onInput="{{ trSetWhere }}" placeholder="Země, města, oblast" aria-label="Destinace" />
         </div>
-        <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(var(--grid-min),1fr)); gap:12px">
-          <div class="field"><label>Termín</label>
-            <input class="input" value="{{ trWhen }}" onInput="{{ trSetWhen }}" placeholder="září 2026 · 3 dny" aria-label="Termín" />
+        <sc-if value="{{ trServer }}">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px">
+            <div class="field"><label>Od</label>
+              <input class="input" type="date" value="{{ trOd }}" onInput="{{ trSetOd }}" aria-label="Začátek cesty" />
+            </div>
+            <div class="field"><label>Do</label>
+              <input class="input" type="date" value="{{ trDo }}" onInput="{{ trSetDo }}" min="{{ trOd }}" aria-label="Konec cesty" />
+            </div>
+            <div class="field"><label>Rozpočet (Kč)</label>
+              <input class="input" inputMode="numeric" value="{{ trBudget }}" onInput="{{ trSetBudget }}" placeholder="38 000" aria-label="Rozpočet" />
+            </div>
           </div>
-          <div class="field"><label>Rozpočet (Kč)</label>
-            <input class="input" value="{{ trBudget }}" onInput="{{ trSetBudget }}" placeholder="38 000" aria-label="Rozpočet" />
+        </sc-if>
+        <sc-if value="{{ trBezServeru }}">
+          <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(var(--grid-min),1fr)); gap:12px">
+            <div class="field"><label>Termín</label>
+              <input class="input" value="{{ trWhen }}" onInput="{{ trSetWhen }}" placeholder="září 2026 · 3 dny" aria-label="Termín" />
+            </div>
+            <div class="field"><label>Rozpočet (Kč)</label>
+              <input class="input" value="{{ trBudget }}" onInput="{{ trSetBudget }}" placeholder="38 000" aria-label="Rozpočet" />
+            </div>
           </div>
-        </div>
-        <div style="display:flex; gap:5px; flex-wrap:wrap">
-          <sc-for list="{{ trWhenSug }}" as="w" hint-placeholder-count="4">
-            <button class="tag tag-outline" onClick="{{ w.go }}" style="border:1px solid var(--g-line); background:transparent; cursor:pointer; font-family:inherit">{{ w.label }}</button>
-          </sc-for>
-        </div>
+          <div style="display:flex; gap:5px; flex-wrap:wrap">
+            <sc-for list="{{ trWhenSug }}" as="w" hint-placeholder-count="4">
+              <button class="tag tag-outline" onClick="{{ w.go }}" style="border:1px solid var(--g-line); background:transparent; cursor:pointer; font-family:inherit">{{ w.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
         <div style="font-size:12.5px; color:var(--g-ink2); display:flex; gap:8px; align-items:flex-start; padding:10px 12px; border-radius:2px; background:var(--g-panel)">
           <i class="ph-duotone ph-tray" style="font-size:17px; color:var(--g-acc); flex:none"></i>
-          <span>Nová cesta se hned objeví v Travel inboxu jako cíl zařazování — rezervace, jízdenky i odkazy pak půjde přiřadit sem.</span>
+          <span>{{ trNote }}</span>
         </div>
         <div class="dialog-actions">
           <sc-if value="{{ trIsEdit }}">
@@ -16181,6 +16196,8 @@ class Component extends DCLogic {
    * a napsané řádky („Nákupy a benzín 14 820 Kč") smí zůstat; s ní ne.
    */
   ukazka() { return !this.zeServeru('DVOJICE'); }
+  // Zápis jde na server (přihlášená dvojice), ne jen do prohlížeče.
+  apiNaServeru() { const a = window.GalerieApi; return !!(a && a.mode === 'http'); }
   /*
    * Nejbližší výročí vztahu (den prvního společného milníku).
    *
@@ -28322,7 +28339,21 @@ class Component extends DCLogic {
         return [pristi, 'prosinec ' + (m === 11 ? r + 1 : r), 'jaro ' + (m >= 5 ? r + 1 : r), 'léto ' + (m >= 8 ? r + 1 : r)]
           .filter((x, i, a) => a.indexOf(x) === i);
       })().map(x => ({ label: x, go: () => set({ when: x }) })),
-      trCant: !(d.title || '').trim(),
+      /*
+       * U dvojice cesta do databáze, s datem od–do.
+       *
+       * Dialog ji dřív ukládal jen do sdíleného stavu (`myTrips`) a sliboval,
+       * že se „hned objeví v Travel inboxu". Server ji neznal: telefon ji
+       * neviděl a zapsat k ní útratu nebo program nešlo — obojí potřebuje
+       * skutečnou cestu. Termín je proto datum, ne věta „září 2026".
+       */
+      trServer: this.apiNaServeru(), trBezServeru: !this.apiNaServeru(),
+      trOd: d.od || '', trSetOd: e => set({ od: e.target.value, do: d.do && d.do < e.target.value ? e.target.value : d.do }),
+      trDo: d.do || '', trSetDo: e => set({ do: e.target.value }),
+      trNote: this.apiNaServeru()
+        ? 'Cesta se objeví v Cestách na počítači i telefonu — útraty, program a doklady k ní pak půjdou přidat.'
+        : 'Nová cesta se hned objeví v Travel inboxu jako cíl zařazování — rezervace, jízdenky i odkazy pak půjde přiřadit sem.',
+      trCant: !(d.title || '').trim() || (this.apiNaServeru() && (!d.od || !d.do || d.do < d.od)),
       trCta: d.mode === 'edit' ? 'Uložit cestu' : 'Založit cestu',
       trClose: () => this.setState({ trDlg: null }),
       trDelete: () => {
@@ -28333,6 +28364,27 @@ class Component extends DCLogic {
       trSave: () => {
         const title = (d.title || '').trim();
         if (!title) { this.toast('Cesta potřebuje název', { icon: 'ph-pencil-simple' }); return; }
+        if (this.apiNaServeru()) {
+          if (!d.od || !d.do || d.do < d.od) { this.toast('Vyberte, od kdy do kdy cesta bude', { icon: 'ph-calendar-blank' }); return; }
+          const rozpocet = parseInt(String(d.budget || '').replace(/\s/g, ''), 10);
+          window.GalerieApi.post('v1/trips', {
+            name: title,
+            description: (d.where || '').trim() || null,
+            start_date: d.od, end_date: d.do,
+            budget: rozpocet > 0 ? rozpocet : null,
+            currency: 'CZK', status: 'planned'
+          }).then(() => {
+            // Rozpracovaná cesta jen ze stavu (dřívější dialog) se tím přestěhuje na server.
+            const zbyle = (this.state.myTrips || []).filter(t => t.id !== d.id);
+            this.setState({ trDlg: null, myTrips: zbyle.length ? zbyle : null });
+            if (window.GalerieObnovit) window.GalerieObnovit('cesty');
+            this.toast('Cesta „' + title + '“ založena — najdete ji i na telefonu', { icon: 'ph-airplane-tilt' });
+          }).catch(e => {
+            const b = (e && e.body) || {};
+            this.toast(b.message || (b.errors && Object.values(b.errors)[0] && Object.values(b.errors)[0][0]) || 'Cestu se nepodařilo založit', { icon: 'ph-warning', color: 'var(--g-mag)' });
+          });
+          return;
+        }
         const prev = s.myTrips || [];
         const row = { id: d.id || 'tr-n' + (s.xSeq || 1), title, where: (d.where || '').trim() || 'zatím nevíme kam', when: (d.when || '').trim() || 'termín neurčen', budget: (d.budget || '').trim(), past: !!d.past, n: 5 + prev.length * 6 };
         this.setState({
