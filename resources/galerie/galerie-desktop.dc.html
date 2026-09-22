@@ -834,7 +834,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(150px,1fr)); gap:6px">
               <sc-for list="{{ onThisDay }}" as="p" hint-placeholder-count="7">
-                <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                   <span style="position:absolute; left:8px; bottom:7px; font-size:11px; color:#fff; letter-spacing:.06em; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.year }}</span>
                   <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:8px; bottom:7px; display:flex; align-items:center; gap:3px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)"><i class="ph-duotone ph-play-circle" style="font-size:14px"></i>{{ p.dur }}</span></sc-if>
                 </button>
@@ -849,7 +849,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:6px">
               <sc-for list="{{ recent }}" as="p" hint-placeholder-count="14">
-                <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                   <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                   <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                   <sc-if value="{{ p.pending }}"><i class="ph-duotone ph-cloud-arrow-up" style="position:absolute; right:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
@@ -1340,7 +1340,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <sc-if value="{{ tripHasPhotos }}">
                   <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:6px; margin-top:14px">
                     <sc-for list="{{ tripPhotos }}" as="p" hint-placeholder-count="10">
-                      <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                      <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                         <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                         <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                       </button>
@@ -1520,7 +1520,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(168px,1fr)); gap:16px; margin-top:16px">
                 <sc-for list="{{ personSug }}" as="p" hint-placeholder-count="4">
                   <div>
-                    <button onClick="{{ p.open }}" style="width:100%; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}"></button>
+                    <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="width:100%; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}"></button>
                     <div style="display:flex; gap:6px; margin-top:8px">
                       <button onClick="{{ p.yes }}" style="flex:1; padding:6px 0; border:1px solid var(--g-acc); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-acc)">Je to on/ona</button>
                       <button onClick="{{ p.no }}" style="flex:none; padding:6px 10px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-ink2)">Ne</button>
@@ -1539,7 +1539,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               </div>
               <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px; margin-top:14px">
                 <sc-for list="{{ personTiles }}" as="p" hint-placeholder-count="12">
-                  <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                  <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                     <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                     <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                   </button>
@@ -1682,7 +1682,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                   <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:6px; margin-top:14px">
                     <sc-for list="{{ recipePhotos }}" as="p" hint-placeholder-count="8">
-                      <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                      <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                         <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                       </button>
                     </sc-for>
@@ -1807,7 +1807,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                   <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(132px,1fr)); gap:6px; margin-top:14px">
                     <sc-for list="{{ placePhotos }}" as="p" hint-placeholder-count="10">
-                      <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                      <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                         <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                         <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                       </button>
@@ -1956,7 +1956,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="font-size:13.5px; color:var(--g-ink2); margin-top:4px">{{ t.text }}</div>
                   <div style="display:grid; grid-template-columns:{{ t.cols }}; gap:5px; margin-top:12px">
                     <sc-for list="{{ t.items }}" as="p" hint-placeholder-count="5">
-                      <button onClick="{{ p.open }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:{{ p.ratio }}; border-radius:2px; background:{{ p.bg }}"></button>
+                      <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:{{ p.ratio }}; border-radius:2px; background:{{ p.bg }}"></button>
                     </sc-for>
                   </div>
                   <button class="btn btn-ghost" onClick="{{ t.go }}" style="margin-top:9px; font-size:13px">{{ t.cta }}</button>
@@ -2341,7 +2341,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </sc-if>
                   <div style="display:grid; gap:5px; grid-template-columns:{{ gridCols }}">
                     <sc-for list="{{ dayItems }}" as="p" hint-placeholder-count="16">
-                      <button onClick="{{ p.open }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; background:{{ p.bg }}"></button>
+                      <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; background:{{ p.bg }}"></button>
                     </sc-for>
                   </div>
                 </div>
@@ -2379,7 +2379,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:5px">
               <sc-for list="{{ mapItems }}" as="p" hint-placeholder-count="12">
-                <button onClick="{{ p.open }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; background:{{ p.bg }}"></button>
+                <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; background:{{ p.bg }}"></button>
               </sc-for>
             </div>
             <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin:22px 0 9px">Alba z tohoto místa</div>
@@ -8038,7 +8038,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         </div>
                         <div style="display:grid; grid-template-columns:repeat(2,minmax(0,220px)); gap:10px; margin-top:12px">
                           <sc-for list="{{ pair.items }}" as="p" hint-placeholder-count="2">
-                            <button onClick="{{ p.open }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}"></button>
+                            <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}"></button>
                           </sc-for>
                         </div>
                       </div>
@@ -8047,7 +8047,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 </sc-if>
                 <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:6px">
                   <sc-for list="{{ appGridTiles }}" as="p" hint-placeholder-count="8">
-                    <button onClick="{{ p.open }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
+                    <button onClick="{{ p.open }}" aria-label="{{ p.aria }}" style="position:relative; border:0; padding:0; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}">
                       <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                       <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                       <sc-if value="{{ p.missing }}"><span style="position:absolute; left:0; right:0; bottom:0; padding:6px 8px; font-size:11px; color:#fff; background:linear-gradient(transparent,rgba(12,11,11,.82))">{{ p.missing }}</span></sc-if>
@@ -15485,7 +15485,7 @@ class Component extends DCLogic {
   photoStrip(match, limit) {
     if (!match) return [];
     return this.photos().filter(p => p.place.indexOf(match) >= 0).slice(0, limit || 12)
-      .map(p => ({ bg: p.bg, fav: this.isFav(p), isVideo: p.isVideo, dur: p.dur, open: () => this.openLb(p.id) }));
+      .map(p => ({ bg: p.bg, fav: this.isFav(p), isVideo: p.isVideo, dur: p.dur, aria: this.popisFotky(p), open: () => this.openLb(p.id) }));
   }
   recipeVals() {
     // `RECIPES.polevka` je záložka z doby, kdy byly recepty napsané v dokumentu.
@@ -30921,7 +30921,9 @@ class Component extends DCLogic {
         cycColor: faze && PHASES[faze] ? PHASES[faze][2] : '',
         cycLabel: faze && PHASES[faze] ? PHASES[faze][0] : '',
         more: (evs.length > 2 ? '+' + (evs.length - 2) + ' další' : '') || (evs.length >= 2 && tasks.length ? tasks.length + ' úkol' : ''),
-        aria: inMonth ? dd + '. ' + MG[m] + ', ' + (evs.length ? this.pl(evs.length, 'událost', 'události', 'událostí') : 'bez událostí') + ((LY.photos !== false) && count ? ', ' + this.pl(count, 'fotka', 'fotky', 'fotek') : '') + ((platbyDne[m + '-' + dd] || []).length ? ', ' + this.pl((platbyDne[m + '-' + dd] || []).length, 'platba', 'platby', 'plateb') : '') + (faze && PHASES[faze] ? ', ' + PHASES[faze][0] : '') : '',
+        aria: inMonth ? dd + '. ' + MG[m] + ', ' + (evs.length ? this.pl(evs.length, 'událost', 'události', 'událostí') : 'bez událostí') + ((LY.photos !== false) && count ? ', ' + this.pl(count, 'fotka', 'fotky', 'fotek') : '') + ((platbyDne[m + '-' + dd] || []).length ? ', ' + this.pl((platbyDne[m + '-' + dd] || []).length, 'platba', 'platby', 'plateb') : '') + (faze && PHASES[faze] ? ', ' + PHASES[faze][0] : '')
+          // Prázdné políčko mřížky má taky jméno, jinak ho čtečka čte jako „tlačítko".
+          : 'Mimo tento měsíc',
         ring: isToday ? '2px solid var(--g-acc)' : sel ? '2px solid var(--g-ink)' : 'none',
         go: inMonth ? () => this.setState({ calDay: dd }) : () => {}
       });
@@ -31218,7 +31220,7 @@ class Component extends DCLogic {
         return dPlace + ' — ' + (vArchivu > dPh.length ? this.pl(vArchivu, 'položka', 'položky', 'položek') + ' v archivu, ' + dPh.length + ' v náhledu' : this.pl(dPh.length, 'položka', 'položky', 'položek')) + vyroci;
       })(),
       calDayEmpty: dPh.length === 0,
-      dayItems: dPh.map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
+      dayItems: dPh.map(p => ({ bg: p.bg, aria: this.popisFotky(p), open: () => this.openLb(p.id) })),
       calDaySelect: () => {
         if (!dPh.length) return;
         this.setState({ selectMode: true, sel: dPh.map(p => p.id), route: 'all' });
@@ -31684,12 +31686,20 @@ class Component extends DCLogic {
     }
     return o;
   }
+  /*
+   * Popis dlaždice pro čtečku. Dlaždice je tlačítko bez textu, takže bez
+   * tohohle ji čtečka přečte jako „tlačítko" a nic víc.
+   */
+  popisFotky(p) {
+    if (!p) return 'Fotografie';
+    return (p.isVideo ? 'Video ' : 'Fotografie ') + [p.name, p.dateShort, p.place].filter(Boolean).join(', ');
+  }
   tile = p => {
     const sel = this.state.sel.includes(p.id);
     return {
       ...p, fav: this.isFav(p), selected: sel, showCheck: this.state.selectMode || sel,
       checkBg: sel ? 'var(--g-acc)' : 'rgba(0,0,0,.25)', selRing: sel ? '3px solid var(--g-acc)' : 'none',
-      aria: (p.isVideo ? 'Video ' : 'Fotografie ') + p.name + ', ' + p.dateShort + ', ' + p.place,
+      aria: this.popisFotky(p),
       isVideo: p.isVideo, tileClick: () => this.state.selectMode ? this.toggleSel(p.id) : this.openLb(p.id),
       open: () => this.openLb(p.id),
       missing: p.missingDate ? 'Chybí datum' : p.missingPlace ? 'Chybí místo' : null,
@@ -34246,7 +34256,7 @@ class Component extends DCLogic {
       personSug: personSugLeft.map(i => {
         const t = pTile(i);
         return {
-          bg: t.bg, open: t.open,
+          bg: t.bg, open: t.open, aria: t.aria || 'Návrh fotografie',
           // „Zpět" bylo `undo: true`, tlačítko bez obsluhy.
           yes: () => { const prev = s.sugSeen; this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Přiřazeno k ' + this.pName(s.personId), { icon: 'ph-check-circle', undo: () => this.setState({ sugSeen: prev }) }); },
           no: () => { const prev = s.sugSeen; this.setState({ sugSeen: { ...s.sugSeen, [s.personId + '-' + i]: 1 } }); this.toast('Návrh zamítnut', { icon: 'ph-x-circle', undo: () => this.setState({ sugSeen: prev }) }); }
@@ -34958,7 +34968,7 @@ class Component extends DCLogic {
               ...(() => {
                 const vse = this.photos();
                 const p = vse.length ? vse[(40 + i * 5) % vse.length] : null;
-                return { bg: p ? p.bg : this.bg(40 + i * 5), open: () => p && this.openLb(p.id) };
+                return { bg: p ? p.bg : this.bg(40 + i * 5), aria: p ? this.popisFotky(p) : 'Vzpomínka z roku ' + y, open: () => p && this.openLb(p.id) };
               })()
             }))
           };
@@ -35500,7 +35510,7 @@ class Component extends DCLogic {
           titleSize: '21px', dot: 'var(--g-acc)', milestone: false,
           cta: album ? 'Otevřít album' : 'Otevřít den v knihovně',
           cols: 'repeat(' + Math.max(1, Math.min(4, fotky.length)) + ', minmax(0,1fr))',
-          items: fotky.slice(0, 4).map(p => ({ bg: p.bg, ratio: '1', open: () => this.openLb(p.id) })),
+          items: fotky.slice(0, 4).map(p => ({ bg: p.bg, ratio: '1', aria: this.popisFotky(p), open: () => this.openLb(p.id) })),
           go: () => album ? this.setState({ route: 'album', albumId: album.id }) : this.setState({ route: 'all', query: '' })
         };
       }) : [
@@ -35548,7 +35558,7 @@ class Component extends DCLogic {
       mapPlace: { ...mapPlaceCur, go: () => this.setState(mapPlaceCur.ids && mapPlaceCur.ids.length
         ? { route: 'all', query: '', misto: { name: mapPlaceCur.name, ids: mapPlaceCur.ids } }
         : { route: 'all', query: mapPlaceCur.name }) },
-      mapItems: this.photos().slice(2, 14).map(p => ({ bg: p.bg, open: () => this.openLb(p.id) })),
+      mapItems: this.photos().slice(2, 14).map(p => ({ bg: p.bg, aria: this.popisFotky(p), open: () => this.openLb(p.id) })),
       mapAlbums: albums.slice(0, 3).map(a => ({ name: a.name, meta: a.date, bg: this.bg(a.n), go: () => this.setState({ route: 'album', albumId: a.id }) })),
 
       shares: (this._sharesNow = shareRows).map(r => ({

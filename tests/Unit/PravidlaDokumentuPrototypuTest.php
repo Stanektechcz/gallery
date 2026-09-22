@@ -656,6 +656,25 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringNotContainsString('mechanisms_path', $prikaz);
     }
 
+    /**
+     * Dlaždice fotek mají jméno pro čtečku.
+     *
+     * Dlaždice je tlačítko bez textu — bez `aria-label` ji odečítač přečte
+     * jako „tlačítko" a nic víc. Popis skládá `popisFotky()`.
+     */
+    public function test_dlazdice_fotek_maji_popis(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        $this->assertStringContainsString('popisFotky(p) {', $pocitac);
+        preg_match_all('/<button onClick="\{\{ p\.open \}\}"([^>]*)>/', $pocitac, $shody);
+        $this->assertNotEmpty($shody[1], 'Dlaždice se nenašly — pravidlo by mlčelo.');
+
+        foreach ($shody[1] as $atributy) {
+            $this->assertStringContainsString('aria-label=', $atributy, 'Dlaždice fotky bez popisu pro čtečku.');
+        }
+    }
+
     /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
     public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
     {
