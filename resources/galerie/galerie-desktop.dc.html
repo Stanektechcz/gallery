@@ -22712,8 +22712,11 @@ class Component extends DCLogic {
       const pKeys = Object.keys(L.places).sort((a, b) => L.places[b] - L.places[a]);
       return {
         ...base,
-        libHead: L.num(L.total) + ' položek v knihovně · ' + this.pl(yKeys.length, 'rok', 'roky', 'let') + ' · '
-          + L.num(L.favs) + ' oblíbených · ' + L.placeN + ' míst',
+        // Tvar podle počtu — dřív „4 položek", „1 oblíbených", „2 míst".
+        libHead: L.num(L.total) + ' ' + (L.total === 1 ? 'položka' : L.total >= 2 && L.total <= 4 ? 'položky' : 'položek') + ' v knihovně · '
+          + this.pl(yKeys.length, 'rok', 'roky', 'let') + ' · '
+          + L.num(L.favs) + ' ' + (L.favs === 1 ? 'oblíbená' : L.favs >= 2 && L.favs <= 4 ? 'oblíbené' : 'oblíbených') + ' · '
+          + L.placeN + ' ' + (L.placeN === 1 ? 'místo' : L.placeN >= 2 && L.placeN <= 4 ? 'místa' : 'míst'),
         libCards: [
           ['Fotek', L.num(L.photos), 'z toho ' + L.num(L.favs) + ' oblíbených', 'ph-image'],
           ['Videí', L.num(L.videos), !L.videos ? 'zatím žádné' : !L.server ? 'průměrně 48 sekund' : L.videoAvg ? 'průměrně ' + this.pl(L.videoAvg, 'sekunda', 'sekundy', 'sekund') : 'délka v souborech chybí', 'ph-video'],

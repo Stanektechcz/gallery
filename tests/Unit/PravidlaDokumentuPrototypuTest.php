@@ -216,6 +216,28 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         }
     }
 
+    /**
+     * Odznaky a čísla na obrazovkách ze skutečných dat a ve správném tvaru.
+     *
+     * Hlavička stránky brala odznak z katalogu (`appPage.badge`: „2 návrhy",
+     * „3 na dnes", „4 aktivní"), panel kreslil „Vzpomínky 0" a telefon
+     * hlásil „zbývá v rozpočtu" i u záporného zůstatku.
+     */
+    public function test_odznaky_a_cisla_bez_ukazky(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringNotContainsString('(appPage.badge || null)', $pocitac);
+        $this->assertStringContainsString('this.odznakHlavicky(R)', $pocitac);
+        $this->assertStringNotContainsString('String(this.memTodayCount())]', $pocitac);
+        $this->assertStringNotContainsString("' položek v knihovně · '", $pocitac);
+        $this->assertStringNotContainsString("R === 'x-inbox' ? ' položek'", $pocitac);
+
+        $this->assertStringNotContainsString("meta: 'zbývá v rozpočtu', color: 'var(--g-ok)'", $telefon);
+        $this->assertStringNotContainsString("value: String(lib.length), meta: 'položek v knihovně'", $telefon);
+    }
+
     /** Koš v telefonu umí i trvale odstranit — dřív jen „Obnovit". */
     public function test_telefon_maze_z_kose_na_serveru(): void
     {

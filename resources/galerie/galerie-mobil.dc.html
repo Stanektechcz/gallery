@@ -12725,7 +12725,26 @@ class Component extends DCLogic {
        */
       ...(() => {
         const DN = (window.GalerieData || {}).DNES, WK = (window.GalerieData || {}).WEEK;
-        const finance = { label: 'Do konce měsíce', value: this.kc(income - spend), meta: 'zbývá v rozpočtu', color: 'var(--g-ok)', go: () => this.goTab('finance') };
+        /*
+         * Příjmy měsíce minus útraty — rozpočet se tu nepočítá.
+         *
+         * Stálo tu vždy „zbývá v rozpočtu" zeleně, i u „−1 825 Kč" dvojice,
+         * která příjmy nezapisuje.
+         */
+        const zbyva = income - spend;
+        const finance = {
+          label: 'Do konce měsíce', value: this.kc(zbyva),
+          meta: !income && !spend ? 'tento měsíc bez plateb' : zbyva >= 0 ? 'zbývá z příjmů' : 'utraceno nad příjmy',
+          color: zbyva >= 0 ? 'var(--g-ok)' : 'var(--g-warn)', go: () => this.goTab('finance')
+        };
+        // Počet z celé knihovny na serveru — telefon drží jen poslední fotky.
+        const naServeru = ((window.GalerieData || {}).NAVCNT || {}).all;
+        const vKnihovne = naServeru !== undefined ? (parseInt(String(naServeru).replace(/\D/g, ''), 10) || 0) : lib.length;
+        const knihovna = {
+          label: 'Knihovna', value: naServeru !== undefined ? (naServeru || '0') : String(lib.length),
+          meta: (vKnihovne === 1 ? 'položka' : vKnihovne >= 2 && vKnihovne <= 4 ? 'položky' : 'položek') + ' v knihovně',
+          color: 'var(--g-ink3)', go: () => this.goTab('memories')
+        };
         if (!DN || !DN.vyroci) {
           return {
             heroBg: this.bg(21), heroTitle: 'Plitvice, před dvěma roky',
@@ -12745,9 +12764,9 @@ class Component extends DCLogic {
           heroTitle: f ? DN.vyroci.den + ', ' + (leta === 1 ? 'před rokem' : 'před ' + leta + ' lety') : 'Z tohoto dne zatím nic z minulých let',
           heroOpen: () => f && lib.some(p => p.id === f.id) ? this.setState({ lb: f.id }) : this.goTab('memories'),
           homeStats: [
-            { label: 'Knihovna', value: String(lib.length), meta: 'položek v knihovně', color: 'var(--g-ink3)', go: () => this.goTab('memories') },
+            knihovna,
             { label: 'Návrhy', value: String(DN.navrhy.length), meta: DN.navrhy.length ? 'z vašich fotek a deníku' : 'nic nečeká', color: 'var(--g-mag)', go: () => { this.setState({ tab: 'more' }); this.push('inbox'); } },
-            { label: 'Po termínu', value: String(poTerminu), meta: poTerminu ? 'úkoly k dotažení' : 'nic nezůstalo', color: 'var(--g-warn)', go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } },
+            { label: 'Po termínu', value: String(poTerminu), meta: poTerminu ? 'úkoly k dotažení' : 'nic nezůstalo', color: poTerminu ? 'var(--g-warn)' : 'var(--g-ink3)', go: () => { this.setState({ tab: 'more' }); this.push('tasks'); } },
             finance
           ]
         };
