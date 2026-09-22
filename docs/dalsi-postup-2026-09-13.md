@@ -836,6 +836,23 @@ rozhraní (přetečení, jména pro čtečku, klávesnice).
   Escape zavírá všechny dialogy (kromě záchranných kódů), telefon ani počítač
   nemají přetečení (kontrolováno i na 360 px).
 
+| Commit | Obsah |
+|---|---|
+| `e7cd8a96` | Dlaždice fotek a políčka kalendáře mají jméno pro čtečku |
+| `f1c79cf9` | Escape zavírá všechny dialogy, ne jen půlku z nich |
+| `1184d1d9` | Bezpečnost: jedna odpověď na otázku, ve které galerii jsem |
+| `ae8714e0` | Telefon: co jste rozhodli, zůstane — a přepínače dělají, co slibují |
+| `1b50c8d2` | Prostor s jedním členem není ukázka; prázdné záložky říkají pravdu |
+
+Testy: **1508 PHP testů**, všechny prošly. Nic se nemigruje.
+
+### Po nasazení (2u)
+
+- Kdo je v jedné galerii host a jinde vlastník, se do té cizí přestane
+  dostávat. Pokud takový účet existuje a **má** tam mít přístup, je potřeba
+  mu v té galerii změnit roli na `editor` (Administrace → účty).
+- Trvale vysypat koš smí nově jen vlastník a správce prostoru.
+
 ## 2t. Dvacáté kolo — mechanismy pro dva: konec prázdných obrazovek (22. 9.)
 
 Audit souboru s mechanismy (`public/galerie-mechanismy-logika.js`) a kontrola
