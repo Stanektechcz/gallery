@@ -5948,7 +5948,8 @@ const telefonZeServeru = (() => {
 
     // — plán a deník —
     const sloupce = (G.ATASKS || {}).all || [];
-    nahrad(TASKS, sloupce.map(c => [c[0], (c[1] || []).map(r => [r[0], krestni(r[1]), r[2], r[3] ? 1 : 0])]));
+    // Páté pole je uuid úkolu — odškrtnutí na telefonu míří na úkol na serveru.
+    nahrad(TASKS, sloupce.map(c => [c[0], (c[1] || []).map(r => [r[0], krestni(r[1]), r[2], r[3] ? 1 : 0, r[4] || null])]));
     const hotove = [];
     const boardUkoly = sloupce.map((c, ci) => ({
       id: 'c' + ci, label: c[0],
@@ -6131,6 +6132,20 @@ class Component extends DCLogic {
     const api = window.GalerieApi;
     if (this.state.queue) return this.state.queue;
     return api && api.mode === 'http' ? [] : QUEUE.map(q => ({ id: q[0], title: q[1], meta: q[2], icon: q[3], st: q[4] }));
+  }
+  // Úkol ze serveru (`t[4]` je jeho uuid) je hotový podle serveru; `done` patří ukázce.
+  ukolHotovy(t, key) {
+    const v = this.galerieNaServeru() && t[4] ? undefined : (this.state.done || {})[key];
+    return v === undefined ? t[3] === 1 : !!v;
+  }
+  ukolNaServeru(t, hotovo) {
+    return window.GalerieApi.patch('v1/todos/' + t[4], { completed: hotovo }).then(() => {
+      if (window.GalerieObnovit) { window.GalerieObnovit('planovani'); window.GalerieObnovit('tyden'); }
+      this.toast((hotovo ? 'Hotovo — ' : 'Vráceno — ') + t[0], {
+        icon: hotovo ? 'ph-check-circle' : 'ph-arrow-counter-clockwise',
+        undo: () => this.ukolNaServeru(t, !hotovo)
+      });
+    }).catch(e => this.chybaServeru(e, 'Úkol se nepodařilo uložit'));
   }
   // U dvojice platí stav z databáze; místní `places` je jen pro ukázku.
   placeVisited(p) { const v = this.galerieNaServeru() ? undefined : this.state.places[p[0]]; return v === undefined ? p[2] === 1 : v; }
@@ -12200,8 +12215,9 @@ class Component extends DCLogic {
     }
     // „co jsme nedotáhli“ — otevřené úkoly a nevyřízené položky
     if (nl.todo) {
-      TASKS.forEach(grp => grp[1].forEach((t, i) => {
-        if (s.done['t' + grp[0] + i] || t[3] === 1) return;
+      // Týž klíč jako odškrtnutí v Úkolech — dřív `'t' + název + i`, který se nikde neukládal.
+      TASKS.forEach((grp, gi) => grp[1].forEach((t, i) => {
+        if (this.ukolHotovy(t, gi + '-' + i)) return;
         if (!hit(t[0])) return;
         results.push({ label: t[0], meta: grp[0] + ' · ' + (t[2] || 'bez termínu') + ' · ' + (t[1] || 'spolu'), icon: 'ph-check-square', go: () => { this.setState({ tab: 'more', query: '' }); this.push('tasks'); } });
       }));
@@ -13697,19 +13713,28 @@ class Component extends DCLogic {
       diaryAdd: () => this.setState({ sheet: 'add', addKind: 'diary', addA: '', addB: '' }),
 
       // úkoly
-      tasksMeta: (() => { let d = 0, a = 0; TASKS.forEach((g, gi) => g[1].forEach((t, ti) => { a++; const v = s.done[gi + '-' + ti]; if (v === undefined ? t[3] === 1 : v) d++; })); return d + ' z ' + (a + tasksExtra.length) + ' hotovo'; })(),
+      tasksMeta: (() => { let d = 0, a = 0; TASKS.forEach((g, gi) => g[1].forEach((t, ti) => { a++; if (this.ukolHotovy(t, gi + '-' + ti)) d++; })); return d + ' z ' + (a + tasksExtra.length) + ' hotovo'; })(),
       taskGroups: TASKS.map((g, gi) => ({
         label: g[0], count: this.pl(g[1].length + (gi === 1 ? tasksExtra.length : 0), 'úkol', 'úkoly', 'úkolů'),
         items: g[1].map((t, ti) => {
           const key = gi + '-' + ti;
-          const on = s.done[key] === undefined ? t[3] === 1 : s.done[key];
+          const on = this.ukolHotovy(t, key);
           return {
             label: t[0], who: t[1], when: t[2],
             box: on ? 'ph-check-square' : 'ph-square',
             boxColor: on ? 'var(--g-acc)' : 'var(--g-ink3)',
             color: on ? 'var(--g-ink3)' : 'var(--g-ink)',
             strike: on ? 'line-through' : 'none',
-            toggle: () => { this.setState({ done: Object.assign({}, s.done, { [key]: !on }) }); this.toast(on ? 'Vráceno — ' + t[0] : 'Hotovo — ' + t[0], { icon: on ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', undo: () => this.setState({ done: Object.assign({}, this.state.done, { [key]: on }) }) }); }
+            toggle: () => {
+              /*
+               * U dvojice odškrtnutí jde do úkolu na serveru (`completed`,
+               * opakovaný úkol dostane další termín). Dřív se měnilo jen
+               * `done` v telefonu — neukládalo se nikam a počítač úkol dál
+               * ukazoval jako otevřený.
+               */
+              if (this.galerieNaServeru() && t[4]) { this.ukolNaServeru(t, !on); return; }
+              this.setState({ done: Object.assign({}, s.done, { [key]: !on }) }); this.toast(on ? 'Vráceno — ' + t[0] : 'Hotovo — ' + t[0], { icon: on ? 'ph-arrow-counter-clockwise' : 'ph-check-circle', undo: () => this.setState({ done: Object.assign({}, this.state.done, { [key]: on }) }) });
+            }
           };
         }).concat(gi === 1 ? tasksExtra.map(x => {
           const on = !!s.done[x.id];

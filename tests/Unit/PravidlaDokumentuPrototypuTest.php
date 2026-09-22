@@ -453,6 +453,17 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringContainsString('if (!q.split(/\\s+/).every(slovo => kde.includes(slovo))) return false;', $pocitac);
     }
 
+    /** Úkol odškrtnutý na telefonu se uzavře na serveru, ne jen v `done` telefonu. */
+    public function test_telefon_odskrtava_ukoly_na_serveru(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        $this->assertStringContainsString('r[3] ? 1 : 0, r[4] || null]', $telefon);
+        $this->assertStringContainsString("window.GalerieApi.patch('v1/todos/' + t[4], { completed: hotovo })", $telefon);
+        $this->assertStringContainsString('if (this.galerieNaServeru() && t[4]) { this.ukolNaServeru(t, !on); return; }', $telefon);
+        $this->assertStringNotContainsString("s.done['t' + grp[0] + i]", $telefon);
+    }
+
     /** Přihlášení se na kód druhého ověření ptá políčkem, ne dialogem prohlížeče. */
     public function test_dvoufazove_overeni_ma_policko(): void
     {
