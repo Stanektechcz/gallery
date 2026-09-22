@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\FinanceCategory;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\User;
@@ -71,6 +72,39 @@ class ImportVypisuTest extends TestCase
         // Obrazovka dostane rovnou novou knihu: platby v Importovaných i Nezařazených.
         $this->assertCount(2, $odpoved->json('data.ATX.imp.rows'));
         $this->assertCount(2, $odpoved->json('data.ATX.un.rows'));
+    }
+
+    /**
+     * Obchodník, kterého dvojice už zařadila, se zařadí sám.
+     *
+     * Číslo pobočky nebo karty v popisu na tom nic nemění; rozhoduje
+     * poslední zařazení a převod mezi vlastními účty se nezařazuje.
+     */
+    public function test_zname_platby_se_zaradi_podle_drivejsich(): void
+    {
+        $ucet = $this->ucet('Společný účet');
+        $potraviny = FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Potraviny', 'kind' => 'expense']);
+        $domacnost = FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Domácnost', 'kind' => 'expense']);
+
+        foreach ([['ALBERT 0712 PRAHA', $potraviny, '2026-08-01'], ['Albert 0655 Praha', $domacnost, '2026-08-20']] as [$popis, $kategorie, $den]) {
+            Transaction::create([
+                'gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => $den,
+                'wallet_from_id' => $ucet->id, 'amount_from' => 100, 'currency_from' => 'CZK',
+                'description' => $popis, 'category_id' => $kategorie->id, 'state' => 'approved', 'created_by' => $this->adri->id,
+            ]);
+        }
+
+        $odpoved = $this->nahraj($ucet, self::HLAVICKA
+            ."CARD_PAYMENT,Current,2026-09-05 12:00:00,2026-09-05 14:22:10,Albert 1180 Praha,-432.50,0.00,CZK,COMPLETED,10000\n"
+            ."CARD_PAYMENT,Current,2026-09-06 12:00:00,2026-09-06 12:00:00,Lékárna U Anděla,-312.00,0.00,CZK,COMPLETED,9688\n")
+            ->assertStatus(201)
+            ->assertJsonPath('zarazeno', 1)
+            ->assertJsonPath('nezarazeno', 1);
+
+        $this->assertStringContainsString('1 zařazena podle dřívějších plateb — zbylé zařaďte v Transakcích', $odpoved->json('zprava'));
+        // Poslední zařazení Alberta bylo do Domácnosti.
+        $this->assertSame($domacnost->id, Transaction::where('description', 'Albert 1180 Praha')->value('category_id'));
+        $this->assertNull(Transaction::where('description', 'Lékárna U Anděla')->value('category_id'));
     }
 
     /** Opakovaný a překrývající se výpis nic nezdvojí. */

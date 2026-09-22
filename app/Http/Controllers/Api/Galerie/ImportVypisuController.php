@@ -18,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Ramsey\Uuid\Uuid;
 
 /**
@@ -94,10 +95,11 @@ class ImportVypisuController extends Controller
             ->get();
 
         $mena = strtoupper((string) ($ucet->currency ?: 'CZK'));
-        $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0];
+        $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0, 'zarazeno' => 0];
         $jineMeny = [];
+        $podleDriv = $this->kategoriePodlePopisu($prostor);
 
-        DB::transaction(function () use ($pohyby, $prostor, $ucet, $mena, $request, &$pocty, &$jineMeny) {
+        DB::transaction(function () use ($pohyby, $prostor, $ucet, $mena, $request, $podleDriv, &$pocty, &$jineMeny) {
             foreach ($pohyby as $pohyb) {
                 $castka = round(abs((float) $pohyb->amount), 2);
 
@@ -129,6 +131,15 @@ class ImportVypisuController extends Controller
 
                 $prijem = (float) $pohyb->amount > 0;
                 $poplatek = round(abs((float) $pohyb->fee_amount), 2);
+                $popis = mb_substr((string) ($pohyb->description ?: 'Platba z výpisu'), 0, 200);
+
+                // Stejný obchodník jako u dřív zařazené platby → stejná kategorie.
+                // Převod mezi vlastními účty se nezařazuje, do rozpočtu nepatří.
+                $kategorie = $pohyb->is_internal_transfer ? null : ($podleDriv[$this->klicPopisu($popis)] ?? null);
+
+                if ($kategorie !== null) {
+                    $pocty['zarazeno']++;
+                }
 
                 Transaction::create([
                     'gallery_space_id' => $prostor->id,
@@ -145,7 +156,8 @@ class ImportVypisuController extends Controller
                     'fee_amount' => $poplatek,
                     'fee_currency' => $poplatek > 0 ? $mena : null,
                     'fee_included' => false,
-                    'description' => mb_substr((string) ($pohyb->description ?: 'Platba z výpisu'), 0, 200),
+                    'description' => $popis,
+                    'category_id' => $kategorie,
                     // Podle `provider` je platba v záložce Importované.
                     'provider' => 'Výpis z banky',
                     // Převod mezi vlastními účty není útrata ani příjem.
@@ -162,15 +174,64 @@ class ImportVypisuController extends Controller
         AuditLog::record('finance.statement.ledger', null, [
             'space_id' => $prostor->id, 'import_uuid' => $import->uuid, 'wallet' => $ucet->uuid,
             'written' => $pocty['zapsano'], 'already' => $pocty['uz'], 'other_currency' => $pocty['mena'],
+            'categorized' => $pocty['zarazeno'],
         ]);
 
         return response()->json([
             'ok' => true,
             'zprava' => $this->zprava($pocty, $ucet->name, array_keys($jineMeny), (int) ($vysledek['import']['rows_failed'] ?? 0)),
             'zapsano' => $pocty['zapsano'],
+            'zarazeno' => $pocty['zarazeno'],
+            // Kolik z nových plateb zbývá zařadit — obrazovka podle toho otevře Nezařazené.
+            'nezarazeno' => $pocty['zapsano'] - $pocty['zarazeno'],
             'uz' => $pocty['uz'],
             'jinaMena' => $pocty['mena'],
         ] + $this->obsahPoAkci($this->obsah, $prostor), $pocty['zapsano'] ? 201 : 200);
+    }
+
+    /**
+     * Kategorie podle popisu z dřív zařazených plateb dvojice.
+     *
+     * Rozhoduje poslední zařazení: když se „Albert" přesunul z Potravin do
+     * Domácnosti, další Albert z výpisu jde do Domácnosti. Smazaná kategorie
+     * se nepoužije.
+     *
+     * @return array<string, int> `{klíč popisu: id kategorie}`
+     */
+    private function kategoriePodlePopisu(GallerySpace $prostor): array
+    {
+        $mapa = [];
+
+        DB::table('transactions as t')
+            ->join('finance_categories as k', 'k.id', '=', 't.category_id')
+            ->where('t.gallery_space_id', $prostor->id)
+            ->whereNull('t.deleted_at')
+            ->whereNull('k.deleted_at')
+            ->orderByDesc('t.occurred_at')
+            ->orderByDesc('t.id')
+            ->limit(3000)
+            ->get(['t.description', 't.category_id'])
+            ->each(function (object $t) use (&$mapa) {
+                $klic = $this->klicPopisu((string) $t->description);
+
+                if ($klic !== '' && ! isset($mapa[$klic])) {
+                    $mapa[$klic] = (int) $t->category_id;
+                }
+            });
+
+        return $mapa;
+    }
+
+    /**
+     * Popis bez čísel a interpunkce: „ALBERT 0712 Praha" a „Albert 1180 Praha"
+     * je týž obchod, číslo pobočky ani karty na zařazení nemá vliv.
+     */
+    private function klicPopisu(string $popis): string
+    {
+        $t = Str::lower(Str::ascii($popis));
+        $t = trim((string) preg_replace('/\s+/', ' ', (string) preg_replace('/[^a-z ]+/', ' ', $t)));
+
+        return mb_substr($t, 0, 40);
     }
 
     /**
@@ -183,9 +244,13 @@ class ImportVypisuController extends Controller
     {
         $casti = [];
 
-        $casti[] = $pocty['zapsano']
-            ? $this->pocet($pocty['zapsano'], 'platba zapsána', 'platby zapsány', 'plateb zapsáno').' na účet '.$ucet.' — zařaďte je v Transakcích'
-            : 'Nic nového — všechno z výpisu už v knize je';
+        $zbyva = $pocty['zapsano'] - $pocty['zarazeno'];
+
+        $casti[] = ! $pocty['zapsano']
+            ? 'Nic nového — všechno z výpisu už v knize je'
+            : $this->pocet($pocty['zapsano'], 'platba zapsána', 'platby zapsány', 'plateb zapsáno').' na účet '.$ucet
+                .($pocty['zarazeno'] ? ', '.$this->pocet($pocty['zarazeno'], 'zařazena', 'zařazeny', 'zařazeno').' podle dřívějších plateb' : '')
+                .($zbyva ? ' — '.($pocty['zarazeno'] ? 'zbylé ' : '').'zařaďte v Transakcích' : '');
 
         if ($pocty['uz'] && $pocty['zapsano']) {
             $casti[] = $this->pocet($pocty['uz'], 'už byla zapsaná', 'už byly zapsané', 'už bylo zapsaných');

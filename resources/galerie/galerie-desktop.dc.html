@@ -30378,8 +30378,8 @@ class Component extends DCLogic {
       window.GalerieApi.nahrajVypis(soubor, ucet).then(res => {
         if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
         this.toast((res && res.zprava) || 'Výpis zpracován', { icon: res && res.zapsano ? 'ph-check-circle' : 'ph-info' });
-        // Nové platby jsou bez kategorie — rovnou tam, kde se zařazují.
-        if (res && res.zapsano) this.setState({ route: 'x-transakce', txFilter: 'un', txQuery: '', txPickCat: null });
+        // Co zbývá zařadit, se otevře rovnou; zařazené podle dřívějších plateb ve Všech.
+        if (res && res.zapsano) this.setState({ route: 'x-transakce', txFilter: res.nezarazeno ? 'un' : 'all', txQuery: '', txPickCat: null });
       }).catch(e => {
         const t = (e && e.body) || {};
         const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;

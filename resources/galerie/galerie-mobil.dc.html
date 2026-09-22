@@ -9692,8 +9692,8 @@ class Component extends DCLogic {
       api.nahrajVypis(soubor, ucet[8]).then(res => {
         if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
         this.toast((res && res.zprava) || 'Výpis zpracován', { icon: res && res.zapsano ? 'ph-check-circle' : 'ph-info' });
-        // Nové platby jsou bez kategorie — rovnou tam, kde se zařazují.
-        if (res && res.zapsano) this.goTab('finance', { txCat2: 'Nezařazeno', txTrip: null });
+        // Co zbývá zařadit, se otevře rovnou; zařazené podle dřívějších plateb bez filtru.
+        if (res && res.zapsano) this.goTab('finance', { txCat2: res.nezarazeno ? 'Nezařazeno' : null, txTrip: null });
       }).catch(e => this.chybaServeru(e, 'Výpis se nepodařilo nahrát'));
     };
     vstup.click();
