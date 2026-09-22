@@ -838,6 +838,13 @@ průchod Arbitrem (zapsat rozpor → vybrat mechanismus → rozhodnout → zápi
 v Paměti rozhodnutí) i Začátkem hádky (spouštěč → protilék → vypršovací
 domluva s odpočtem 364 dní). Zkušební dvojice je z databáze smazaná.
 
+| Commit | Obsah |
+|---|---|
+| `42a1ffcb` | Formát: dva soubory podle pintu |
+| `ec3f6234` | Mechanismy pro dva: konec prázdných obrazovek a hluchých tlačítek |
+
+Testy: **1503 PHP testů**, všechny prošly. Nic se nemigruje.
+
 ## 2s. Devatenácté kolo — dvoufázové přihlášení, tiché hodiny, klíče stavu (22. 9.)
 
 Druhý audit počítače a audit klíčů, které si telefon a počítač posílají.
