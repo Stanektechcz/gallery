@@ -52,6 +52,11 @@ class CoupleState extends Model
         'lockIdle', 'lockSecs', 'lockBio', 'lockStart', 'setVals', 'navHide', 'navOrd', 'memPrefs',
         // Jednorázový kód druhého ověření z přihlašovací obrazovky.
         'lockCode', 'lockNeeds2fa',
+        // Dialog účtu: současné a nové heslo, tajný klíč a záchranné kódy
+        // dvoufázového přihlášení. Počítač ho posílal s každým stiskem klávesy.
+        'acDlg',
+        // Nastavení upozornění ze serveru — každého zvlášť, ne dvojice.
+        'klSrv',
     ];
 
     /**

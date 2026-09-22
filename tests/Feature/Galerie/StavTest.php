@@ -174,6 +174,32 @@ class StavTest extends TestCase
     }
 
     /**
+     * Dialog účtu se neukládá ani nesdílí.
+     *
+     * Počítač ho posílal do sdíleného stavu s každým stiskem klávesy — současné
+     * i nové heslo, a s dvoufázovým přihlášením i tajný klíč a záchranné kódy.
+     */
+    public function test_dialog_uctu_se_neuklada(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', [
+            'data' => [
+                'acDlg' => ['mode' => 'heslo', 'a' => 'soucasne-heslo-123', 'b' => 'nove-heslo-4567', 'tajny' => 'JBSWY3DPEHPK3PXP', 'kody' => ['ABCDE-FGHIJ']],
+                'klSrv' => ['quiet' => ['enabled' => true]],
+                'joy' => ['zbytek projde'],
+            ],
+            'rev' => 0,
+        ])->assertOk();
+
+        $ulozeno = CoupleState::first();
+        $vse = json_encode([$ulozeno->data, $ulozeno->private], JSON_UNESCAPED_UNICODE);
+
+        foreach (['soucasne-heslo-123', 'nove-heslo-4567', 'JBSWY3DPEHPK3PXP', 'ABCDE-FGHIJ', 'klSrv'] as $tajne) {
+            $this->assertStringNotContainsString($tajne, $vse);
+        }
+        $this->assertSame(['zbytek projde'], $ulozeno->data['joy']);
+    }
+
+    /**
      * Dialog kódu zámku a heslo k odkazu se neukládají ani nesdílí.
      *
      * Počítač posílal při psaní heslo do galerie z dialogu kódu, starý i nový
