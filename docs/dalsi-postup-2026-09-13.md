@@ -504,6 +504,53 @@ Testy: **1428 PHP testů**, všechny prošly.
 
 ---
 
+## 2m. Třinácté kolo — cesty, vzkazy hostů a poctivé prázdné stavy (22. 9.)
+
+**Cesty se zakládaly jen naoko.** Dialog „Nová cesta" na počítači ukládal
+cestu jen do sdíleného stavu (`myTrips`) a sliboval, že se „hned objeví
+v Travel inboxu". Server ji neznal: telefon ji neviděl a zapsat k ní útratu
+nebo program nešlo — obojí potřebuje skutečnou cestu. Telefon navíc cestu
+založit neuměl vůbec a bez cest ukazoval na hlavní záložce bílou plochu.
+
+- Počítač: dialog zakládá cestu na serveru (`POST /v1/trips`) s datem od–do
+  (místo věty „září 2026") a rozpočtem; rozpracovaná cesta z dřívějška se
+  při uložení přestěhuje na server.
+- Telefon: na záložce Cesty tlačítko **Nová cesta** (formulář název,
+  destinace, od, do, rozpočet) a prázdný stav s vysvětlením.
+- Telefon: **bod programu cesty** (dřív „zatím jen na počítači") — výběr dne
+  z rozsahu cesty a nepovinný čas; zapíše se do programu u obou.
+- Celkový rozpočet z dialogu se ukáže u cesty, dokud nemá limity po
+  kategoriích (dřív se neukázal nikde).
+- Telefon: **„Splněno" u bodu programu** se ukládá k bodu na serveru
+  (`/cesty/program/{id}/hotovo`) — dřív jen v jednom telefonu, druhý ani
+  počítač o tom nevěděli.
+
+**Vzkazy hostů na telefonu** šly jen číst; hlasový vzkaz odkazoval „přehrát
+ve Sdílených na počítači". Teď přehrávač a akce Skrýt/Zveřejnit, Přilepit
+k fotce a Smazat (dvojím klepnutím).
+
+**Prázdné stavy, které slibovaly nemožné:** „Rozpoznávání [tváří] běží
+v telefonu/zařízení" — aplikace tváře nerozpoznává; „Kontrola [duplicit] běží
+každou noc (ve 4:40)" — běží jednou týdně. Texty říkají pravdu.
+
+Ověřeno v prohlížeči: telefon — založení cesty z formuláře (`POST
+/api/v1/trips 201`, cesta v seznamu „9. – 11. října 2026 · odjezd za 17
+dní"), bod programu na 2. den v 10:30 (`POST /api/cesty/{n}/program 201`,
+v programu „Sobota 17. 10."), vzkaz hosta skrýt → zveřejnit → smazat;
+počítač — dialog s daty, `POST /api/v1/trips 201`, u cesty „Rozpočet
+12 000 Kč"; odškrtnutí bodu programu na telefonu (`POST
+/api/cesty/program/{id}/hotovo 200`, v databázi `done`). Testovací cesty
+a vzkaz z vývojové databáze uklizeny.
+
+| Commit | Obsah |
+|---|---|
+| `4ba1b931` | Cesty na serveru z obou rozvržení (dialog s daty, telefon: nová cesta a bod programu), rozpočet cesty; vzkazy hostů na telefonu; poctivé prázdné stavy |
+| `07fffb82` | „Splněno" u bodu programu cesty na serveru |
+
+Testy: **1430 PHP testů**, všechny prošly.
+
+---
+
 ## 3. Známé nedostatky — bezpečnost
 
 Seřazeno podle rizika. Nic z toho není aktivně zneužitelné bez jiné chyby,
