@@ -153,9 +153,9 @@
      * viděl číslo partnera jako svoje a mohl mu ho přepsat. U dvojice se píše
      * do `blizW[jméno]` a zadat jde jen své vlastní.
      */
-    // Stejná hranice jako v `dva()`: s jedním členem prostoru se jména dvojice
-    // dokreslují z ukázky, takže tu nesmí platit „skutečná dvojice".
-    const ukazka = ((DESK().DVOJICE) || []).length < 2;
+    // Ukázka je jen prostor bez jmen ze serveru; s jedním členem `dva()`
+    // vrací jeho jméno a „Druhý z vás", takže zápis pod jménem platí dál.
+    const ukazka = !((DESK().DVOJICE) || []).length;
     const wMap = s.blizW || {};
     const wA = ukazka ? s.blizWA : wMap[jA], wM = ukazka ? s.blizWM : wMap[jM];
     const blocked = s.blizBlock || {};
@@ -365,7 +365,7 @@
          * dívá — zapsat „ano" nebo rok za druhého by bylo mluvit za něj
          * přesně u rozhodnutí, kde to nejde.
          */
-        const ukazka = ((DESK().DVOJICE) || []).length < 2;
+        const ukazka = !((DESK().DVOJICE) || []).length;
         const cizi = !ukazka && p.who !== jA;
         const zaDruheho = () => { this.toast('Pozici ' + PAD(this, p.who, 'gen') + ' zapíše ' + KR(p.who) + ' na svém zařízení', { icon: 'ph-lock-simple' }); };
         return {
@@ -790,8 +790,8 @@
      * součet souborů v knihovně, jen když ho server zná; platby jsou text.
      */
     const G = DESK();
-    // Jedno jméno v prostoru = jména se dokreslují z ukázky (viz `dva()`).
-    const ukazka = (G.DVOJICE || []).length < 2;
+    // Ukázka je prostor bez jmen ze serveru (viz `dva()`).
+    const ukazka = !(G.DVOJICE || []).length;
     const statistiky = G.LIBSTATS || {};
     const cnt = k => k === 'veta' ? this.vetoList().filter(v => v.who === who).length
       : k === 'prom' ? this.promList().filter(p => p.who === who || p.to === who).length

@@ -675,6 +675,34 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         }
     }
 
+    /**
+     * Druhý audit telefonu: co se rozhodne, zůstane — a ovládání nelže.
+     */
+    public function test_druhy_audit_telefonu(): void
+    {
+        $telefon = self::dokument('galerie-mobil.dc.html');
+
+        // Odložené a vyřízené návrhy ze serveru (dřív po obnovení zmizely).
+        $this->assertStringContainsString("nahrad(INBOX, (AL.inbox || []).map((r, i) => inboxRadek(r, i, 'si', 'act'))", $telefon);
+        $this->assertStringContainsString("(st[p.id] || p.stavZeServeru || 'act') === tab", $telefon);
+        // Kolečko, kategorie plateb a stav schránky se ukládají.
+        $this->assertStringContainsString("'mWOff mWLog txCat inboxSt '", $telefon);
+        // Balíčky se stahují doopravdy a žádost jde do seznamu, který server čte.
+        $this->assertStringContainsString('if (offSrv) { ulozeno ? this.mOfflineUvolni(p[0], p[1]) : this.mOfflineUloz(p[0], p[1]); return; }', $telefon);
+        $this->assertStringContainsString("accept: () => this.ndPatch(n[0], { state: 'prijato'", $telefon);
+        $this->assertStringNotContainsString('ndStateM whLogM', $telefon);
+        // Řazení knihovny píše do klíče, který telefon čte.
+        $this->assertStringContainsString("this.setState({ sortMem: v === 'Nejstarší první' ? 'old' : 'new' })", $telefon);
+        // Tiché hodiny u vzpomínek jdou na server.
+        $this->assertStringContainsString("window.GalerieApi.patch('v1/notifications/preferences', { quiet: { enabled: zapnout, from: '22:00', to: '08:00' } })", $telefon);
+        // Prázdný den z kalendáře neshodí obrazovku.
+        $this->assertStringNotContainsString('dayId: DAYS[0][0]', $telefon);
+        // Prostor s jedním členem nedostane jména z ukázky.
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $this->assertStringContainsString("if (zeServeru && zeServeru.length === 1) return [zeServeru[0], 'Druhý z vás'];", self::dokument($nazev), $nazev);
+        }
+    }
+
     /** Dialog účtu (hesla, klíč 2FA) a nastavení upozornění nejdou do sdíleného stavu. */
     public function test_dialog_uctu_neni_ve_sdilenem_stavu(): void
     {

@@ -18621,6 +18621,13 @@ class Component extends DCLogic {
     const zeServeru = (window.GalerieData || {}).DVOJICE;
     if (zeServeru && zeServeru.length >= 2) return zeServeru;
 
+    /*
+     * Prostor s jediným členem (druhý ještě nepřijal pozvánku) není ukázka.
+     * Dřív se v něm dokreslila jména „Adrian a Makinka" — člověk viděl jako
+     * svoje jméno někoho, kdo neexistuje, a psalo se mu „Požádat Makinku".
+     */
+    if (zeServeru && zeServeru.length === 1) return [zeServeru[0], 'Druhý z vás'];
+
     const jmena = Object.keys(KL_MOOD || {});
     const par = jmena.length >= 2 ? jmena : ['Adrian', 'Makinka'];
     const ja = (window.GALERIE_USER || {}).name;

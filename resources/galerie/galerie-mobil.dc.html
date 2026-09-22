@@ -5669,8 +5669,35 @@ const MEMPTY = {
   tickets: ['ph-ticket', 'Žádné jízdenky', 'Jízdenku zapíšete i s trasou — uvidíte ji oba, na telefonu i na počítači.', 'Přidat jízdenku', 'ph-plus', 'add:ticket'],
   archive: ['ph-archive', 'Archiv je prázdný', 'Album archivujete v jeho nabídce na počítači — zmizí z Alb a tady ho jde vrátit. Fotky v něm zůstávají.', null, null, null],
   recovery: ['ph-lifebuoy', 'Tady není co zachraňovat', 'Smazané fotky a alba čekají 30 dní v Koši — odtamtud je vrátíte.', 'Otevřít koš', 'ph-trash', 'trash'],
+  /*
+   * Záložky, které se dvojici nenaplní — protože je aplikace zatím nevede.
+   *
+   * Dřív na nich stálo obecné „Jak se záložka začne plnit, obsah se ukáže
+   * tady", což je slib, který nikdo nesplní. Radši rovnou říct, kde ta věc
+   * je (nebo že není), a nabídnout obrazovku, která funguje.
+   */
+  wkUs: ['ph-heart-straight', 'Nic jen pro vás dva', 'Výročí a milníky vedeme v Dárcích a výročích, uložené momenty ve Vzpomínkách — sem se zatím nic nesbírá.', 'Dárky a výročí', 'ph-gift', 'gifts'],
+  wkFind: ['ph-binoculars', 'Zatím není co objevovat', 'Návrhy „co jste dlouho neviděli" neděláme. Starší fotky projdete v Knihovně.', 'Knihovna', 'ph-images', 'memories'],
+  nowPlan: ['ph-compass', 'Žádná cesta právě neběží', 'Program dne, útrata a deník se ukážou, až bude cesta probíhat — otevřete ji v Cestách.', 'Cesty', 'ph-airplane-tilt', 'trips'],
+  nowMoney: ['ph-wallet', 'Žádná cesta právě neběží', 'Útrata dne se počítá jen během cesty. Zapsané výdaje najdete u té které cesty.', 'Cesty', 'ph-airplane-tilt', 'trips'],
+  nowLog: ['ph-notebook', 'Žádná cesta právě neběží', 'Deník z cesty se píše u ní; zápisy z dřívějška jsou v Deníku.', 'Deník', 'ph-notebook', 'diary'],
+  nowToday: ['ph-camera', 'Rituál Zároveň zatím nevedeme', 'Společný moment dne aplikace nehlídá ani nepřipomíná. Fotky z dneška uvidíte ve Vzpomínkách.', 'Vzpomínky', 'ph-sparkle', 'memories'],
+  nowStreak: ['ph-flame', 'Série se nepočítá', 'Rituál Zároveň aplikace nevede, takže není co počítat.', null, null, null],
+  nowArch: ['ph-archive', 'Archiv rituálu je prázdný', 'Rituál Zároveň aplikace nevede — archiv proto nevzniká.', null, null, null],
+  voiceTx: ['ph-text-t', 'Přepisy neděláme', 'Aplikace řeč na text nepřevádí. Hlasovku si pustíte u zprávy v chatu.', 'Nahrávky', 'ph-microphone', 'chat'],
+  memKeep: ['ph-bookmark-simple', 'Nic uloženého', 'Vzpomínku uložíte srdíčkem u fotky — najdete ji pak v Oblíbených.', 'Vzpomínky', 'ph-sparkle', 'memories'],
+  memLate: ['ph-clock-afternoon', 'Nic odloženého', 'Odložená vzpomínka se vrátí sama; zatím žádná odložená není.', null, null, null],
+  datesDone: ['ph-check-circle', 'Zatím nic podniknutého', 'Co jste opravdu podnikli, zapište do deníku nebo jako akci v kalendáři — archiv randíček nevedeme.', 'Deník', 'ph-notebook', 'diary'],
+  remind: ['ph-bell', 'Připomínky k dárkům nevedeme', 'Výročí najdete na vedlejší záložce; upozornění chodí na vzpomínky, ne na dárky.', 'Výročí', 'ph-calendar-heart', null],
+  dupesDone: ['ph-check-circle', 'Vyřešené duplicity nearchivujeme', 'Co jste vyřešili, zmizí z Nálezů. Smazané fotky čekají 30 dní v Koši.', 'Otevřít koš', 'ph-trash', 'trash'],
+  tv: ['ph-monitor-play', 'TV režim je na počítači', 'Promítání na obrazovku spustíte z počítače; tady si připravíte výběr k tisku.', 'Výběry k tisku', 'ph-printer', null],
+  tier: ['ph-ranking', 'Tierlist zatím nevedeme', 'Filmy a seriály hodnotíte ve Watchlistu; pořadí do pásem aplikace neskládá.', 'Watchlist', 'ph-film-strip', null],
+  burps: ['ph-trophy', 'Modul není zapnutý', 'Hodnocení pro dva je volitelný modul — zapíná se v nastavení prostoru na počítači.', null, null, null],
+  farts: ['ph-trophy', 'Modul není zapnutý', 'Hodnocení pro dva je volitelný modul — zapíná se v nastavení prostoru na počítači.', null, null, null],
+  autoRules: ['ph-lightning', 'Pravidla se nastavují na počítači', 'Automatizace vedeme v Pravidlech na počítači; tady se zatím neukazují.', null, null, null],
+  autoLog: ['ph-clock-counter-clockwise', 'Historie automatizací je prázdná', 'Běhy pravidel zapisuje počítač — tady je zatím nezobrazujeme.', null, null, null],
   // Archiv jízdenek server nevede — záložka jen poctivě řekne, kde jízdenky jsou.
-  ticketsOld: ['ph-archive', 'Archiv jízdenek nevedeme', 'Uložené jízdenky jsou v Aktuálních. Smazaná jízdenka zmizí u obou, do archivu se neodkládá.', 'Aktuální jízdenky', 'ph-ticket', 'sec:jizdenky/0']
+  ticketsOld: ['ph-archive', 'Archiv jízdenek nevedeme', 'Uložené jízdenky jsou v Aktuálních. Smazaná jízdenka zmizí u obou, do archivu se neodkládá.', 'Aktuální jízdenky', 'ph-ticket','sec:jizdenky/0']
 };
 // ── Onboarding pro dva ──
 // [titulek, úvodní věta, ikona]
@@ -7893,7 +7920,10 @@ class Component extends DCLogic {
     const whOptsFor = src => src === 'recipes' ? Object.keys(RECIPES).map(k => (RECIPES[k] || {}).title || k).concat(['Zbytky', 'Objednáme'])
       : src === 'watch' ? ((D.AL || {}).watchlist || []).map(r => r[0])
       : src === 'places' ? Object.keys(D.PLACES || {}).map(k => (D.PLACES[k] || {}).title).filter(Boolean)
-      : src === 'who' ? this.dva().slice(0, 2).map(j => this.krestni(j)) : ['Ano', 'Ne'];
+      : src === 'who' ? this.dva().slice(0, 2).map(j => this.krestni(j))
+      // Randíčko točí uložené nápady, ne „Ano/Ne" — ty zůstávají jen pro kolečko bez zdroje.
+      : src === 'dates' ? (this.secRowsOf('datesSaved') || []).map(r => r.t || r[0]).filter(Boolean)
+      : ['Ano', 'Ne'];
     const whList = whOptsFor(whDef[3]);
     const whPicks = key === 'whSpin' ? WHEELDEF.map((w, i) => ({
       label: w[1], icon: w[2],
@@ -9923,6 +9953,9 @@ class Component extends DCLogic {
      */
     const zeServeru = (window.GalerieData || {}).DVOJICE;
     if (zeServeru && zeServeru.length >= 2) return zeServeru;
+
+    // Prostor s jediným členem není ukázka — druhého nepojmenováváme za něj.
+    if (zeServeru && zeServeru.length === 1) return [zeServeru[0], 'Druhý z vás'];
 
     const jmena = Object.keys((window.GalerieData || {}).KL_MOOD || {});
     const par = jmena.length >= 2 ? jmena : ['Adrian', 'Makinka'];
