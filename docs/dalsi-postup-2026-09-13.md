@@ -804,6 +804,48 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2x. Dvacáté čtvrté kolo — pozvánka místo kódu, alba podle id (24. 9.)
+
+- **Druhý z dvojice se přidá pozvánkou.** Krok prvního spuštění „Jsme dva"
+  se ptal na kód z druhého telefonu a jediná přijímaná hodnota byla
+  `OBCODE = 'K7M2QF'` — konstanta v `galerie-data.js`, tedy v souboru, který
+  server podá komukoli; nápověda ji rovnou vypisovala a vedle stálo tlačítko
+  „Vyplnit kód z prototypu". Spárování bylo dekorace: na server nešlo nic.
+  Nově se volá `POST /api/admin/users`, tedy totéž, co tlačítko
+  v administraci. Krok **neblokuje** — kdo zakládá galerii sám, projde dál
+  a pozve partnera kdykoli z Administrace.
+- **Alba na telefonu podle identifikátoru, ne podle názvu.** Obsah alba se
+  skládal porovnáním popisku dlaždice (`$f['album'] === $a['name']`), takže
+  dvě alba se stejným názvem dostala obě fotky obou, fotka bez alba se
+  chytla na album jménem „Bez alba" a snímek zařazený jen přes spojovací
+  tabulku v albu chyběl. Bez dotazu navíc (`Knihovna` zůstává na 51).
+
+**Triáž zbylých klíčů — plán z 2w se ukázal menší, než čekal.** Z 55 klíčů,
+které server nedodává, je **54 slovník aplikace** (názvy měsíců, spouštěče
+pravidel, fáze cyklu, formáty tisku, kroky průvodce) a zůstávají. `SRCHMSG`
+i `TICHO_TOPICS` už jsou za `ukazka()`, `RITUALS` je katalog s uloženým
+stavem dvojice vedle. Jediný skutečný nález byl `OBCODE` — a nebyl to
+chybějící poskytovatel, ale předstíraná funkce. **Dvanáct nových
+poskytovatelů tedy psát netřeba.**
+
+**Změřeno, neměněno podruhé:** dokument má 2 499 KB, z toho 389 KB (15,6 %)
+odsazení, 160 KB (6,4 %) komentáře a 529 KB (21,2 %) inline styly
+v 7 953 výskytech. Odstranit odsazení by přenos skoro nezlevnilo (gzip
+opakované mezery stlačí) a sbírání bílého místa mezi řádkovými prvky mění
+vykreslení — riziko je větší než zisk na době parsování.
+
+**Nález bez opravy:** `System` vyskočil ze 113 na 145 dotazů. Je to cena
+za kontroly z kola 2v (měkké mazání v `zivotSekci`, viditelnost rozpočtu):
+každý `Tabulky::sloupec()` je dotaz do schématu. Na SQLite levné, na MySQL
+ne — stojí za revizi v příštím kole.
+
+| Commit | Obsah |
+|---|---|
+| `3d1bf60c` | Druhého z dvojice přidá pozvánka, ne kód z veřejného souboru |
+| `532f6ac5` | Dvě alba se stejným názvem si na telefonu prohazovala fotky |
+
+Testy: **1540 PHP testů**, všechny prošly. Nic se nemigruje.
+
 ## 2w. Dvacáté třetí kolo — prototyp jako produkt (24. 9.)
 
 Rozhodnutí z tohohle kola: **prototyp na `/` je produkt**. React/Inertia
