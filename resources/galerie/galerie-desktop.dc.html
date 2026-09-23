@@ -1973,10 +1973,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:9px">Filtr</div>
             <div style="display:flex; flex-direction:column; gap:7px; font-size:13.5px">
-              <label class="radio"><input type="checkbox" checked="{{ true }}"><span class="dot"></span>{{ jmA }}</label>
-              <label class="radio"><input type="checkbox" checked="{{ true }}"><span class="dot"></span>{{ jmM }}</label>
-              <label class="radio"><input type="checkbox"><span class="dot"></span>Jen videa</label>
-              <label class="radio"><input type="checkbox"><span class="dot"></span>Jen významné dny</label>
+              <label class="radio" onClick="{{ tlAutorA }}"><input type="checkbox" checked="{{ tlAutorAOn }}"><span class="dot"></span>{{ jmA }}</label>
+              <label class="radio" onClick="{{ tlAutorM }}"><input type="checkbox" checked="{{ tlAutorMOn }}"><span class="dot"></span>{{ jmM }}</label>
+              <label class="radio" onClick="{{ tlJenVidea }}"><input type="checkbox" checked="{{ tlJenVideaOn }}"><span class="dot"></span>Jen videa</label>
+              <label class="radio" onClick="{{ tlOblibene }}"><input type="checkbox" checked="{{ tlOblibeneOn }}"><span class="dot"></span>Jen oblíbené</label>
             </div>
           </div>
         </div>
@@ -12735,8 +12735,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <div>
             <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); margin-bottom:8px">Datum</div>
             <div style="display:flex; gap:8px">
-              <div class="field" style="flex:1"><label>Od</label><input class="input" type="date" value="2024-07-01"></div>
-              <div class="field" style="flex:1"><label>Do</label><input class="input" type="date" value="2024-07-31"></div>
+              <div class="field" style="flex:1"><label>Od</label><input class="input" type="date" value="{{ filtrOd }}" onChange="{{ filtrSetOd }}"></div>
+              <div class="field" style="flex:1"><label>Do</label><input class="input" type="date" value="{{ filtrDo }}" onChange="{{ filtrSetDo }}"></div>
             </div>
             <div style="display:flex; gap:6px; flex-wrap:wrap; margin-top:9px">
               <sc-for list="{{ quickDates }}" as="q" hint-placeholder-count="5">
@@ -31729,6 +31729,76 @@ class Component extends DCLogic {
     // Místo z mapy: položky shluku, ne hledání podle jména (to bývá souřadnice).
     const misto = this.state.misto;
     if (misto && misto.ids && this.state.route === 'all') ph = ph.filter(p => misto.ids.indexOf(p.id) >= 0);
+    return this.podleFiltru(ph);
+  }
+  /*
+   * „Pokročilé filtry" doopravdy filtrují.
+   *
+   * Zásuvka s pěti skupinami a devatenácti volbami zapisovala `s.filters`,
+   * nakreslila odznak s počtem, chipy nad mřížkou, zavřela se — a mřížka
+   * ukázala přesně to co předtím. Stav se četl jen kvůli odznaku, chipům
+   * a ukládání chytrého alba; do výběru fotek nevstoupil ani jednou.
+   *
+   * Filtruje se nad tím, co dlaždice už nesou (`Knihovna::fotky()`), takže
+   * to nestojí ani jeden dotaz navíc. Volby v jedné skupině platí jako
+   * „nebo" (Fotky **nebo** Videa), skupiny mezi sebou jako „a zároveň" —
+   * jinak by druhá zaškrtnutá volba vždycky vyprázdnila mřížku.
+   */
+  podleFiltru(ph) {
+    const s = this.state;
+
+    // Vlastní rozsah dat ze zásuvky filtrů; prázdná mez neomezuje.
+    const od = (s.filtrOd || '').trim(), doKdy = (s.filtrDo || '').trim();
+    if (od || doKdy) {
+      ph = ph.filter(p => {
+        const d = p.dateVal || p.day || '';
+        if (! d) return false;
+        return (! od || d >= od) && (! doKdy || d <= doKdy);
+      });
+    }
+
+    const f = s.filters || [];
+    if (! f.length) return ph;
+
+    const ma = x => f.indexOf(x) >= 0;
+    const rok = new Date().getFullYear();
+    const vDobe = (p, od, doKdy) => {
+      const d = p.dateVal || p.day;
+      return d ? d >= od && d <= doKdy : false;
+    };
+    const dva = this.dva();
+
+    const skupiny = [
+      // Typ a orientace
+      [[ma('Fotky'), p => !p.isVideo], [ma('Videa'), p => !!p.isVideo],
+       [ma('Na šířku'), p => p.orient === 'landscape'], [ma('Na výšku'), p => p.orient === 'portrait']],
+      // Označení
+      [[ma('Oblíbené'), p => this.isFav(p)], [ma('Sdílené'), p => !!p.shared],
+       [ma('Se štítkem'), p => (p.tags || []).length > 0], [ma('Bez štítku'), p => (p.tags || []).length === 0]],
+      // Autor nahrání
+      [[ma(dva[0]), p => p.author === dva[0]], [ma(dva[1]), p => p.author === dva[1]]],
+      // Stav originálu
+      [[ma('Uloženo'), p => !p.pending && !p.error], [ma('Čeká na přenos'), p => !!p.pending],
+       [ma('Chyba'), p => !!p.error], [ma('Jen náhled'), p => p.sync === 'preview']],
+      // Chybějící údaje
+      [[ma('Bez alba'), p => !p.album || p.album === 'Bez alba'],
+       [ma('Bez data'), p => this.mChybi(p, 'date')],
+       [ma('Bez místa'), p => !p.place || p.place === 'Bez místa']],
+      // Rychlé rozsahy dat
+      [[ma('Tento měsíc'), p => vDobe(p, new Date().toISOString().slice(0, 7) + '-01', '9999')],
+       [ma('Loni v tuto dobu'), p => String(p.y) === String(rok - 1)],
+       [ma('Rok ' + (rok - 2)), p => String(p.y) === String(rok - 2)],
+       [ma('Léto ' + (new Date().getMonth() >= 5 ? rok : rok - 1)), p => {
+         const m = (p.dateVal || p.day || '').slice(5, 7);
+         return m >= '06' && m <= '08';
+       }]]
+    ];
+
+    skupiny.forEach(skupina => {
+      const zapnute = skupina.filter(x => x[0]).map(x => x[1]);
+      if (zapnute.length) ph = ph.filter(p => zapnute.some(test => test(p)));
+    });
+
     return ph;
   }
   isFav(p) { const e = this.state.favs[p.id]; return e === undefined ? p.fav : e; }
@@ -34088,6 +34158,33 @@ class Component extends DCLogic {
         const [a, m] = this.dva();
         return { jmA: krestni(a), jmM: krestni(m), jmDruhy: krestni(this.druhy(this.meWho())) };
       })(),
+
+      /*
+       * Postranní panel časové osy — čtyři zaškrtávátka, která nic nedělala.
+       *
+       * Neměla `onChange` na políčku ani `onClick` na `<label>`, a dvě z nich
+       * byla navíc natvrdo zaškrtnutá. Vypadalo to jako zapnutý filtr podle
+       * autora, který se nedá vypnout. Jsou to teď tytéž volby jako
+       * v „Pokročilých filtrech", takže se stav sdílí: co se zaškrtne tady,
+       * je vidět i jako chip nad mřížkou a dá se odtud zrušit.
+       *
+       * „Jen významné dny" nahradilo „Jen oblíbené" — významnost dne aplikace
+       * nikde nevede, kdežto srdíčko ano.
+       */
+      ...(() => {
+        const f = s.filters || [];
+        const [a, m] = this.dva();
+        const prepni = volba => () => this.setState({
+          filters: f.indexOf(volba) >= 0 ? f.filter(x => x !== volba) : f.concat(volba)
+        });
+
+        return {
+          tlAutorAOn: f.indexOf(a) >= 0, tlAutorA: prepni(a),
+          tlAutorMOn: f.indexOf(m) >= 0, tlAutorM: prepni(m),
+          tlJenVideaOn: f.indexOf('Videa') >= 0, tlJenVidea: prepni('Videa'),
+          tlOblibeneOn: f.indexOf('Oblíbené') >= 0, tlOblibene: prepni('Oblíbené')
+        };
+      })(),
       theme: s.theme, themeIcon: s.theme === 'dark' ? 'ph-sun' : 'ph-moon',
       toggleTheme: () => this.setState({ theme: s.theme === 'dark' ? 'light' : 'dark' }),
       rootRef: this._root(),
@@ -35232,12 +35329,27 @@ class Component extends DCLogic {
         }
       })),
 
-      hasFilters: s.filters.length > 0 || !!(s.misto && R === 'all'), filterCount: s.filters.length + (s.misto && R === 'all' ? 1 : 0),
+      // Rozsah dat se počítá mezi filtry a jde zrušit chipem jako ostatní.
+      hasFilters: s.filters.length > 0 || !!(s.misto && R === 'all') || !!(s.filtrOd || s.filtrDo),
+      filterCount: s.filters.length + (s.misto && R === 'all' ? 1 : 0) + ((s.filtrOd || s.filtrDo) ? 1 : 0),
       activeFilters: (s.misto && R === 'all' ? [{ label: s.misto.label || 'Místo: ' + s.misto.name, remove: () => this.setState({ misto: null }) }] : [])
+        .concat((s.filtrOd || s.filtrDo)
+          ? [{ label: (s.filtrOd || '…') + ' – ' + (s.filtrDo || '…'), remove: () => this.setState({ filtrOd: '', filtrDo: '' }) }]
+          : [])
         .concat(s.filters.map(f => ({ label: f, remove: () => this.setState({ filters: s.filters.filter(x => x !== f) }) }))),
-      clearFilters: () => this.setState({ filters: [], filtersOpen: false, query: '', misto: null }),
+      clearFilters: () => this.setState({ filters: [], filtersOpen: false, query: '', misto: null, filtrOd: '', filtrDo: '' }),
       openFilters: () => this.setState({ filtersOpen: true }), closeFilters: () => this.setState({ filtersOpen: false }),
       filtersOpen: s.filtersOpen, applyFilters: () => this.setState({ filtersOpen: false, route: 'all' }),
+      /*
+       * Vlastní rozsah dat — dosud dvě políčka s napsaným červencem 2024.
+       *
+       * Neměla obsluhu ani stavový klíč, takže se datum dalo přepsat a při
+       * příštím otevření zásuvky tam stál zase rok 2024. Teď se ukládá
+       * a `visible()` podle něj mřížku opravdu ořízne.
+       */
+      filtrOd: s.filtrOd || '', filtrDo: s.filtrDo || '',
+      filtrSetOd: e => this.setState({ filtrOd: e.target.value }),
+      filtrSetDo: e => this.setState({ filtrDo: e.target.value }),
       quickDates: ['Tento měsíc', 'Loni v tuto dobu', 'Rok ' + (new Date().getFullYear() - 2), 'Léto ' + (new Date().getMonth() >= 5 ? new Date().getFullYear() : new Date().getFullYear() - 1), 'Vlastní'].map(l => ({ label: l, go: () => this.setState({ filters: Array.from(new Set(s.filters.concat(l))) }) })),
       filterGroups: [
         { title: 'Typ a orientace', opts: ['Fotky', 'Videa', 'Na šířku', 'Na výšku'] },
