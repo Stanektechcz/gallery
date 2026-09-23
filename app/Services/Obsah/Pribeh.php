@@ -59,6 +59,9 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             'STORY' => [],
             'STORYMS' => [],
             'STORY_ROKY' => new \stdClass,
+            // Kroky objednávky tisku se posílají jen s objednávkou; bez ní
+            // nemá obrazovka co sledovat. `prazdne()` o nich dosud mlčelo.
+            'POSTEPS' => [],
             'PORDERS' => [],
             'EM_ITEMS' => [],
             'EM_LOG' => [],

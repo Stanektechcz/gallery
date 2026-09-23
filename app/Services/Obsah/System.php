@@ -110,6 +110,17 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'SECLIFE' => [],
             'OZNAMENI' => [],
             'VAULT_ITEMS' => [],
+            /*
+             * `kolekce()` je posílá, `prazdne()` o nich mlčelo.
+             *
+             * Klient si na ně dosud dával pozor sám, ale mlčení tady znamená,
+             * že se ukázka smaže jen tam, kam se prototyp nezapomněl podívat.
+             * `AFORMS` jsou přepínače nastavení, `LOCKWHO` a `LOCKMAIL` kdo
+             * se přihlašuje — u prázdné galerie prostě nikdo.
+             */
+            'AFORMS' => new \stdClass,
+            'LOCKWHO' => '',
+            'LOCKMAIL' => '',
             'ABARS' => ['health' => [], 'risk' => []],
             'AL' => ['inbox' => [], 'snoozed' => [], 'inboxDone' => [], 'vault' => [], 'users' => [], 'jobs' => [], 'api' => [], 'tarify' => []],
         ];

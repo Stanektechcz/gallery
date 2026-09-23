@@ -31611,7 +31611,31 @@ class Component extends DCLogic {
       blkShiftHint: shiftN ? 'Typicky po dovolené se špatně nastaveným časem v aparátu — třeba jiné časové pásmo.' : 'Kladné číslo posune dopředu, záporné dozadu.',
       blkPlace: s.blkPlace || '',
       blkSetPlace: e => this.setState({ blkPlace: e.target.value }),
-      blkPlaceSug: ['Zadar, Chorvatsko', 'Pustevny, Beskydy', 'Ostrava', 'Praha'].map(x => ({ label: x, go: () => this.setState({ blkPlace: x }) })),
+      /*
+       * Nabídka míst z vlastní knihovny, ne ze čtyř napsaných.
+       *
+       * Stálo tu „Zadar, Chorvatsko" a „Pustevny, Beskydy" — místa ukázkové
+       * dvojice, nabízená na každé obrazovce jako návrh, kam tu fotku zařadit.
+       * Bere se proto to, co dvojice u fotek opravdu má, seřazené podle toho,
+       * jak často; bez fotek s místem se nenabízí nic a políčko se vyplní ručně.
+       */
+      blkPlaceSug: (() => {
+        if (this.ukazka()) {
+          return ['Zadar, Chorvatsko', 'Pustevny, Beskydy', 'Ostrava', 'Praha']
+            .map(x => ({ label: x, go: () => this.setState({ blkPlace: x }) }));
+        }
+
+        const cetnost = {};
+        (this.photos() || []).forEach(p => {
+          const m = (p.place || '').trim();
+          if (m && m !== 'Bez místa') cetnost[m] = (cetnost[m] || 0) + 1;
+        });
+
+        return Object.keys(cetnost)
+          .sort((a, b) => cetnost[b] - cetnost[a])
+          .slice(0, 4)
+          .map(x => ({ label: x, go: () => this.setState({ blkPlace: x }) }));
+      })(),
       blkAlbum: album,
       // Se serverem se album vybírá podle identifikátoru — zařazení jde do databáze.
       blkAlbumOpts: [{ value: '', label: 'Nechat beze změny' }]

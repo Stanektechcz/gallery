@@ -14,28 +14,7 @@ use App\Policies\AlbumPolicy;
 use App\Policies\MediaPolicy;
 use App\Services\Automation\AutomationEngine;
 use App\Services\Billing\EntitlementService;
-use App\Services\Obsah\Cesty;
-use App\Services\Obsah\Darky;
-use App\Services\Obsah\Denik;
-use App\Services\Obsah\Dnes;
-use App\Services\Obsah\Domacnost;
-use App\Services\Obsah\Finance;
-use App\Services\Obsah\FinanceRozbory;
-use App\Services\Obsah\Klid;
-use App\Services\Obsah\Knihovna;
-use App\Services\Obsah\Kucharka;
-use App\Services\Obsah\Mechanismy;
-use App\Services\Obsah\Planovani;
-use App\Services\Obsah\Pravidla;
-use App\Services\Obsah\Pribeh;
-use App\Services\Obsah\Rozhodovani;
-use App\Services\Obsah\Sdileni;
-use App\Services\Obsah\System;
-use App\Services\Obsah\Tyden;
-use App\Services\Obsah\Uklid;
-use App\Services\Obsah\Vztah;
-use App\Services\Obsah\Zdravi;
-use App\Services\Obsah\Zpravy;
+use App\Services\Obsah\Poskytovatele;
 use App\Support\Tabulky;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
@@ -66,30 +45,7 @@ class AppServiceProvider extends ServiceProvider
          */
         $this->app->when(DataController::class)
             ->needs('$poskytovatele')
-            ->give(fn ($app) => [
-                $app->make(Finance::class),
-                $app->make(Knihovna::class),
-                $app->make(Planovani::class),
-                $app->make(Domacnost::class),
-                $app->make(Cesty::class),
-                $app->make(Vztah::class),
-                $app->make(Zdravi::class),
-                $app->make(Sdileni::class),
-                $app->make(Zpravy::class),
-                $app->make(Kucharka::class),
-                $app->make(Darky::class),
-                $app->make(Denik::class),
-                $app->make(Pravidla::class),
-                $app->make(FinanceRozbory::class),
-                $app->make(Uklid::class),
-                $app->make(System::class),
-                $app->make(Klid::class),
-                $app->make(Pribeh::class),
-                $app->make(Mechanismy::class),
-                $app->make(Rozhodovani::class),
-                $app->make(Tyden::class),
-                $app->make(Dnes::class),
-            ]);
+            ->give(fn () => Poskytovatele::vsichni());
     }
 
     /**

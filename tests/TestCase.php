@@ -41,6 +41,13 @@ abstract class TestCase extends BaseTestCase
      */
     protected function assertPrazdne(mixed $hodnota, string $cesta = 'data'): void
     {
+        // `stdClass` je v poskytovatelích tvar „mapa podle identifikátorů".
+        // Z HTTP chodí jako pole, ale při přímém volání `prazdne()` zůstává
+        // objektem — bez tohohle řádku by prázdná mapa spadla na skalár.
+        if ($hodnota instanceof \stdClass) {
+            $hodnota = (array) $hodnota;
+        }
+
         if (is_array($hodnota)) {
             foreach ($hodnota as $klic => $vnitrek) {
                 $this->assertPrazdne($vnitrek, $cesta.'.'.$klic);

@@ -286,17 +286,67 @@
     });
   }
 
+  /*
+   * Ukázka se k přihlášené dvojici nedostane.
+   *
+   * `galerie-data.js` nese život ukázkové dvojice — Chorvatsko 2026, Zadar,
+   * cizí sdílené odkazy. Dokument z něj čte na osmdesáti místech tvarem
+   * `this.state.X || UKAZKA`, takže všude, kam data ze serveru ještě
+   * nedorazila (nebo kde je dvojice prostě nemá), svítil cizí život.
+   *
+   * Tvary sem posílá server z `prazdne()` poskytovatelů — týchž metod, které
+   * plní prázdné kolekce v odpovědi. Ručně psaný seznam by se rozešel při
+   * prvním přidaném klíči.
+   *
+   * Vyprazdňuje se **hned při načtení**, ne až s daty: `navlec` mění pole na
+   * místě, takže konstanty rozebrané v dokumentu (`const { TX, BUD, … }`)
+   * zůstávají platné a serverová data do nich pak jen natečou. Kdyby se
+   * čekalo na `DVOJICE` ze serveru, smazalo by se i to, co už dorazilo.
+   *
+   * Číselníky (názvy měsíců, spouštěče pravidel, kroky průvodce) se
+   * nevyprazdňují — nejsou to data dvojice, ale slovník aplikace.
+   */
+  var DATA_PRAZDNE = @json(\App\Services\Obsah\Poskytovatele::prazdneKolekce());
+
+  /*
+   * Přihlášená je i dvojice **bez sezení**.
+   *
+   * Prototyp se přihlašuje klíčem přes `/sanctum/token` a `TokenController`
+   * sezení nezakládá — `$request->user()` je pro něj `null`, takže samotné
+   * `GALERIE_USER` by tuhle pojistku u skutečné dvojice nikdy nespustilo.
+   * Rozhoduje proto i uložený klíč, tedy totéž, podle čeho se `galerie-api.js`
+   * rozhoduje, jestli má kam volat.
+   */
+  function prihlasenaDvojice() {
+    if (window.GALERIE_USER) return true;
+    try { return !! localStorage.getItem('galerie.token'); } catch (e) { return false; }
+  }
+
+  function vyprazdniUkazku(cil) {
+    if (! cil || ! prihlasenaDvojice()) return false;
+
+    Object.keys(DATA_PRAZDNE).forEach(function (k) {
+      if (cil[k] === undefined) return;
+      navlec(cil, k, DATA_PRAZDNE[k], true);
+    });
+
+    return true;
+  }
+
   // `galerie-data.js` přiřazuje celé `window.GalerieData`, takže se hlídá i ono —
   // jinak by nový objekt obal ztratil.
   var data = window.GalerieData;
+  vyprazdniUkazku(data);
   obal(data);
   try {
     Object.defineProperty(window, 'GalerieData', {
       configurable: true,
       get: function () { return data; },
       set: function (v) {
-        // Nejdřív nádoby, pak obal: `obal` znovu navlékne, co už dorazilo ze
-        // serveru, takže ukázková data z nového načtení nic nepřebijí.
+        // Nejdřív ukázku pryč, pak nádoby, pak obal: `sjednotNadoby` přelije
+        // obsah do starých polí a `obal` vrátí, co už dorazilo ze serveru —
+        // v tomhle pořadí nové načtení souboru ukázku nevrátí zpátky.
+        vyprazdniUkazku(v);
         sjednotNadoby(data, v);
         data = v;
         obal(v);
