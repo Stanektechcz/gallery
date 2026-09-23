@@ -196,6 +196,44 @@ class ObsahKnihovnaTest extends TestCase
         $this->assertSame([$foto->uuid], $data['MOBIL']['ALBUMS'][0]['ids']);
     }
 
+    /**
+     * Dvě alba se stejným názvem si na telefonu neprohodí fotky.
+     *
+     * Obsah alba se skládal porovnáním popisku dlaždice s názvem alba
+     * (`$f['album'] === $a['name']`). Dvě „Léto" pod různými rodiči tím
+     * dostala obě fotky obou, fotka bez alba se chytla na album jménem
+     * „Bez alba" a snímek zařazený jen přes spojovací tabulku v albu chyběl.
+     */
+    public function test_stejnojmenna_alba_si_neprohodi_fotky(): void
+    {
+        $dvaTisiceTri = $this->album('2023');
+        $dvaTisiceCtyri = $this->album('2024');
+        $letoA = $this->album('Léto', $dvaTisiceTri);
+        $letoB = $this->album('Léto', $dvaTisiceCtyri);
+
+        $vA = $this->fotka(['primary_album_id' => $letoA->id], 1);
+        $vB = $this->fotka(['primary_album_id' => $letoB->id], 2);
+        // Třetí je v albu jen přes spojovací tabulku, hlavní album nemá.
+        $jenVazbou = $this->fotka([], 3);
+
+        DB::table('album_media')->insert([
+            'album_id' => $letoB->id,
+            'media_item_id' => $jenVazbou->id,
+            'sort_order' => 0,
+            'is_cover' => false,
+        ]);
+
+        $alba = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.MOBIL.ALBUMS'))
+            ->keyBy('id');
+
+        $this->assertSame([$vA->uuid], $alba[$letoA->uuid]['ids'], 'První „Léto" má jen svou fotku.');
+        $this->assertEqualsCanonicalizing(
+            [$vB->uuid, $jenVazbou->uuid],
+            $alba[$letoB->uuid]['ids'],
+            'Druhé „Léto" má svou fotku i tu zařazenou jen vazbou.',
+        );
+    }
+
     /** Podalbum je skutečné, ne pět vymyšlených jmen podle počtu potomků. */
     public function test_podalba_prichazeji_ze_skutecne_hierarchie(): void
     {

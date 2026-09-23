@@ -61,6 +61,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Co si přihlášený člověk označil jako oblíbené; `media_item_id => true`. */
     private array $oblibene = [];
 
+    /** Do kterých alb fotka patří; `media_item_id => [uuid alba, …]`. Viz `vazbyAlb()`. */
+    private array $uuidAlb = [];
+
     /** A která videa mají soubor, který jde přehrát. */
     private array $prehratelne = [];
 
@@ -235,7 +238,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
             ->where('is_hidden', false)
-            ->with(['uploader:id,name', 'primaryAlbum:id,title'])
+            // `uuid` musí být v načtených sloupcích: `albaFotky()` ho čte
+            // u každé fotky a bez něj by se dotazoval po jedné.
+            ->with(['uploader:id,name', 'primaryAlbum:id,title,uuid'])
             ->orderByDesc('taken_at')
             ->orderByDesc('uploaded_at')
             ->limit(self::FOTEK)
@@ -315,6 +320,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 // Kromě `primary_album_id` se počítá i členství přes spojovací
                 // tabulku — jinak by fotka vložená do alba ručně hlásila „Bez alba".
                 'album' => $m->primaryAlbum?->title ?: ($vAlbu[$m->id] ?? 'Bez alba'),
+                // Identifikátory alb, do kterých fotka patří — podle nich si
+                // telefon skládá obsah alba (`mobil()`), ne podle popisku výš.
+                'albumIds' => $this->albaFotky($m),
                 'y' => $den['y'],
                 'isVideo' => $video,
                 'orient' => $this->orientace($m),
@@ -457,15 +465,48 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function vazbyAlb(Collection $media): array
     {
-        return DB::table('album_media as am')
+        $radky = DB::table('album_media as am')
             ->join('albums as a', 'a.id', '=', 'am.album_id')
             ->whereIn('am.media_item_id', $media->pluck('id'))
             ->whereNull('a.deleted_at')
             ->orderBy('am.sort_order')
-            ->get(['am.media_item_id', 'a.title'])
-            ->groupBy('media_item_id')
-            ->map(fn (Collection $r) => (string) $r->first()->title)
+            ->get(['am.media_item_id', 'a.title', 'a.uuid'])
+            ->groupBy('media_item_id');
+
+        /*
+         * Do kterých alb fotka patří — podle identifikátoru, ne podle názvu.
+         *
+         * Telefon si obsah alba skládal porovnáním `$f['album'] === $a['name']`,
+         * tedy podle **popisku**. Dvě alba se stejným názvem („Léto" pod dvěma
+         * rodiči) si tím prohodila fotky a fotka bez alba se chytla na album,
+         * které se jmenuje „Bez alba". Popisek je pro člověka, ne klíč.
+         */
+        $this->uuidAlb = $radky
+            ->map(fn (Collection $r) => $r->pluck('uuid')->map(fn ($u) => (string) $u)->unique()->values()->all())
             ->all();
+
+        return $radky->map(fn (Collection $r) => (string) $r->first()->title)->all();
+    }
+
+    /**
+     * Do kterých alb snímek patří: hlavní album i členství přes spojovací tabulku.
+     *
+     * Hlavní album (`primary_album_id`) v `album_media` být nemusí, takže se
+     * přidává zvlášť — jinak by fotka zařazená jen jako hlavní v albu na
+     * telefonu chyběla.
+     *
+     * @return list<string>
+     */
+    private function albaFotky(MediaItem $m): array
+    {
+        $uuid = $this->uuidAlb[$m->id] ?? [];
+        $hlavni = $m->primaryAlbum?->uuid;
+
+        if ($hlavni && ! in_array((string) $hlavni, $uuid, true)) {
+            array_unshift($uuid, (string) $hlavni);
+        }
+
+        return array_values($uuid);
     }
 
     /**
@@ -1207,9 +1248,18 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'ALBUMS' => array_map(fn (array $a) => [
                 'id' => $a['id'],
                 'name' => $a['name'],
+                /*
+                 * Podle identifikátoru alba, ne podle jeho názvu.
+                 *
+                 * Dřív se porovnávalo `$f['album'] === $a['name']`, tedy
+                 * popisek dlaždice. Dvě alba se stejným názvem si tím prohodila
+                 * fotky, fotka bez alba se chytla na album jménem „Bez alba"
+                 * a snímek zařazený jen přes spojovací tabulku (ne jako hlavní
+                 * album) v albu na telefonu vůbec nebyl.
+                 */
                 'ids' => array_values(array_map(
                     fn (array $f) => $f['id'],
-                    array_filter($fotky, fn (array $f) => $f['album'] === $a['name']),
+                    array_filter($fotky, fn (array $f) => in_array($a['id'], $f['albumIds'] ?? [], true)),
                 )),
                 'seed' => $a['n'],
                 'bg' => $a['bg'],
