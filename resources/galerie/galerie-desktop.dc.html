@@ -8301,9 +8301,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
 
               <div class="field"><label>Heslo do galerie</label><input class="input" type="password" value="{{ vltPwd }}" onChange="{{ vltSetPwd }}" placeholder="Zadejte heslo"></div>
               <!--
-                Pod kolonkou stálo „V prototypu je heslo zadar2026“ a přesně
-                s tím se zadané heslo porovnávalo — v prohlížeči, proti
-                konstantě z veřejného souboru. Ověřuje ho server.
+                Pod kolonkou stávalo vypsané heslo a přesně s ním se zadané
+                porovnávalo — v prohlížeči, proti konstantě z veřejného
+                souboru. Ověřuje ho server. (Hodnota se sem nepíše ani do
+                komentáře: dokument je veřejný.)
 
                 Kolonka „Kód z aplikace v telefonu“ je pryč: kontrolovalo se
                 u ní jen to, že má šest číslic, takže prošlo cokoli. Políčko,
@@ -33228,8 +33229,8 @@ class Component extends DCLogic {
   /*
    * Obnovovací kód taky ověřuje server — a spotřebuje ho.
    *
-   * Porovnával se s `LOCKREC` ('zadar-2026-oba') z téhož veřejného souboru,
-   * takže poslední záloha od zamčené aplikace byla čitelná ze zdrojáku.
+   * Porovnával se s konstantou `LOCKREC` z téhož veřejného souboru, takže
+   * poslední záloha od zamčené aplikace byla čitelná ze zdrojáku.
    * Server ho po použití zahodí i s kódem zámku, takže si člověk musí hned
    * nastavit nový: jednorázová záloha, ne druhé trvalé heslo na papíře.
    */
@@ -33674,9 +33675,9 @@ class Component extends DCLogic {
       /*
        * Nápověda pod heslem už heslo neříká.
        *
-       * Stálo v ní „Prototyp — heslo zadar2026 pro oba účty." a to heslo
-       * doopravdy fungovalo. Vypsané přihlašovací údaje jsou to poslední,
-       * co má být na zamčené obrazovce.
+       * Stálo v ní vypsané heslo pro oba účty — a to heslo doopravdy
+       * fungovalo. Vypsané přihlašovací údaje jsou to poslední, co má být
+       * na zamčené obrazovce (a proto se nepíšou ani sem).
        */
       lockPwdHint: 'Heslo je totéž jako do galerie. Ověřuje ho server.',
       // Obnovu hesla dělá server — bez něj (ukázka) není kam odkázat.

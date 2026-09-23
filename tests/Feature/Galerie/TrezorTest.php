@@ -80,19 +80,37 @@ class TrezorTest extends TestCase
     }
 
     /**
-     * Heslo z ukázkového souboru neotevře nic.
+     * Ve veřejném souboru žádné heslo není — ani v komentáři.
      *
-     * Právě tohle bylo dřív **jediné** heslo, které fungovalo — a stálo
-     * v souboru, který si server podává komukoli.
+     * Dřív tu stálo `VAULT_PWD = '…'` a bylo to **jediné** heslo, které
+     * trezor otevřelo. Test tehdy tu hodnotu ze souboru vytáhl a ověřil,
+     * že už neplatí.
+     *
+     * Jenže když se konstanta vyprázdnila, hodnota zůstala o pár řádků výš
+     * **ve vysvětlujícím komentáři** — a tenhle test ji tam pořád našel,
+     * takže procházel dál a zveřejnění nikdo nezachytil. Soubor přitom
+     * server podá komukoli na `GET /galerie-data.js`; komentář s heslem
+     * je stejné zveřejnění jako konstanta.
+     *
+     * Hlídá se proto opak: v souboru nesmí být heslo nikde.
      */
-    public function test_heslo_z_verejneho_souboru_neplati(): void
+    public function test_verejny_soubor_neobsahuje_heslo(): void
     {
         $verejne = file_get_contents(public_path('galerie-data.js'));
-        preg_match("/VAULT_PWD = '([^']+)'/", $verejne, $shoda);
 
-        $this->assertNotEmpty($shoda[1] ?? '', 'V ukázce se to heslo pořád vyskytuje — test má co ověřovat.');
+        $this->assertDoesNotMatchRegularExpression(
+            "/VAULT_PWD\s*=\s*'[^']+'/",
+            $verejne,
+            'Heslo trezoru je zpátky ve veřejném souboru.',
+        );
 
-        $this->postJson('/api/trezor/odemknout', ['heslo' => $shoda[1]])->assertStatus(422);
+        // A totéž pro heslo zámku, obnovovací kód a PIN.
+        $this->assertDoesNotMatchRegularExpression("/LOCKPWD\s*=\s*'[^']+'/", $verejne, 'Heslo zámku je ve veřejném souboru.');
+        $this->assertDoesNotMatchRegularExpression("/LOCKREC\s*=\s*'[^']+'/", $verejne, 'Obnovovací kód je ve veřejném souboru.');
+        $this->assertDoesNotMatchRegularExpression("/LOCKPIN\s*=\s*\{\s*[A-Z]\s*:/", $verejne, 'PIN zámku je ve veřejném souboru.');
+
+        // Vymyšlené heslo trezor neotevře — odemyká jen heslo do galerie.
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'heslo-ktere-neexistuje'])->assertStatus(422);
         $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => false]);
     }
 

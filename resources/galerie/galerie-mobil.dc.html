@@ -9151,8 +9151,8 @@ class Component extends DCLogic {
       /*
        * Obnovovací kód ověřuje server a spotřebuje ho.
        *
-       * Porovnával se s `LOCKREC` ('zadar-2026-oba') z veřejného souboru,
-       * takže poslední záloha od zamčené aplikace šla přečíst ze zdrojáku.
+       * Porovnával se s konstantou `LOCKREC` z veřejného souboru, takže
+       * poslední záloha od zamčené aplikace šla přečíst ze zdrojáku.
        */
       lockRecGo: () => {
         const api = window.GalerieApi;

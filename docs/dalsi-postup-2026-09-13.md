@@ -878,10 +878,11 @@ což je od přestěhování rozcestníku na `/prehled` správně.
 - **Dvě políčka „Od" a „Do"** měla natvrdo červenec 2024, žádnou obsluhu
   a žádný stavový klíč. **Čtyři zaškrtávátka** v panelu časové osy neměla
   obsluhu vůbec a dvě byla natvrdo zaškrtnutá.
-- **Demo hesla z veřejného souboru.** `VAULT_PWD = 'zadar2026'`,
-  `LOCKPIN = { A: '240613', … }`, `LOCKREC` — ověřuje je server už od
-  dřívějších kol a nikdo je nečte, ale ležely dál v souboru, který server
-  podá komukoli. Teď jsou prázdné.
+- **Demo hesla z veřejného souboru.** `VAULT_PWD`, `LOCKPIN`, `LOCKREC` —
+  ověřuje je server už od dřívějších kol a nikdo je nečte, ale ležely dál
+  v souboru, který server podá komukoli. Teď jsou prázdné. (Konkrétní
+  hodnoty se nepíšou ani sem — viz kolo 2y, kde se ukázalo, že komentář
+  s heslem ve veřejném souboru je totéž zveřejnění jako konstanta.)
 
 **Změřeno, neměněno:** indexy jsou na všech horkých tabulkách v pořádku
 (`media_items(gallery_space_id, taken_at)`, `transactions(…, occurred_at)`,

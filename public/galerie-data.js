@@ -1788,15 +1788,16 @@
   /*
    * Heslo trezoru, PIN zámku a obnovovací kód tu **nejsou**.
    *
-   * Bývaly: `VAULT_PWD = 'zadar2026'`, `LOCKPIN = { A: '240613', … }`
-   * a `LOCKREC = 'zadar-2026-oba'` — ve veřejném souboru, který server podá
-   * komukoli, a obrazovka je pod kolonkou sama vypisovala. Od té doby
-   * ověřuje heslo i PIN server (`POST /api/trezor/odemknout`, `/api/zamek-*`)
-   * a tyhle konstanty nikdo nečte; zůstávají jen proto, že je dokument
-   * rozebírá jedním `const { … } = window.GalerieData`.
+   * Bývaly tu jako hodnoty a obrazovka je pod kolonkou sama vypisovala.
+   * Od té doby ověřuje heslo i PIN server (`POST /api/trezor/odemknout`,
+   * `/api/zamek-*`) a tyhle konstanty nikdo nečte; zůstávají jen proto,
+   * že je dokument rozebírá jedním `const { … } = window.GalerieData`.
    *
-   * Prázdné tedy zůstanou. Zapsaná šestice číslic vedle kolonky na PIN vypadá
-   * jako nápověda, i když se podle ní nic neodemkne.
+   * Konkrétní hodnoty se sem **nepíšou ani do komentáře** — tenhle soubor
+   * server podá komukoli na `GET /galerie-data.js`, takže vysvětlující
+   * poznámka s heslem je totéž zveřejnění jako ta konstanta. (Přesně tohle
+   * se tu jednou stalo: konstanty se vyprázdnily a hodnoty zůstaly o pár
+   * řádků výš v komentáři.) Co bývalo, je v historii gitu.
    */
   const VAULT_PWD = '';
   const LOCKPIN = {};
