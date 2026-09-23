@@ -804,6 +804,69 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2w. Dvacáté třetí kolo — prototyp jako produkt (24. 9.)
+
+Rozhodnutí z tohohle kola: **prototyp na `/` je produkt**. React/Inertia
+aplikace (90 stránek, zamrzlá na `1a6a93a3` ze 14. 9.) zůstává, jak je —
+a tím se ruší i nález „rozbitá navigace": React odkazuje „Domů" na `/`,
+což je od přestěhování rozcestníku na `/prehled` správně.
+
+- **Cizí život zmizel ze všech obrazovek přihlášené dvojice.** Dokument čte
+  `galerie-data.js` na ~80 místech tvarem `this.state.X || UKAZKA` a dalších
+  55 metod `*Vals()` bez jakékoli pojistky. Opraveno **jedním mechanismem**:
+  `navlec()` mění pole na místě, takže stačí kolekce vyprázdnit hned při
+  načtení — konstanty rozebrané v dokumentu zůstanou platné a serverová data
+  do nich natečou. Týž vzor jako `MECH_PRAZDNE` od kola 2t.
+- **Tvary posílá server** z `prazdne()` poskytovatelů, ne ručně psaný seznam
+  na klientu. Nový `Poskytovatele` drží seznam jednou pro kontroler
+  i pro prototyp; `AppServiceProvider` se tím zkrátil o 22 řádků.
+- **Pojistka by u skutečné dvojice nikdy nespustila** — prototyp se
+  přihlašuje klíčem přes `/sanctum/token` a `TokenController` sezení
+  nezakládá, takže `$request->user()` je pro něj `null`. Rozhoduje proto
+  i uložený klíč.
+- **Čtyři kolekce neuměly být prázdné** (`AFORMS`, `POSTEPS`, `LOCKWHO`,
+  `LOCKMAIL`) — právě tam by ukázka zůstala. Nový test to hlídá pro všechny
+  poskytovatele naráz.
+- **Pokročilé filtry začaly filtrovat.** Zásuvka s pěti skupinami
+  a devatenácti volbami zapisovala `s.filters`, kreslila odznak i chipy —
+  a mřížka ukázala totéž co předtím. Stav se četl na deseti místech, při
+  výběru fotek ani na jednom. Filtruje se teď ve `visible()` nad tím, co
+  dlaždice nesou; volby v jedné skupině jako „nebo", skupiny mezi sebou jako
+  „a zároveň". Ověřeno: „Videa" + „Fotky" = vše, „Videa" + „Oblíbené" = nic.
+- **Dvě políčka „Od" a „Do"** měla natvrdo červenec 2024, žádnou obsluhu
+  a žádný stavový klíč. **Čtyři zaškrtávátka** v panelu časové osy neměla
+  obsluhu vůbec a dvě byla natvrdo zaškrtnutá.
+- **Demo hesla z veřejného souboru.** `VAULT_PWD = 'zadar2026'`,
+  `LOCKPIN = { A: '240613', … }`, `LOCKREC` — ověřuje je server už od
+  dřívějších kol a nikdo je nečte, ale ležely dál v souboru, který server
+  podá komukoli. Teď jsou prázdné.
+
+**Změřeno, neměněno:** indexy jsou na všech horkých tabulkách v pořádku
+(`media_items(gallery_space_id, taken_at)`, `transactions(…, occurred_at)`,
+`calendar_events(…, starts_at)` a dál). Načtení vychází na 2,0 s do
+DOMContentLoaded a dominuje mu **2,5 MB dokumentu**, ne skripty —
+`galerie-data.js` je z toho ~9 %. Dokument je gzipovaný a s ETagem, takže
+opakovaná návštěva dostane 304.
+
+**Nález bez opravy:** `gallery:billing-reminders` není v `routes/console.php`
+ani v `deploy.sh` — ten příkaz nikdy neběží. Zapnout ho je rozhodnutí
+o fakturaci, ne oprava.
+
+| Commit | Obsah |
+|---|---|
+| `560f8ea2` | Cizí život zmizel ze všech obrazovek přihlášené dvojice |
+| `559892f3` | Pokročilé filtry začaly filtrovat |
+
+Testy: **1538 PHP testů**, všechny prošly. Nic se nemigruje.
+
+### Zbývá z tohohle plánu (kolo 24)
+
+Dvanáct klíčů jsou data dvojice, která **žádný poskytovatel nedodává** —
+`CYC_TODAY`, `CYC_SHARE`, `AMISS`, `RITUALS`, `ADMIN`, `MSGREPLIES`,
+`KAP_TRIG`, `GV_VOICE_POOL` a další. Rozhodnutí padlo dodělat k nim
+poskytovatele (ne jen vyprázdnit). Zámek je z nich nejdál: `LOCKWHO`
+a `LOCKMAIL` server dodává, zbytek ne.
+
 ## 2v. Dvacáté druhé kolo — audit poskytovatelů obsahu, čas dvojice (23. 9.)
 
 Hloubková kontrola všech 31 souborů v `app/Services/Obsah/` (17 264 řádků):

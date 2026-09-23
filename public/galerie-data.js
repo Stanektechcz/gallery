@@ -1785,14 +1785,25 @@
   };
 
   // Trezor: obsah za druhým ověřením. Patnáctiminutové sezení podle repozitáře.
-  const VAULT_PWD = 'zadar2026';
-
-  // Zámek aplikace: dva profily, šestimístný kód, obnovovací kód pro případ zapomenutí.
-  const LOCKPIN = { A: '240613', M: '190522' };
+  /*
+   * Heslo trezoru, PIN zámku a obnovovací kód tu **nejsou**.
+   *
+   * Bývaly: `VAULT_PWD = 'zadar2026'`, `LOCKPIN = { A: '240613', … }`
+   * a `LOCKREC = 'zadar-2026-oba'` — ve veřejném souboru, který server podá
+   * komukoli, a obrazovka je pod kolonkou sama vypisovala. Od té doby
+   * ověřuje heslo i PIN server (`POST /api/trezor/odemknout`, `/api/zamek-*`)
+   * a tyhle konstanty nikdo nečte; zůstávají jen proto, že je dokument
+   * rozebírá jedním `const { … } = window.GalerieData`.
+   *
+   * Prázdné tedy zůstanou. Zapsaná šestice číslic vedle kolonky na PIN vypadá
+   * jako nápověda, i když se podle ní nic neodemkne.
+   */
+  const VAULT_PWD = '';
+  const LOCKPIN = {};
   const LOCKWHO = { A: 'Adrian', M: 'Makinka' };
-  const LOCKREC = 'zadar-2026-oba';
+  const LOCKREC = '';
   const LOCKMAIL = { A: 'adrian@example.com', M: 'makinka@example.com' };
-  const LOCKPWD = 'zadar2026';
+  const LOCKPWD = '';
   const VAULT_ITEMS = [
     { id: 'v1', name: 'Doklady', meta: '12 souborů · šifrováno · naposledy otevřeno 4. 8.', n: 6 },
     { id: 'v2', name: 'Smlouvy k bytu', meta: '6 souborů · šifrováno', n: 12 },
