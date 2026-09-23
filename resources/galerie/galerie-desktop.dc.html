@@ -13079,12 +13079,22 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div style="display:flex; flex-direction:column; gap:22px">
               <div style="display:flex; gap:20px; flex-wrap:wrap; align-items:flex-start">
                 <div style="flex:1 1 260px; min-width:240px; display:flex; flex-direction:column; gap:9px">
-                  <label for="ob-pair" style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Kód z druhého telefonu</label>
-                  <input id="ob-pair" class="input" value="{{ obPair }}" onInput="{{ obSetPair }}" placeholder="K7M2QF" aria-label="Párovací kód" style="font-size:26px; letter-spacing:.22em; text-transform:uppercase" />
-                  <div style="display:inline-flex; align-items:center; gap:8px; font-size:13px; color:{{ obPairColor }}">
-                    <i class="ph-duotone {{ obPairIcon }}" style="font-size:17px"></i>{{ obPairState }}
-                  </div>
-                  <button class="btn btn-ghost" onClick="{{ obPairFill }}" style="align-self:flex-start; font-size:12.5px; gap:6px"><i class="ph-duotone ph-magic-wand" style="font-size:15px"></i>Vyplnit kód z prototypu</button>
+                  <sc-if value="{{ obKodem }}">
+                    <label for="ob-pair" style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Kód z druhého telefonu</label>
+                    <input id="ob-pair" class="input" value="{{ obPair }}" onInput="{{ obSetPair }}" placeholder="K7M2QF" aria-label="Párovací kód" style="font-size:26px; letter-spacing:.22em; text-transform:uppercase" />
+                    <div style="display:inline-flex; align-items:center; gap:8px; font-size:13px; color:{{ obPairColor }}">
+                      <i class="ph-duotone {{ obPairIcon }}" style="font-size:17px"></i>{{ obPairState }}
+                    </div>
+                    <button class="btn btn-ghost" onClick="{{ obPairFill }}" style="align-self:flex-start; font-size:12.5px; gap:6px"><i class="ph-duotone ph-magic-wand" style="font-size:15px"></i>Vyplnit kód z prototypu</button>
+                  </sc-if>
+                  <sc-if value="{{ obPozvankou }}">
+                    <label for="ob-mail" style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">E-mail toho druhého</label>
+                    <input id="ob-mail" class="input" type="email" value="{{ obInviteMail }}" onInput="{{ obSetInviteMail }}" placeholder="jmeno@email.cz" aria-label="E-mail pro pozvánku" style="font-size:17px" />
+                    <div style="display:inline-flex; align-items:center; gap:8px; font-size:13px; color:{{ obPairColor }}">
+                      <i class="ph-duotone {{ obPairIcon }}" style="font-size:17px"></i>{{ obPairState }}
+                    </div>
+                    <button class="btn btn-secondary" onClick="{{ obInvite }}" disabled="{{ obInviteCant }}" style="align-self:flex-start; gap:7px"><i class="ph-duotone ph-paper-plane-tilt" style="font-size:16px"></i>Poslat pozvánku</button>
+                  </sc-if>
                 </div>
                 <div style="flex:1 1 280px; min-width:260px; display:flex; flex-direction:column; gap:14px">
                   <sc-for list="{{ obPairSteps }}" as="x" hint-placeholder-count="3">
@@ -25658,14 +25668,31 @@ class Component extends DCLogic {
     const impFiles = impPicked.reduce((a, x) => a + x[3], 0);
     const pair = (s.obPair || '').toUpperCase();
     const paired = pair === OBCODE;
+    /*
+     * Krok „jsme dva" je hotový, když je dvojice doopravdy dvojice.
+     *
+     * U ukázky rozhoduje zadaný kód, u přihlášené dvojice to, jestli druhý
+     * v galerii už je (`DVOJICE` má dvě jména) nebo mu právě odešla pozvánka.
+     * Dřív se nedalo pokračovat bez kódu, který stál ve veřejném souboru.
+     */
+    const partnerJe = ((window.GalerieData || {}).DVOJICE || []).length >= 2;
+    const hotovo = this.ukazka() ? paired : (partnerJe || !! s.obInviteSent);
+    /*
+     * Čekat na to, až druhý přijme e-mail, by první spuštění zablokovalo.
+     *
+     * Kdo si galerii zakládá sám a partnera pozve večer, musí projít dál —
+     * pozvat jde kdykoli z Administrace. U ukázky zůstává kód podmínkou,
+     * aby bylo první spuštění vidět celé.
+     */
+    const pustDal = this.ukazka() ? paired : true;
     const pin = s.obPin || '';
     // Jméno páru z účtů, jakmile je server zná; cizí přezdívky jen v ukázce.
     const name = s.obName === undefined ? (this.dvojiceNazvy().znam ? this.dvojiceNazvy().spojka : (this.ukazka() ? 'Adrian a Makinka' : '')) : s.obName;
     // Krok je hotový, když má, co potřebuje — jinak se dál nepustí.
-    const ready = [true, paired, onCount > 0, true, pin.length === 6, true][step];
+    const ready = [true, pustDal, onCount > 0, true, pin.length === 6, true][step];
     const blockNote = [
       '',
-      paired ? '' : 'Zadejte kód z druhého telefonu — v prototypu ' + OBCODE + '.',
+      pustDal ? '' : 'Zadejte kód z druhého telefonu — v prototypu ' + OBCODE + '.',
       onCount ? '' : 'Vyberte aspoň jednu sekci.',
       '',
       pin.length === 6 ? '' : 'Kód musí mít šest číslic.',
@@ -25753,19 +25780,73 @@ class Component extends DCLogic {
       }),
       obWhoNote: 'Účty jsou dva a oddělené. Soukromé zápisy a trezor druhý neuvidí ani po odemčení telefonu.',
 
-      obPairCode: OBCODE,
+      /*
+       * Druhý člověk se přidá **pozvánkou**, ne kódem z veřejného souboru.
+       *
+       * Krok prvního spuštění se ptal na „kód z druhého telefonu" a jediná
+       * přijímaná hodnota byla `OBCODE = 'K7M2QF'` — konstanta v souboru,
+       * který server podá komukoli, a nápověda pod kolonkou ji rovnou
+       * vypisovala. Spárování bylo dekorace: nic se neposlalo na server
+       * a druhý telefon se nepřipojil.
+       *
+       * Aplikace přitom skutečné zvaní umí — `POST /api/admin/users` pošle
+       * e-mail s odkazem, stejně jako tlačítko v administraci. Ukázka si kód
+       * nechává, aby šlo projít prvním spuštěním i bez serveru.
+       */
+      obKodem: this.ukazka(),
+      obPozvankou: ! this.ukazka(),
+      // Kód patří ukázce; přihlášené dvojici se neposílá ani do hodnot obrazovky.
+      obPairCode: this.ukazka() ? OBCODE : '',
       obPair: s.obPair || '',
       obSetPair: e => this.setState({ obPair: e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 6) }),
-      obPaired: paired,
-      obPairState: paired ? 'Spárováno — oba telefony vidí stejný archiv.' : 'Čeká na kód z druhého telefonu.',
-      obPairColor: paired ? 'var(--g-ok)' : 'var(--g-ink3)',
-      obPairIcon: paired ? 'ph-check-circle' : 'ph-devices',
+      obPaired: hotovo,
+      obPairState: this.ukazka()
+        ? (paired ? 'Spárováno — oba telefony vidí stejný archiv.' : 'Čeká na kód z druhého telefonu.')
+        : (partnerJe
+          ? 'Druhý z vás už galerii má — hotovo.'
+          : (s.obInviteSent ? 'Pozvánka odeslána na ' + s.obInviteSent + '. Až ji přijme, uvidíte se tu oba.' : 'Pošlete pozvánku na e-mail toho druhého.')),
+      obPairColor: hotovo ? 'var(--g-ok)' : 'var(--g-ink3)',
+      obPairIcon: hotovo ? 'ph-check-circle' : 'ph-devices',
       obPairFill: () => this.setState({ obPair: OBCODE }),
-      obPairSteps: [
-        ['ph-device-mobile', 'Na druhém telefonu', 'Otevřete Galerii a zvolte „Připojit se k páru“.'],
-        ['ph-hash', 'Kód se zobrazí', 'Šest znaků, platí deset minut a použije se jednou.'],
-        ['ph-lock-key', 'Klíč zůstane v telefonech', 'Server drží jen zašifrované soubory. Kód se nikam neposílá.']
-      ].map(x => ({ icon: x[0], label: x[1], note: x[2] })),
+      obInviteMail: s.obInviteMail || '',
+      obSetInviteMail: e => this.setState({ obInviteMail: e.target.value }),
+      obInviteCant: ! /.+@.+\..+/.test((s.obInviteMail || '').trim()),
+      obInvite: () => {
+        const mail = (s.obInviteMail || '').trim();
+
+        if (! /.+@.+\..+/.test(mail)) {
+          this.toast(mail ? 'Tohle nevypadá jako e-mailová adresa' : 'Nejdřív napište e-mail, kam pozvánka půjde', { icon: 'ph-warning' });
+          return;
+        }
+
+        if (! window.GalerieApi || GalerieApi.mode !== 'http') {
+          this.toast('Pozvánku pošle jen server a ten teď neodpovídá.', { icon: 'ph-warning' });
+          return;
+        }
+
+        GalerieApi.post('admin/users', { email: mail, role: 'host' }).then(odpoved => {
+          this.setState({ obInviteSent: mail, obInviteMail: '' });
+          // Odkaz se ukáže i při úspěchu: e-mail končívá ve spamu a tohle je
+          // jediná cesta, jak ho předat rovnou — stejně jako v administraci.
+          if (odpoved && odpoved.invite_url) {
+            try { navigator.clipboard.writeText(odpoved.invite_url); } catch (e) {}
+            this.toast('Pozvánka odeslána · odkaz zkopírován, kdyby e-mail nedorazil.', { icon: 'ph-link' });
+          } else {
+            this.toast('Pozvánka odeslána na ' + mail, { icon: 'ph-paper-plane-tilt' });
+          }
+        }).catch(() => this.toast('Pozvánku se nepodařilo odeslat.', { icon: 'ph-warning' }));
+      },
+      obPairSteps: this.ukazka()
+        ? [
+          ['ph-device-mobile', 'Na druhém telefonu', 'Otevřete Galerii a zvolte „Připojit se k páru“.'],
+          ['ph-hash', 'Kód se zobrazí', 'Šest znaků, platí deset minut a použije se jednou.'],
+          ['ph-lock-key', 'Klíč zůstane v telefonech', 'Server drží jen zašifrované soubory. Kód se nikam neposílá.']
+        ].map(x => ({ icon: x[0], label: x[1], note: x[2] }))
+        : [
+          ['ph-paper-plane-tilt', 'Pozvánka e-mailem', 'Odkaz platí sedm dní a použije se jednou.'],
+          ['ph-user-plus', 'Druhý si založí heslo', 'Účty jsou dva a oddělené — každý má svoje.'],
+          ['ph-images', 'Pak vidíte totéž', 'Společná galerie; soukromé zápisy a trezor zůstávají jen vaše.']
+        ].map(x => ({ icon: x[0], label: x[1], note: x[2] })),
 
       obSecGroups: OBSECS.map(g => ({
         title: g[0], note: g[1],
@@ -32285,7 +32366,9 @@ class Component extends DCLogic {
        */
       klAskMine: 1, klAskDone: 1, klAskSentQ: 1, homeQText: 1, zprLetter: 1, promW: 1, trT: 1, vetoReason: 1,
       gftN: 1, gftP: 1, gftS: 1, gftT: 1, surpA: 1, surpW: 1, capText: 1, confirmValue: 1,
-      dcR: 1, dcRev: 1, dcT: 1, dcW: 1, kalInput: 1, obName: 1, obPair: 1, pplName: 1, pplTarget: 1,
+      // `obInviteMail` je rozepsaná adresa; odeslaná pozvánka (`obInviteSent`)
+      // se naopak ukládá — po obnovení stránky má krok vědět, že odešla.
+      dcR: 1, dcRev: 1, dcT: 1, dcW: 1, kalInput: 1, obName: 1, obPair: 1, obInviteMail: 1, pplName: 1, pplTarget: 1,
       quartT: 1, quartA: 1, quartM: 1, quartW: 1, verB: 1, verV: 1, verY: 1, kidsM: 1, kidsO: 1,
       // Rozepsaný rozpor (Arbitr) a spouštěč hádky — do stavu patří až hotový řádek.
       arbW: 1, arbAr: 1, arbOA: 1, arbOM: 1, fsT: 1, fsA: 1, fsWho: 1, svedW: 1, svedWho: 1, svedK: 1,

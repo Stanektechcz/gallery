@@ -759,4 +759,36 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertStringNotContainsString('se sem zapíše sám — z rychlého vstupu', $pocitac);
         $this->assertStringNotContainsString('Založit to pravidlo', $pocitac);
     }
+
+    /**
+     * Druhý člověk se přidá pozvánkou, ne kódem z veřejného souboru.
+     *
+     * Krok prvního spuštění se ptal na „kód z druhého telefonu" a jediná
+     * přijímaná hodnota byla `OBCODE = 'K7M2QF'` — konstanta ze souboru,
+     * který server podá komukoli, a nápověda pod kolonkou ji vypisovala.
+     * Spárování bylo dekorace: na server nešlo nic.
+     */
+    public function test_prvni_spusteni_zve_pozvankou(): void
+    {
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+
+        // Pozvánka jde na týž endpoint jako tlačítko v administraci.
+        $this->assertStringContainsString("GalerieApi.post('admin/users', { email: mail, role: 'host' })", $pocitac);
+
+        // Kód zůstává jen ukázce — do hodnot přihlášené dvojice se neposílá.
+        $this->assertStringContainsString('obKodem: this.ukazka()', $pocitac);
+        $this->assertStringContainsString('obPozvankou: ! this.ukazka()', $pocitac);
+        $this->assertStringContainsString("obPairCode: this.ukazka() ? OBCODE : ''", $pocitac);
+
+        // Krok nesmí blokovat prvního z dvojice, který zakládá galerii sám.
+        $this->assertStringContainsString('const pustDal = this.ukazka() ? paired : true;', $pocitac);
+        $this->assertStringContainsString('const ready = [true, pustDal,', $pocitac);
+
+        // Rozepsaná adresa se nesdílí na druhé zařízení, odeslaná pozvánka ano.
+        $this->assertStringContainsString('obInviteMail: 1', $pocitac);
+        $this->assertStringNotContainsString('obInviteSent: 1', $pocitac);
+
+        // Starý tvar: hotovost kroku podle konstanty z veřejného souboru.
+        $this->assertStringNotContainsString('const ready = [true, paired,', $pocitac);
+    }
 }
