@@ -804,6 +804,123 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2y. Dvacáté páté kolo — kompletní audit (24. 9.)
+
+Kolo bez oprav: tři průzkumy (bezpečnost a přístup, zapisovací cesty,
+plánovač a schéma) plus vlastní ověření každého nálezu proti zdroji.
+Opraveno bylo jediné — vlastní chyba z kola 2x (viz `139745dd`). Zbytek
+je popsaný tady, aby se o pořadí rozhodovalo podle důkazů, ne podle dojmu.
+
+### Kritické — kdokoli si může vzít cizí účet
+
+**Pozvánka na e-mail, který už účet má.** `AdminController::invite`
+(`:77-79`) odmítne e-mail jen tehdy, když už je členem **téhle** galerie.
+U cizího účtu `AdministraceZasahy::pozvi` (`:147-148`) přepíše jeho
+`invitation_token` a `invitation_accepted_at` vrátí na `null` — znovu
+natáhne pozvánku, kterou ten člověk přijal třeba před rokem — a
+`AdminController:85` pošle odkaz volajícímu. `InvitationController::accept`
+(`:45-52`) na něj nastaví nové heslo, potvrdí e-mail a přihlásí.
+Vlastník galerie si tak otevře cizí účet: deník se `visibility='private'`,
+trezor, finance. Původní majitel se nepřihlásí. Chybí jediná podmínka:
+účet existuje a pozvánku už přijal.
+
+**Vývoz fotek nesahá na prostor.** `GenerateExportJob:39-41` vybírá
+`MediaItem::where('primary_album_id', …)` a `whereIn('id', media_ids)`
+bez `gallery_space_id`; `SpaceContext` ve frontě ustupuje, protože tam
+není přihlášený uživatel, a `ExportController:23` ověřuje jen
+`'media_ids' => 'nullable|array'`. Kdo si vyžádá vývoz s cizími
+identifikátory, dostane ZIP s fotkami jiné dvojice.
+
+### Kritické — ztráta zápisu
+
+**Dvě `catch (\Throwable)` zahodí úpravu natrvalo.**
+`MediaVeStavu:50-53` (popisek, místo, datum, štítky, lidé) a
+`FinanceVeStavu:102-105` (zařazení transakce). Obojí se počítá jako rozdíl
+proti `$predtim`, což je stav **před** uložením patche — a stav se uloží
+i tak. Při dalším požadavku je tedy rozdíl prázdný a **zápis se už nikdy
+nezopakuje**. Jedna chyba databáze = úprava je pryč, odpověď je 200
+a obrazovka dál ukazuje nový popisek, který v knihovně není.
+
+**Sloupec je užší než `Vejde`.** MySQL má `'strict' => true`, vývoj běží
+na SQLite, která spolkne cokoli. Celý `PATCH /api/state` je jedna
+transakce (`StateController:119`), takže jediný dlouhý řetězec shodí
+uložení **všeho** — a `galerie-api.js:400-404` bere 500 jako výpadek sítě
+a zkouší to znovu s odstupem, týden, bez hlášky. 16 míst má `Vejde` širší
+než sloupec (mimo jiné všech devět `client_id` na 80 proti sloupci 64,
+`house_chores.icon` 60/40, `calendar_events.title` 255/160) a dvanáct
+posílá surový text klienta do sloupce s limitem — nejužší je
+`couple_story_chapters.year` **varchar(9)** u volného pole pro rok.
+
+**`couple_truths` má špatný klíč.** `MechanismyVeStavu::KLICE` (`:29-34`)
+tabulku nezná, takže `srovnej()` hledá `'couple_truths'`, zatímco prohlížeč
+posílá `truths`. Obě pojistky proti staré kopii tím padnou a mazání se
+utrhne: přidání jedné „dvě pravdy" smaže všechny, které mezitím zapsal
+partner. Stejný vzorec (`whereNotIn` + `whereIn`, oba vypadnou) je
+v devíti dalších převodnících; tam ho drží jen to, že klient `__odebrane`
+posílá — je to jeden řádek JavaScriptu od toho, aby byl živý.
+
+**Tři klíče se neukládají nikam.** `mlLoad`, `pauseLog`, `pausePlan` jsou
+v `SERVEROVE`, takže je `bezMechanismu()` ze stavu vyhodí, ale `zpracuj()`
+je nezná a `couple_pause` ani `couple_mental_load` v `app/` nikdo nezapisuje.
+Tlačítko „Pauza ukončena · zapsáno do historie" nezapíše nic.
+
+### Vysoké — jeden vidí data druhého
+
+- **Srdíčka jsou v databázi soukromá, ve stavu společná.** `favs` není
+  v `persistSkip()` počítače ani v `CoupleState`, takže jde do sdíleného
+  stavu — a klient ho čte **přednostně** před serverovým příznakem
+  uživatele. Partner vidí cizí oblíbené jako své.
+- **Mapa energie se přepisuje celá.** Počítač posílá řádky obou a
+  `KlidVeStavu:185-216` je oběma zapíše. Klik na stará data vrátí partnerovi
+  všechny buňky. Jinde v kódu je přesně tahle pojistka napsaná
+  (`FilmyVeStavu:319-327`).
+- **Správce (nejen vlastník) umí zrušit klíč vlastníka** a vydat si nový
+  (`AdminController:184-211`) — a v seznamu klíčů jsou i přihlašovací
+  tokeny zařízení, ne jen API klíče.
+- **`ZamekController::nastav()` je druhé dveře k PINu** bez tří pokusů,
+  bez blokace a bez zápisu do protokolu, které má `over()`.
+- **Sloučení duplicit vybírá fotku do koše podle pořadí v poli**, bez
+  druhého kritéria řazení; když se mezi vykreslením a klikem cokoli změní,
+  do koše jde jiná fotka.
+- **„Trvale odstraněno" je `->delete()` na modelu se `SoftDeletes`** —
+  soubory zmizí, řádek zůstane, noční úklid ho nevidí. Mazání z Disku
+  je uvnitř `catch`, takže při výpadku Disku originál v cloudu zůstane
+  a zpráva stejně řekne „trvale".
+- **Sloučení lidí smaže partnerovu soukromou poznámku** (`LideController:112-121`).
+
+### Plánovač a fronta
+
+- `queue:retry all` každých 10 minut resetuje pokusy a maže `failed_jobs`:
+  trvale padající úloha se točí donekonečna a `gallery:doctor` se o ní
+  nikdy nedozví. Systém tím nemá kam hlásit selhání.
+- `retry_after` čte `DB_QUEUE_RETRY_AFTER` (výchozí **90 s**), zatímco
+  `.env.example` nastavuje `QUEUE_RETRY_AFTER`, což nečte nic. Skoro každá
+  úloha má delší `$timeout`, takže se **spouští podruhé, než doběhne první**
+  — u vývozu (3600 s) si dvě kopie přepisují tentýž ZIP.
+- `UploadDriveChunkJob::dispatch()` slibuje `PendingDispatch` a vrací
+  `new static(...)` → `TypeError` při každém volání; po částech se na Disk
+  nenahrálo nikdy a každý pokus nechá na Googlu osiřelou relaci.
+- `queue:work` v plánovači nemá `--queue=`, takže bere jen `default` —
+  fronty `media`, `drive` a `high` (35 míst) zůstávají ležet.
+- **15 příkazů nespouští nic**, mimo jiné `galerie:pred-nasazenim`
+  (brána před nasazením, má vlastní test), `gallery:upravy-ze-stavu`
+  (dohnání starších úprav) a `gallery:billing-reminders`.
+- `deploy.sh` vynechává `chown` na `storage`, znovunačtení PHP-FPM
+  (s `validate_timestamps=0` se nový kód neprojeví) a tu bránu.
+- Všechny příkazy počítají čas v UTC: `gallery:daily-moment` míří na
+  9–21 h, ve skutečnosti běží 11–23 h pražského času; denní souhrn chodí
+  ve 21–23 h; připomínky cyklu v 10–12 h.
+
+### Schéma pro MySQL
+
+`migrate` na čisté MySQL spadne na čtvrté migraci:
+`albums.materialized_path` je `string(2048)` a indexovaný = 8192 bajtů
+proti limitu 3072. Totéž `push_subscriptions.endpoint` (`unique`).
+Devět sloupců `*_cover_media_id` nemá cizí klíč, takže po trvalém smazání
+fotky ukazují na nic.
+
+---
+
 ## 2x. Dvacáté čtvrté kolo — pozvánka místo kódu, alba podle id (24. 9.)
 
 - **Druhý z dvojice se přidá pozvánkou.** Krok prvního spuštění „Jsme dva"
