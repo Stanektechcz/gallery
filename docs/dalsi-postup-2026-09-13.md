@@ -804,6 +804,59 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ab. Dvacáté deváté kolo — co zbylo po auditu (24. 9.)
+
+Kolo bez zadaného seznamu: pokračování v nálezech, které audit vedl jako
+provozní. Ke každé opravě test, který bez ní spadne.
+
+### Sirotci po trvalém mazání — důsledek vlastní opravy
+
+Devět sloupců v osmi tabulkách míří na `media_items` bez cizího klíče: obálka
+alba, osoby, cesty, fotoknihy a stohu, druhá půlka živé fotky, výsledek
+nahrávání, doklad hosta a záznam o stažení.
+
+Dokud koš mazal měkce, řádek zůstával a odkaz pořád na něco ukazoval. Od
+chvíle, kdy se maže doopravdy (kolo 27), ukazuje do prázdna. Stojí za to si to
+přiznat: **tohle nezpůsobil audit, ale naše vlastní oprava** — a ukázalo se to
+teprve tím, že se na to někdo zeptal testem.
+
+Řeší to obsluha `deleting` na modelu, protože cizí klíče s `nullOnDelete()`
+těch devět sloupců nemá (`recipes.cover_media_id` je má, takže je to
+přehlédnutí). Týká se jen `forceDelete()`; při měkkém smazání se odkazy nechají.
+
+### `gallery:exif --clean-orphans`
+
+Bral každou položku bez `drive_file_id`, jejíž originál nenašel na místním
+disku, a rovnou ji odstranil natvrdo. Do té množiny ale patří i fotky zrcadlené
+do Dropboxu nebo OneDrivu (ty `drive_file_id` nemají z principu) a položky,
+které se právě nahrávají. Bez zkoušky nanečisto, bez potvrzení a bez zápisu do
+protokolu. Příkaz nikdo nespouští — to je jediný důvod, proč se to nestalo.
+
+Výchozí chování je teď výpis, maže se až s `--opravdu`. Při psaní testu vyšlo
+najevo, že `--clean-orphans` navíc pokračoval čtením EXIF z celé knihovny a že
+jediná fotka v Dropboxu ten průchod shodí výjimkou o nenastaveném disku.
+
+### Dny cesty
+
+`sort_order` se počítal jako `$datum->diffInDays($start)`. Carbon 3 vrací
+rozdíl **se znaménkem** a v tomhle pořadí je to `start − datum`, tedy záporné
+číslo pro každý den po tom prvním. Sloupec je `unsignedSmallInteger`: na MySQL
+spadne celá transakce a bod programu nejde přidat nikam než na první den.
+
+### Plánovač
+
+Patnáct úloh mělo `withoutOverlapping()` bez uvedené platnosti — výchozí zámek
+drží **1440 minut**. `releaseOnTerminationSignals` nepokryje SIGKILL ani výpadek
+proudu, takže po jednom takovém konci minutová úloha den neběží.
+
+A `runInBackground()` hlásí skutečný konec událostí
+`ScheduledBackgroundTaskFinished`, na kterou nikdo neposlouchal: `gallery:doctor`
+a vyprazdňování fronty se zapisovaly vždy jako úspěšné. Doktor mohl vracet
+FAILURE donekonečna a administrace o tom mlčela — přitom je to jediné místo,
+kde by se dvojice dozvěděla, že něco spadlo.
+
+---
+
 ## 2aa. Dvacáté sedmé kolo — šířky sloupců, soukromí, koš (24. 9.)
 
 Body 6–10 z pořadí v auditu 2y. Ke každému test, který bez opravy spadne.
