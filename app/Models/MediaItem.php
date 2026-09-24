@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToGallerySpace;
+use App\Support\Tabulky;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class MediaItem extends Model
@@ -107,9 +109,58 @@ class MediaItem extends Model
         ];
     }
 
+    /**
+     * Kdo na fotku ukazuje, aniž by to hlídal cizí klíč.
+     *
+     * Devět sloupců v osmi tabulkách — obálka alba, osoby, cesty, fotoknihy
+     * a stohu, druhá půlka živé fotky, výsledek nahrávání, doklad hosta
+     * a záznam o stažení. `recipes.cover_media_id` cizí klíč s `nullOnDelete()`
+     * má, takže tady chybí z přehlédnutí, ne ze záměru.
+     *
+     * @var array<string, string>
+     */
+    private const ODKAZY = [
+        'albums' => 'cover_media_id',
+        'people' => 'cover_media_id',
+        'trips' => 'cover_media_id',
+        'photo_books' => 'cover_media_id',
+        'media_stacks' => 'cover_media_id',
+        'upload_sessions' => 'resulting_media_id',
+        'guest_uploads' => 'media_item_id',
+        'share_access_logs' => 'media_item_id',
+        'media_items' => 'live_photo_pair_id',
+    ];
+
     protected static function booted(): void
     {
         static::creating(fn (MediaItem $m) => $m->uuid ??= (string) Str::uuid());
+
+        /*
+         * Po trvalém smazání nesmí nikde zbýt odkaz na tuhle fotku.
+         *
+         * Dokud koš mazal měkce, řádek v `media_items` zůstával a odkaz pořád
+         * na něco ukazoval. Od chvíle, kdy se maže doopravdy, by ukazoval do
+         * prázdna: album by si jako obálku vzalo nic a obrazovka by se ptala
+         * na fotku, která neexistuje.
+         *
+         * Cizí klíče s `nullOnDelete()` by to hlídaly v databázi, jenže těch
+         * devět sloupců je nemá. Tahle obsluha platí na každém ovladači
+         * a pokrývá i `forceDelete()`, kterým mažou obě obrazovky koše
+         * i noční úklid.
+         */
+        static::deleting(function (MediaItem $m) {
+            if (! $m->isForceDeleting()) {
+                return;
+            }
+
+            foreach (self::ODKAZY as $tabulka => $sloupec) {
+                if (! Tabulky::je($tabulka) || ! Tabulky::sloupec($tabulka, $sloupec)) {
+                    continue;
+                }
+
+                DB::table($tabulka)->where($sloupec, $m->id)->update([$sloupec => null]);
+            }
+        });
     }
 
     // Scopes
