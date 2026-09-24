@@ -4,11 +4,13 @@ namespace App\Jobs;
 
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Support\SpaceContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 
@@ -24,7 +26,36 @@ class GenerateExportJob implements ShouldQueue
         private readonly int $userId,
         private readonly array $options,
         private readonly string $jobId,
+        private readonly int $spaceId = 0,
     ) {}
+
+    /**
+     * Které fotky do vývozu patří.
+     *
+     * Filtr podle prostoru tu stojí i přesto, že ho kontroler ověřuje taky:
+     * úloha běží ve frontě, kde není přihlášený uživatel, takže globální
+     * rozsah `SpaceContext` ustupuje — a bez tohohle `where` vrátil vývoz
+     * s cizími identifikátory ZIP s fotkami jiné dvojice. Statická je proto,
+     * aby na ni šel napsat test bez fronty a bez souborů na disku.
+     *
+     * @param  array<string, mixed>  $options
+     * @return Collection<int, MediaItem>
+     */
+    public static function vybraneFotky(array $options, int $spaceId): Collection
+    {
+        if ($spaceId <= 0) {
+            return collect();
+        }
+
+        $dotaz = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $spaceId);
+
+        return match ($options['type'] ?? null) {
+            'album' => $dotaz->where('primary_album_id', $options['target_id'] ?? 0)->get(),
+            'selection' => $dotaz->whereIn('id', $options['media_ids'] ?? [])->get(),
+            default => collect(),
+        };
+    }
 
     public function handle(): void
     {
@@ -36,11 +67,7 @@ class GenerateExportJob implements ShouldQueue
                 return;
             }
 
-            $media = match ($this->options['type']) {
-                'album' => MediaItem::where('primary_album_id', $this->options['target_id'])->get(),
-                'selection' => MediaItem::whereIn('id', $this->options['media_ids'] ?? [])->get(),
-                default => collect(),
-            };
+            $media = self::vybraneFotky($this->options, $this->spaceId);
 
             $zipPath = storage_path("app/exports/{$this->jobId}.zip");
             @mkdir(dirname($zipPath), 0755, true);

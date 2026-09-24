@@ -2,8 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Controller;
 use App\Jobs\GenerateExportJob;
+use App\Models\Album;
+use App\Models\MediaItem;
+use App\Support\SpaceContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -11,6 +15,8 @@ use Illuminate\Support\Str;
 
 class ExportController extends Controller
 {
+    use UrcujePar;
+
     public function create(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -21,12 +27,16 @@ class ExportController extends Controller
             'include_xmp' => 'boolean',
             'preserve_structure' => 'boolean',
             'media_ids' => 'nullable|array',
+            'media_ids.*' => 'integer',
         ]);
+
+        $prostor = $this->parId($request);
+        $this->jenZProstoru($data, $prostor);
 
         // Dispatch export job
         $jobId = (string) Str::uuid();
         Cache::put("export_owner_{$jobId}", $request->user()->id, now()->addHour());
-        GenerateExportJob::dispatch($request->user()->id, $data, $jobId)->onQueue('default');
+        GenerateExportJob::dispatch($request->user()->id, $data, $jobId, $prostor)->onQueue('default');
 
         return response()->json(['job_id' => $jobId, 'status' => 'queued'], 202);
     }
@@ -53,5 +63,39 @@ class ExportController extends Controller
     private function ensureOwner(Request $request, string $id): void
     {
         abort_unless(hash_equals((string) $request->user()->id, (string) Cache::get("export_owner_{$id}", '')), 404);
+    }
+
+    /**
+     * Cizí identifikátor se odmítne hned, ne až ve frontě.
+     *
+     * Úloha filtruje podle prostoru sama (`GenerateExportJob::vybraneFotky`),
+     * takže cizí fotka by se do ZIPu nedostala. Ale kdo pošle cizí čísla,
+     * dostal by prázdný vývoz a žádné vysvětlení — a hlavně by se z rozdílu
+     * mezi „prázdný" a „něco v tom je" dalo číst, co v cizí galerii existuje.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function jenZProstoru(array $data, int $prostor): void
+    {
+        if (($data['type'] ?? null) === 'album' && ($data['target_id'] ?? null) !== null) {
+            abort_unless(Album::withoutGlobalScope(SpaceContext::SCOPE)
+                ->whereKey($data['target_id'])
+                ->where('gallery_space_id', $prostor)
+                ->exists(), 403, 'Tohle album do vaší galerie nepatří.');
+        }
+
+        $fotky = array_values(array_filter((array) ($data['media_ids'] ?? [])));
+
+        if ($fotky === []) {
+            return;
+        }
+
+        $vlastnich = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->whereIn('id', $fotky)
+            ->where('gallery_space_id', $prostor)
+            ->count();
+
+        abort_unless($vlastnich === count(array_unique($fotky)), 403,
+            'Ve výběru jsou fotky, které do vaší galerie nepatří.');
     }
 }
