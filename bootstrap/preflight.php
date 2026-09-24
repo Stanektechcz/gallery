@@ -22,7 +22,7 @@
 if (PHP_SAPI === 'cli' && PHP_VERSION_ID < 80401) {
     $skript = basename($_SERVER['argv'][0] ?? 'artisan');
 
-    fwrite(STDERR, "\n  Tohle PHP je staré: " . PHP_VERSION . ", potřeba je aspoň 8.4.1.\n\n");
+    fwrite(STDERR, "\n  Tohle PHP je staré: ".PHP_VERSION.", potřeba je aspoň 8.4.1.\n\n");
     fwrite(STDERR, "  Spustili jste `php {$skript}`, což vzalo systémové PHP. Aplikace běží\n");
     fwrite(STDERR, "  na jiné instalaci — použijte tu samou, jakou používá deploy.sh:\n\n");
     fwrite(STDERR, "      grep PHP_BIN deploy.sh      # ukáže cestu\n");
