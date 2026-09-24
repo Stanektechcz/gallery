@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
 use App\Services\Billing\EntitlementService;
+use App\Services\Notifications\OdberyPush;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -102,7 +103,9 @@ class AdministraceZasahy
         if (! $aktivni) {
             // Odebraný přístup musí platit hned. Bez zrušení tokenů by se telefon
             // s uloženým přihlášením dostal dovnitř dál — a to je smysl akce.
+            // Stejně tak upozornění: jejich text je vidět i na zamčeném telefonu.
             $clen->tokens()->delete();
+            OdberyPush::zrusVse($clen);
         }
 
         $this->zapis('admin.access', $clen, $aktivni

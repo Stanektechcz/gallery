@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Services\Notifications\OdberyPush;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -41,8 +42,10 @@ class SecuritySessionController extends Controller
 
         $sezeni = DB::table('sessions')->where('user_id', $user->id)->where('id', '!=', $request->session()->getId())->delete();
         $klice = $user->tokens()->delete();
+        // A upozornění do telefonu — odhlášené zařízení by jinak zvonilo dál.
+        $odbery = OdberyPush::zrusVse($user, $request->input('endpoint'));
 
-        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice]);
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'odbery' => $odbery]);
 
         return response()->json(['status' => 'revoked_others']);
     }

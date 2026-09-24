@@ -3,6 +3,7 @@
 namespace App\Services\Notifications;
 
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Provoz\PauzaDvojice;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -33,6 +34,13 @@ class WebPushService
     public function sendToUser(User $user, array $payload): int
     {
         if (! $this->configured() || ! Schema::hasTable('push_subscriptions')) {
+            return 0;
+        }
+
+        // Kdo do galerie nesmí (odebraný přístup, host), tomu upozornění o obsahu
+        // dvojice neodejde — ani když mu odběr zůstal z doby, kdy ještě směl.
+        // Stejné pravidlo jako při přihlášení a v `dvojice`, ne vlastní výklad.
+        if (app(PristupDoGalerie::class)->proc($user) !== null) {
             return 0;
         }
 

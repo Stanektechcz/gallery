@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Services\Notifications\OdberyPush;
 use App\Services\Provoz\PokusyOvereni;
 use App\Support\Tabulky;
 use Illuminate\Http\JsonResponse;
@@ -236,7 +237,12 @@ class ZamekController extends Controller
             ->when($tohle?->id, fn ($q, $id) => $q->where('id', '!=', $id))
             ->delete();
 
-        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice]);
+        // Odhlášené zařízení nesmí dál dostávat upozornění. Který odběr patří
+        // tomuhle zařízení, ví jen klient: pošle-li jeho adresu, zůstane; jinak
+        // se ruší všechny a tohle zařízení si odběr obnoví samo.
+        $odbery = OdberyPush::zrusVse($clovek, $request->input('endpoint'));
+
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'odbery' => $odbery]);
 
         return response()->json([
             'sezeni' => $sezeni,

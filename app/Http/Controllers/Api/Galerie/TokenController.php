@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\PristupDoGalerie;
+use App\Services\Notifications\OdberyPush;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -99,9 +100,17 @@ class TokenController extends Controller
      * vedle tokenu může existovat i přihlášené sezení — a to token nezneplatní.
      * Bez druhého kroku by se člověk odhlásil, dostal by potvrzení a aplikace by
      * ho dál pouštěla dovnitř.
+     *
+     * Pošle-li klient adresu odběru upozornění (`endpoint`), zruší se i ten.
+     * Jinak odhlášený telefon dál zvonil — i když se na něm mezitím přihlásil
+     * někdo jiný. Starý klient adresu neposílá a odhlásí se jako dřív.
      */
     public function destroy(Request $request): JsonResponse
     {
+        if ($request->user() !== null) {
+            OdberyPush::zrus($request->user(), $request->input('endpoint'));
+        }
+
         $request->user()?->currentAccessToken()?->delete();
 
         if ($request->hasSession()) {
