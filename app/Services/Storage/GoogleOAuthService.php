@@ -26,10 +26,16 @@ class GoogleOAuthService
      * Generate the OAuth authorization URL.
      * Only forces consent when truly needed.
      */
-    public function getAuthorizationUrl(bool $forceConsent = false): string
+    public function getAuthorizationUrl(bool $forceConsent = false, ?string $state = null): string
     {
         if ($forceConsent) {
             $this->client->setPrompt('consent');
+        }
+
+        // Náhodný stav ze sezení (viz GoogleOAuthController::redirect()). Bez něj
+        // šlo oběti podstrčit kód cizího Disku a fotky by odtekly tam.
+        if ($state !== null) {
+            $this->client->setState($state);
         }
 
         return $this->client->createAuthUrl();

@@ -11,11 +11,15 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
 class GoogleOAuthController extends Controller
 {
+    /** Klíč sezení s náhodným stavem OAuth — viz `redirect()` a `callback()`. */
+    private const STATE_KEY = 'oauth.google.state';
+
     public function __construct(private readonly GoogleOAuthService $oauthService) {}
 
     /**
@@ -56,7 +60,12 @@ class GoogleOAuthController extends Controller
         // Force consent only if no refresh token or explicitly requested
         $forceConsent = $request->boolean('force') || ! $connection?->getRefreshToken();
 
-        $url = $this->oauthService->getAuthorizationUrl($forceConsent);
+        // Náhodný stav v sezení, ověřený při návratu — stejně jako u Discordu
+        // a Dropboxu. Viz `callback()`.
+        $state = Str::random(40);
+        $request->session()->put(self::STATE_KEY, $state);
+
+        $url = $this->oauthService->getAuthorizationUrl($forceConsent, $state);
 
         return redirect()->away($url);
     }
@@ -72,6 +81,25 @@ class GoogleOAuthController extends Controller
 
             return redirect()->route('settings.storage.google')
                 ->with('error', 'Autorizace Google byla zrušena: '.$request->input('error_description', 'neznámá chyba'));
+        }
+
+        /*
+         * Návrat patří k přesměrování, které začalo tady.
+         *
+         * Bez toho šlo přihlášené oběti podstrčit odkaz s kódem od útočníkova
+         * Googlu: server by kód vyměnil, uložil **jeho** Disk k jejímu účtu
+         * a hned zařadil synchronizaci všech jejích galerií — celá knihovna
+         * by odtekla na cizí Disk. Stav se z sezení vytahuje (`pull`), takže
+         * platí jednou, a porovnává se v konstantním čase.
+         */
+        $ocekavany = $request->session()->pull(self::STATE_KEY);
+        $prisly = $request->query('state');
+
+        if (! is_string($ocekavany) || ! is_string($prisly) || ! hash_equals($ocekavany, $prisly)) {
+            Log::warning('Google OAuth callback bez platného state', ['user_id' => $request->user()->id]);
+
+            return redirect()->route('settings.storage.google')
+                ->with('error', 'Připojení Google Disku nepatří k tomuhle přihlášení. Spusťte ho prosím znovu z nastavení.');
         }
 
         $code = $request->input('code');
