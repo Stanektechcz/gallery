@@ -56,6 +56,28 @@ class ZamekTest extends TestCase
         $this->postJson('/api/zamek/overit', ['kod' => '240613'])->assertStatus(409);
     }
 
+    /**
+     * Nastavení kódu má tytéž obrany jako ověření.
+     *
+     * `over()` má tři pokusy, blokaci a zápis do protokolu; `nastav()`
+     * nemělo nic z toho, jen plochý limit požadavků. Kdo zvedl odemčený
+     * telefon, mohl tudy hádat heslo do galerie donekonečna — a v protokolu,
+     * který obrazovka zámku slibuje, po tom nezbyla stopa.
+     */
+    public function test_hadani_hesla_pri_nastaveni_kodu_se_zablokuje(): void
+    {
+        // Stejné počítání jako u odemykání: třetí chyba už zavírá.
+        $this->postJson('/api/zamek', ['kod' => '240613', 'heslo' => 'špatné'])->assertStatus(422);
+        $this->postJson('/api/zamek', ['kod' => '240613', 'heslo' => 'špatné2'])->assertStatus(422);
+        $this->postJson('/api/zamek', ['kod' => '240613', 'heslo' => 'špatné3'])->assertStatus(429);
+
+        // A ani se správným heslem to hned po blokaci neprojde.
+        $this->postJson('/api/zamek', ['kod' => '240613', 'heslo' => 'heslo-adriana'])->assertStatus(429);
+
+        $this->assertGreaterThan(0, DB::table('audit_logs')->where('action', 'app_lock.set.failed')->count(),
+            'Neúspěšný pokus o nastavení kódu musí být v protokolu.');
+    }
+
     /** První kód se zakládá heslem do galerie. */
     public function test_prvni_kod_chce_heslo(): void
     {

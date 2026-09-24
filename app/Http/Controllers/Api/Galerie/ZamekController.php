@@ -79,12 +79,36 @@ class ZamekController extends Controller
 
         $clovek = $request->user();
 
-        if ($clovek->app_lock_pin) {
-            if (! Hash::check((string) ($data['stary'] ?? ''), $clovek->app_lock_pin)) {
-                return response()->json(['chyba' => 'Starý kód nesouhlasí.'], 422);
+        /*
+         * Tytéž obrany jako u ověření kódu.
+         *
+         * `over()` má tři pokusy, blokaci i zápis do protokolu; tahle cesta
+         * neměla nic z toho, jen plochý limit požadavků. Přitom se tu hádá
+         * buď starý kód, nebo rovnou **heslo do galerie** — kdo zvedl
+         * odemčený telefon, mohl zkoušet donekonečna a v protokolu, který
+         * obrazovka zámku slibuje, po tom nezbyla stopa.
+         */
+        if (($blok = PokusyOvereni::blokDo($clovek, self::DRUH)) > 0) {
+            return response()->json(['chyba' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.'], 429);
+        }
+
+        $sedi = $clovek->app_lock_pin
+            ? Hash::check((string) ($data['stary'] ?? ''), $clovek->app_lock_pin)
+            : Hash::check((string) ($data['heslo'] ?? ''), (string) $clovek->password);
+
+        if (! $sedi) {
+            $chyba = PokusyOvereni::chyba($clovek, self::DRUH);
+            AuditLog::record('app_lock.set.failed', null, ['pokus' => $chyba['pokusu']]);
+
+            if ($chyba['blok'] > 0) {
+                return response()->json([
+                    'chyba' => 'Třikrát to nesedělo. Zkuste to za '.$chyba['blok'].' s.',
+                ], 429);
             }
-        } elseif (! Hash::check((string) ($data['heslo'] ?? ''), (string) $clovek->password)) {
-            return response()->json(['chyba' => 'Heslo do galerie nesouhlasí.'], 422);
+
+            return response()->json([
+                'chyba' => $clovek->app_lock_pin ? 'Starý kód nesouhlasí.' : 'Heslo do galerie nesouhlasí.',
+            ], 422);
         }
 
         // Obnovovací kód se čte nahlas do telefonu a opisuje z papíru, takže
