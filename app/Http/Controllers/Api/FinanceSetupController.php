@@ -22,6 +22,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\Rule;
 
 /**
  * Správa účtů, cest, kategorií a partnerů.
@@ -841,7 +842,8 @@ class FinanceSetupController extends Controller
             'starts_on' => 'required|date',
             'ends_on' => 'nullable|date|after_or_equal:starts_on',
             'split' => 'nullable|in:equal,first,second',
-            'payer_partner_id' => 'nullable|integer',
+            // Zapíše se do každé transakce, kterou předpis kdy vytvoří.
+            'payer_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
         ]);
 
         $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $data['wallet_uuid'])->firstOrFail();
@@ -974,7 +976,7 @@ class FinanceSetupController extends Controller
             'type' => 'sometimes|in:expense,income',
             'category_uuid' => 'nullable|uuid',
             'wallet_uuid' => 'nullable|uuid',
-            'payer_partner_id' => 'nullable|integer',
+            'payer_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
             'split' => 'nullable|in:equal,first,second',
         ]);
 

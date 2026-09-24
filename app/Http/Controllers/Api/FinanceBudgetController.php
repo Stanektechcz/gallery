@@ -19,6 +19,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\Rule;
 
 /**
  * Rozpočty modulu — limity nad knihou.
@@ -319,7 +320,9 @@ class FinanceBudgetController extends Controller
             'ends_on' => 'nullable|date|after_or_equal:starts_on',
             'amount' => "{$pravidlo}|numeric|min:0",
             'reserve_amount' => 'nullable|numeric|min:0',
-            'finance_project_id' => 'nullable|integer',
+            // Obrazovka posílá `trip_uuid` (níž); tohle pole bez ověření
+            // přijalo i cestu jiné galerie.
+            'finance_project_id' => ['nullable', 'integer', Rule::exists('finance_projects', 'id')->where('gallery_space_id', $this->space($request)->id)],
             'alert_thresholds' => 'nullable|string|max:40',
             'income_adds' => 'sometimes|boolean',
             'auto_balance' => 'sometimes|boolean',

@@ -13,6 +13,7 @@ use App\Models\Wallet;
 use App\Services\Finance\FinanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 /**
@@ -145,8 +146,10 @@ class FinanceEntryController extends Controller
             'amount_to' => 'nullable|numeric',
             'category' => 'nullable|uuid',
             'trip' => 'nullable|uuid',
-            'payer_partner_id' => 'nullable|integer',
-            'beneficiary_partner_id' => 'nullable|integer',
+            // Partner jen z téhle galerie; `split.*.partner_id` se ověřoval
+            // v `ulozPodily()`, tyhle dva se zapsaly, ať byly čí chtěly.
+            'payer_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
+            'beneficiary_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
             'fee_amount' => 'nullable|numeric|min:0',
             'fee_currency' => 'nullable|string|size:3',
             'fee_included' => 'sometimes|boolean',

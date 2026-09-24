@@ -26,7 +26,7 @@ class AlbumStoryController extends Controller
             ->get();
 
         // Resolve media for photo/video blocks
-        $enriched = $blocks->map(fn ($b) => $this->enrichBlock($b));
+        $enriched = $blocks->map(fn ($b) => $this->enrichBlock($b, $album->gallery_space_id));
 
         return response()->json($enriched->values());
     }
@@ -58,7 +58,7 @@ class AlbumStoryController extends Controller
             'updated_at' => now(),
         ]);
 
-        return response()->json($this->enrichBlock(DB::table('album_story_blocks')->find($id)), 201);
+        return response()->json($this->enrichBlock(DB::table('album_story_blocks')->find($id), $album->gallery_space_id), 201);
     }
 
     /**
@@ -86,7 +86,17 @@ class AlbumStoryController extends Controller
             ->where('album_id', $album->id)
             ->update($update);
 
-        return response()->json($this->enrichBlock(DB::table('album_story_blocks')->find($blockId)));
+        /*
+         * Zpátky jen blok z tohohle alba.
+         *
+         * Zápis byl omezený na album, čtení odpovědi ne: `find($blockId)` vrátil
+         * blok odkudkoli. Čísla jdou po sobě, takže prázdný požadavek na vlastní
+         * album s cizím číslem vrátil text cizího příběhu.
+         */
+        $blok = DB::table('album_story_blocks')->where('id', $blockId)->where('album_id', $album->id)->first();
+        abort_unless($blok, 404);
+
+        return response()->json($this->enrichBlock($blok, $album->gallery_space_id));
     }
 
     /**
@@ -152,7 +162,14 @@ class AlbumStoryController extends Controller
             ->firstOrFail();
     }
 
-    private function enrichBlock(object $block): array
+    /**
+     * Blok i s fotkami — jen z galerie alba.
+     *
+     * `content.media_uuids` je obsah od klienta a nic ho neověřuje. Globální
+     * rozsah by cizí fotku schoval jen tomu, kdo do její galerie nepatří;
+     * člen dvou galerií by v příběhu jednoho alba viděl fotky druhého.
+     */
+    private function enrichBlock(object $block, int $galerie): array
     {
         $content = is_string($block->content)
             ? (json_decode($block->content, true) ?? [])
@@ -169,6 +186,7 @@ class AlbumStoryController extends Controller
         // Resolve photo block media
         if ($block->type === 'photo' && ! empty($content['media_uuids'])) {
             $items = MediaItem::with('variants')
+                ->where('gallery_space_id', $galerie)
                 ->whereIn('uuid', $content['media_uuids'])
                 ->get();
 
@@ -182,6 +200,7 @@ class AlbumStoryController extends Controller
         // Resolve video block media
         if ($block->type === 'video' && ! empty($content['media_uuid'])) {
             $item = MediaItem::with('variants')
+                ->where('gallery_space_id', $galerie)
                 ->where('uuid', $content['media_uuid'])
                 ->first();
             if ($item) {

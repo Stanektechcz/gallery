@@ -132,9 +132,9 @@ class SharedTodoController extends Controller
         $todo = $this->todo($request, $uuid);
         $previousAssignee = $todo->assigned_to;
         $data = $this->validatedTask($request, true);
-        if (array_key_exists('assigned_to', $data) && $data['assigned_to'] !== null) {
-            $this->member($todo->gallery_space_id, (int) $data['assigned_to']);
-        }
+        // Stejná kontrola odkazů jako při založení — úprava dřív zapsala
+        // `trip_id` jakékoli cesty, i z jiné galerie.
+        $this->validateLinks(GallerySpace::findOrFail($todo->gallery_space_id), $data);
         if (! empty($data['list_uuid'])) {
             $data['list_id'] = $this->listInSpace(GallerySpace::findOrFail($todo->gallery_space_id), $data['list_uuid'])->id;
         }
