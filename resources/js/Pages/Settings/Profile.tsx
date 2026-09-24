@@ -3,6 +3,7 @@ import SecurityActivity from '@/Components/SecurityActivity';
 import TwoFactorSetup from '@/Components/TwoFactorSetup';
 import AvatarEditor from '@/Components/AvatarEditor';
 import AppLayout from '@/Layouts/AppLayout';
+import { popisChyby } from '@/lib/popisChyby';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import { KeyRound, Loader2, Laptop, LogOut, ShieldCheck, UserRound } from 'lucide-react';
@@ -75,15 +76,25 @@ export default function ProfileSettings({ sessions = [] }: { sessions?: Session[
     };
 
     const revoke = async (id: string) => {
-        await axios.delete(`/settings/security/sessions/${id}`);
-        setItems(current => current.filter(item => item.id !== id));
-        setNotice('Zařízení bylo odhlášeno.');
+        setError(''); setNotice('');
+        try {
+            await axios.delete(`/settings/security/sessions/${id}`);
+            setItems(current => current.filter(item => item.id !== id));
+            setNotice('Zařízení bylo odhlášeno.');
+        } catch (reason) {
+            setError(popisChyby(reason, 'Zařízení se nepodařilo odhlásit.'));
+        }
     };
 
     const revokeOthers = async () => {
-        await axios.post('/settings/security/sessions/revoke-others');
-        setItems(current => current.filter(item => item.is_current));
-        setNotice('Všechna ostatní zařízení byla odhlášena.');
+        setError(''); setNotice('');
+        try {
+            await axios.post('/settings/security/sessions/revoke-others');
+            setItems(current => current.filter(item => item.is_current));
+            setNotice('Všechna ostatní zařízení byla odhlášena.');
+        } catch (reason) {
+            setError(popisChyby(reason, 'Ostatní zařízení se nepodařilo odhlásit.'));
+        }
     };
 
     const emailChanged = profile !== null && form.email !== profile.email;

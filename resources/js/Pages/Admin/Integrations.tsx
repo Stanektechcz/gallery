@@ -1,5 +1,6 @@
 import BankConnectionManager from '@/Components/Banking/BankConnectionManager';
 import AppLayout from '@/Layouts/AppLayout';
+import { popisChyby } from '@/lib/popisChyby';
 import { Head, Link } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -102,8 +103,8 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
             mergeItem(item.provider, response.data);
             setValues(current => ({ ...current, [item.provider]: {} }));
             setNotice({ tone: 'success', text: `${item.name}: nastavení bylo bezpečně uloženo${response.data.is_enabled ? ' a integrace je aktivní' : ''}.` });
-        } catch (error: any) {
-            setNotice({ tone: 'error', text: error.response?.data?.message ?? 'Nastavení se nepodařilo uložit.' });
+        } catch (error) {
+            setNotice({ tone: 'error', text: popisChyby(error, 'Nastavení se nepodařilo uložit.') });
         } finally {
             setBusy(null);
         }
@@ -116,10 +117,16 @@ export default function Integrations({ providers, gallerySpaceId }: { providers:
             const response = await axios.post(`/admin/integrations/${item.provider}/test`);
             mergeItem(item.provider, { last_status: 'ok', last_tested_at: new Date().toISOString(), last_error: null });
             setNotice({ tone: 'success', text: response.data.message ?? `${item.name}: připojení funguje.` });
-        } catch (error: any) {
-            const message = error.response?.data?.message ?? 'Připojení se nepodařilo ověřit.';
-            mergeItem(item.provider, { last_status: 'failed', last_tested_at: new Date().toISOString(), last_error: message });
-            setNotice({ tone: 'error', text: message });
+        } catch (error) {
+            // Neúspěšný test vrací server jako 422 se `status: 'failed'` a vlastní větou —
+            // jen ta patří k integraci. Vypršelé přihlášení o připojení nic neříká.
+            const result = axios.isAxiosError(error) && error.response?.data?.status === 'failed'
+                ? String(error.response.data.message ?? '')
+                : '';
+            if (result) {
+                mergeItem(item.provider, { last_status: 'failed', last_tested_at: new Date().toISOString(), last_error: result });
+            }
+            setNotice({ tone: 'error', text: result || popisChyby(error, 'Připojení se nepodařilo ověřit.') });
         } finally {
             setBusy(null);
         }

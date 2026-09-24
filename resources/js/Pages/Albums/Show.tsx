@@ -1,6 +1,8 @@
 // `media` je v tomhle souboru už stránkovaný seznam z API, tak pod jiným jménem.
 import { media as pocetMedii, pocet, polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
+import { popisChyby } from '@/lib/popisChyby';
+import { hlaska } from '@/Components/Hlasky';
 import AlbumEvent from '@/Components/AlbumEvent';
 import AlbumCurationAssistant from '@/Components/AlbumCurationAssistant';
 import AlbumSettings from '@/Components/AlbumSettings';
@@ -102,6 +104,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
         location_country_code: '',
     });
     const [savingLocation, setSavingLocation] = useState(false);
+    const [locationError, setLocationError] = useState('');
     const galleryItems = useMemo(() => media.data.map(item => {
         const thumbnail = item.variants?.find(v => v.type === 'thumbnail')
             ?? item.variants?.find(v => v.type === 'video_poster');
@@ -128,6 +131,8 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
         try {
             await axios.delete(`/albums/${album.uuid}`);
             router.visit('/albums');
+        } catch (problem) {
+            hlaska(popisChyby(problem, 'Album se nepodařilo smazat.'), 'chyba');
         } finally { setDeleting(false); }
     };
 
@@ -135,6 +140,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
 
     const saveLocation = async () => {
         setSavingLocation(true);
+        setLocationError('');
         try {
             await axios.patch(`/albums/${album.uuid}`, {
                 location_name:    locationVal.location_name || null,
@@ -144,6 +150,9 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
             });
             setShowLocationEdit(false);
             router.reload({ only: ['album'] });
+        } catch (problem) {
+            // Editor zůstane otevřený, ať jde chybnou souřadnici hned opravit.
+            setLocationError(popisChyby(problem, 'Místo alba se nepodařilo uložit.'));
         } finally { setSavingLocation(false); }
     };
 
@@ -225,6 +234,7 @@ export default function AlbumShow({ album, breadcrumb, children, media, filters:
                                     value={locationVal}
                                     onChange={setLocationVal}
                                 />
+                                {locationError && <p role="alert" className="text-xs text-red-400">{locationError}</p>}
                                 <div className="flex gap-2">
                                     <button onClick={saveLocation} disabled={savingLocation}
                                         className="text-xs bg-[var(--color-accent)] text-[var(--color-accent-contrast)] px-3 py-1.5 rounded-lg hover:opacity-90 disabled:opacity-40 flex items-center gap-1.5">

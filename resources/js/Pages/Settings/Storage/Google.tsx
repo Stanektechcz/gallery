@@ -1,4 +1,5 @@
 import AppLayout from '@/Layouts/AppLayout';
+import { popisChyby } from '@/lib/popisChyby';
 import { Head, router } from '@inertiajs/react';
 import axios from 'axios';
 import {
@@ -51,6 +52,7 @@ function formatBytes(bytes: number | null): string {
 export default function GoogleStorageSettings({ connection, client_configured }: Props) {
     const [testing, setTesting] = useState(false);
     const [testResults, setTestResults] = useState<Record<string, any> | null>(null);
+    const [testError, setTestError] = useState('');
     const [disconnecting, setDisconnecting] = useState(false);
     const [syncing, setSyncing] = useState(false);
 
@@ -61,11 +63,13 @@ export default function GoogleStorageSettings({ connection, client_configured }:
     async function runTest() {
         setTesting(true);
         setTestResults(null);
+        setTestError('');
         try {
             const res = await axios.post('/settings/storage/google/test');
             setTestResults(res.data.tests);
-        } catch {
-            setTestResults({ error: { pass: false, detail: 'Test request failed' } });
+        } catch (e) {
+            // Samostatně, ne jako řádek výsledků: ten má šířku na „OK" a delší důvod by uřízl.
+            setTestError(popisChyby(e, 'Test Google Drive se nepodařilo spustit.'));
         } finally {
             setTesting(false);
         }
@@ -205,6 +209,10 @@ export default function GoogleStorageSettings({ connection, client_configured }:
                         )}
                     </div>
                 </div>
+
+                {testError && (
+                    <p role="alert" className="mb-6 rounded-xl border border-red-400/25 bg-red-500/10 p-3 text-xs text-red-300">{testError}</p>
+                )}
 
                 {/* Test results */}
                 {testResults && (
