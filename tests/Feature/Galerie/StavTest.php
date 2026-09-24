@@ -75,6 +75,35 @@ class StavTest extends TestCase
     }
 
     /**
+     * Střet se pozná i u klíče, který si vede tabulka.
+     *
+     * `rev_keys` zapisoval až `applyPatch()`, jenže ten dostane patch teprve
+     * potom, co z něj každý převodník vytáhl své klíče. U všeho, co má
+     * vlastní tabulku — papírová záloha, pravidla, rozhodnutí, domácnost,
+     * kalendář, mapa energie, přání — tedy revize nikdy nevznikla a `strety()`
+     * neměl co porovnat: vyhrál poslední zápis a nikomu se nic neřeklo.
+     *
+     * Přitom je to přesně ten případ, na který detekce střetů je: karta
+     * otevřená přes víkend a partner, který mezitím něco změnil.
+     */
+    public function test_strety_se_poznaji_i_u_klice_z_tabulky(): void
+    {
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['paper' => [
+                ['id' => 'p1', 'label' => 'Heslo k routeru', 'value' => 'v obálce'],
+            ]]])->assertOk();
+
+        // Makinka staví na stavu, jaký byl před Adrianovým zápisem.
+        $this->actingAs($this->maki)
+            ->patchJson('/api/state', ['data' => ['paper' => [
+                ['id' => 'p1', 'label' => 'Heslo k routeru', 'value' => 've šuplíku'],
+            ]], 'rev' => 0])
+            ->assertStatus(409)
+            ->assertJsonPath('conflict', true)
+            ->assertJsonPath('strety', ['paper']);
+    }
+
+    /**
      * Zápis do téhož klíče postavený na starší verzi se neaplikuje.
      *
      * Bez signálu leží patch ve frontě klidně dny. Kdyby se pak přepsal aktuální

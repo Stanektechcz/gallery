@@ -123,6 +123,9 @@ class StateController extends Controller
 
             $clientRev = $validated['rev'] ?? null;
             $patch = $validated['data'];
+            // Zapamatováno hned tady: převodníky si cestou své klíče z patche
+            // vezmou, ale revizi pro ně zapsat musíme (viz `applyPatch`).
+            $poslaneKlice = array_keys($patch);
 
             /*
              * Střet se řeší po klíčích, ne po celém dokumentu.
@@ -502,7 +505,10 @@ class StateController extends Controller
             $state->zapomenFilmy(self::SERVEROVE_SEZNAMY);
             // Rozdíl pro převodníky (co prohlížeč odebral) do stavu nepatří.
             unset($patch[OdebraneVStavu::KLIC], $patch[OdebraneVStavu::ZMENENE]);
-            $state->applyPatch($this->sPuvodnimTvarem($patch, $request));
+            // Klíče tak, jak přišly — i ty, které si cestou vzaly převodníky.
+            // Bez nich by pro klíče vedené v tabulkách nevznikla revize
+            // a jejich střet by se nedal poznat (viz `CoupleState::applyPatch`).
+            $state->applyPatch($this->sPuvodnimTvarem($patch, $request), $poslaneKlice);
             // Až po uložení stavu: dluh se vede proti tomu, co v něm leží.
             $state->zapisDluh($dluh);
 

@@ -236,8 +236,22 @@ class CoupleState extends Model
         return true;
     }
 
-    /** Sloučení částečného patche po klíčích. Hodnoty se nahrazují celé. */
-    public function applyPatch(array $patch): void
+    /**
+     * Sloučení částečného patche po klíčích. Hodnoty se nahrazují celé.
+     *
+     * `$poslaneKlice` jsou klíče tak, jak přišly od prohlížeče — **před** tím,
+     * než z patche každý převodník vytáhl ty své. Revize se totiž musí zapsat
+     * i pro ně, jinak `strety()` nemá co porovnat.
+     *
+     * Bez toho byla detekce střetů u všeho, co má vlastní tabulku (papírová
+     * záloha, pravidla, rozhodnutí, domácnost, kalendář, mapa energie, přání…)
+     * mrtvá: vyhrál poslední zápis a nikomu se nic neřeklo. Přitom je to
+     * přesně ten případ, na který ta detekce je.
+     *
+     * @param  array<string, mixed>  $patch
+     * @param  list<string>  $poslaneKlice
+     */
+    public function applyPatch(array $patch, array $poslaneKlice = []): void
     {
         // Surově: klíče, které patch nemění, se uloží přesně tak, jak ležely.
         $open = $this->surovy('data');
@@ -270,6 +284,21 @@ class CoupleState extends Model
             // U kterého klíče se to stalo. Bez toho se nedá poznat střet
             // o tutéž věc od změny něčeho jiného.
             $revize[$key] = $nova;
+        }
+
+        /*
+         * Revize i pro klíče, které si z patche vzaly převodníky.
+         *
+         * Ty se sem nedostanou (`bez*()` je odstraní), takže by pro ně nikdy
+         * nevznikl záznam v `rev_keys` a střet by se u nich nedal poznat.
+         * Hesla a interní klíče se nepočítají — ty se neukládají vůbec.
+         */
+        foreach ($poslaneKlice as $klic) {
+            if (in_array($klic, self::NEUKLADAT, true) || in_array($klic, self::INTERNI, true)) {
+                continue;
+            }
+
+            $revize[$klic] = $nova;
         }
 
         $this->zapisData($open, array_keys($patch));
