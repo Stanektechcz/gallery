@@ -804,6 +804,75 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2af. Třicáté třetí kolo — co je vidět zvenku a kdo je provozovatel (24. 9.)
+
+Dokončený průchod starého API (zbylých 49 kontrolerů) a veřejné cesty bez
+přihlášení. Každý nález je ověřený testem, který bez opravy spadne.
+
+### Kritické
+
+**Připojení Google Disku šlo podstrčit.** Přesměrování ke Googlu neneslo
+`state` a zpětné volání žádný nekontrolovalo — jako jediné z OAuth v aplikaci
+(Discord, Dropbox i OneDrive ho mají). Útočník si prošel souhlasem se svým
+Diskem, nechal si nevyužitý `code` a podstrčil přihlášené oběti odkaz
+`/oauth/google/callback?code=…` (SameSite=lax cookie při otevření odkazu
+nese). Server kód vyměnil, uložil **útočníkův** Disk k účtu oběti a hned
+zařadil synchronizaci všech jejích galerií. Teď náhodný stav v sezení,
+jednorázový, porovnaný v konstantním čase.
+
+**Vlastník galerie byl zároveň provozovatel instalace.** `users.role = owner`
+má každý, kdo si založí galerii — a po otevření registrace
+(`GALLERY_REGISTRATION_OPEN`) každý zákazník. Tahle role otvírala tržby všech
+galerií, změnu tarifů a cen pro všechny, seznam všech účtů, klíče integrací
+platformy a spouštění i pozastavování úloh, které běží pro všechny (to smel
+i editor). Dnes spící díra — registrace je zavřená —, ale jejím otevřením by
+se z každého zákazníka stal provozovatel. Nově `User::isOperator()` podle
+`GALLERY_OPERATOR_EMAILS`, bez nastavení podle `GALLERY_OWNER_EMAIL`
+(účet vlastníka má po migraci `sjednotit_ucty_dvojice` právě tuhle adresu,
+takže se dnešní provoz nemění). Pozvánka do vlastní galerie zůstává vlastníkovi
+— hlídá limit členů podle tarifu.
+
+> **Při nasazení ověřit:** že se vlastník přihlašuje adresou z
+> `GALLERY_OWNER_EMAIL`, případně nastavit `GALLERY_OPERATOR_EMAILS`. Jinak
+> přijde o `/admin` a o ruční spouštění úloh.
+
+### Vysoké
+
+* **Odkaz „bez data a místa" vydával polohu.** Dialog to slibuje, `hide_gps`
+  ale nikdo nečetl: stažení vydalo originál i s EXIF (souřadnice obvykle
+  domova). Teď se stahuje zmenšenina — ta vzniká otočená a bez metadat;
+  EXIF z originálu smazat nejde, je v něm i otočení snímku. Video se u takového
+  odkazu nestahuje, stránka originál nenabídne ani jako náhled.
+* **Přehled aktivity** (`/activity`) filtroval jen podle lidí, ne podle
+  galerie — kdo je ve dvou, tomu partner viděl jména souborů z té druhé.
+* **Nahrávky od hostů** (jediný zápis na disk bez přihlášení): smazaný odkaz
+  vzal řádky (`cascadeOnDelete`), ne soubory — ty ležely na disku napořád.
+  Odkaz měl limit jen na soubor, ne celkový; nově strop čekajících nahrávek
+  `GALLERY_GUEST_UPLOAD_PENDING_MB` (2 GB). `gallery:clean-temp` dočistí
+  sirotky z dřívějška.
+
+### Ověřeno bez nálezu
+
+Klíče dat, které server nedodává (66), jsou buď slovníky, nebo je prototyp
+ukazuje jen v ukázce. Převodníky stavu mažou jen výslovně odebrané (klient
+posílá `__odebrane` u všech seznamů). Bankovní OAuth je vázaný na žádost
+uloženou na serveru. `laravel.log` obsahuje jen šum z testů.
+
+**Pokrytí průchodu:** API galerie celé, starší API všech ~103 kontrolerů.
+
+| Commit | Co |
+|---|---|
+| `0cdac12f` | Fotky od hostů nezůstávají na disku napořád a nezaplní ho |
+| `a06fe2cc` | Připojení Google Disku nejde podstrčit cizím kódem |
+| `d365acfd` | Vlastník galerie není provozovatel celé instalace |
+| `6177693b` | Přehled aktivity ukazuje jen tuhle galerii |
+| `5c9729e2` | Odkaz „bez data a místa" nevydá polohu ani ve staženém souboru |
+
+Testy: **1676 PHP testů**, všechny prošly. Bez migrace; dvě nová nastavení
+(`GALLERY_OPERATOR_EMAILS`, `GALLERY_GUEST_UPLOAD_PENDING_MB`).
+
+---
+
 ## 2ae. Třicáté druhé kolo — den dvojice a cizí záznamy ve starém API (24. 9.)
 
 Kolo bez zadaného seznamu: hledání chyb napříč kódem. Dvě třídy chyb, obě
