@@ -31,6 +31,11 @@ return [
     // zůstává i mimo tuhle lhůtu — bere se z něj sloupec „naposledy".
     'task_log_retention_days' => env('GALLERY_TASK_LOG_DAYS', 90),
 
+    // Kolik smí na jeden sdílený odkaz čekat nahrávek od hostů, než je dvojice
+    // projde. Do schválení leží na disku serveru a nahrát je může kdokoli
+    // s odkazem, bez přihlášení — bez stropu to bylo bez konce.
+    'guest_upload_pending_mb' => env('GALLERY_GUEST_UPLOAD_PENDING_MB', 2048),
+
     // Upload limits
     'max_chunk_size_mb' => env('GALLERY_MAX_CHUNK_MB', 64),
     'max_upload_size_gb' => env('GALLERY_MAX_UPLOAD_GB', 32),

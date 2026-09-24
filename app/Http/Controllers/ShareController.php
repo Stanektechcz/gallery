@@ -240,6 +240,26 @@ class ShareController extends Controller
         }
         $limitKb = (int) floor(min($link->upload_limit_bytes ?: 104857600, 104857600) / 1024);
         $data = $request->validate(['files' => 'required|array|min:1|max:20', 'files.*' => "required|file|max:{$limitKb}|mimetypes:image/jpeg,image/png,image/webp,image/heic,image/heif,video/mp4,video/quicktime", 'contributor_name' => 'nullable|string|max:100']);
+
+        /*
+         * Strop na odkaz, ne jen na soubor.
+         *
+         * Do schválení leží všechno na disku serveru a nahrát to může kdokoli
+         * s odkazem. Limit na soubor to nezastavil: dvacet souborů po sto
+         * megabajtech třicetkrát za minutu. Počítá se jen čekající — co dvojice
+         * schválila, je už v galerii, a odmítnuté je smazané.
+         */
+        $strop = (int) config('gallery.guest_upload_pending_mb', 2048) * 1024 * 1024;
+        $ceka = (int) GuestUpload::where('shared_link_id', $link->id)->where('status', 'pending')->sum('size_bytes');
+        $nove = collect($data['files'])->sum(fn ($soubor) => (int) $soubor->getSize());
+
+        if ($ceka + $nove > $strop) {
+            return response()->json([
+                'error' => 'upload_quota',
+                'message' => 'K tomuhle odkazu už čeká na schválení tolik fotek, kolik se vejde. Až je dvojice projde, půjde nahrávat dál.',
+            ], 413);
+        }
+
         $uploads = collect($data['files'])->map(function ($file) use ($link, $data) {
             $uuid = (string) Str::uuid();
             $safeName = preg_replace('/[^a-zA-Z0-9._-]/', '_', $file->getClientOriginalName());

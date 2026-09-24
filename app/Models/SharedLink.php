@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class SharedLink extends Model
@@ -35,6 +36,41 @@ class SharedLink extends Model
             $link->uuid ??= (string) Str::uuid();
             $link->token ??= Str::random(40);
         });
+
+        /*
+         * S odkazem odchází i to, co přes něj hosté nahráli a nikdo neprošel.
+         *
+         * Řádky nahrávek smaže databáze sama (`cascadeOnDelete`), soubory ne:
+         * ležely by na disku napořád a nic by je už nenašlo — i fotky, kterých
+         * se dvojice smazáním odkazu chtěla zbavit. Schválené jsou už v galerii
+         * a odmítnuté smazané, takže jde jen o čekající.
+         */
+        static::deleting(function (SharedLink $link) {
+            GuestUpload::where('shared_link_id', $link->id)
+                ->where('status', 'pending')
+                ->pluck('storage_path')
+                ->each(fn (string $cesta) => self::smazNahravku($cesta));
+        });
+    }
+
+    /**
+     * Soubor nahrávky i s její složkou — ale jen složku přesně toho tvaru.
+     *
+     * `deleteDirectory(dirname(...))` nad cestou bez složky by dostal `.`
+     * a smazal celý disk. Složka se proto maže jen tehdy, když je to
+     * `guest_uploads/{uuid}`; jinak jen samotný soubor.
+     */
+    public static function smazNahravku(string $cesta): void
+    {
+        $slozka = dirname($cesta);
+
+        if (preg_match('#^guest_uploads/[0-9a-f-]{36}$#i', $slozka)) {
+            Storage::disk('local')->deleteDirectory($slozka);
+
+            return;
+        }
+
+        Storage::disk('local')->delete($cesta);
     }
 
     public function creator()

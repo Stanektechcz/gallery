@@ -2,7 +2,9 @@
 
 namespace App\Console\Commands;
 
+use App\Models\GuestUpload;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Storage;
 
 class GalleryCleanTempCommand extends Command
 {
@@ -61,8 +63,49 @@ class GalleryCleanTempCommand extends Command
             }
         }
 
+        $cleaned += $this->osireleNahravkyHostu();
+
         $this->info("Cleaned {$cleaned} temporary files/directories.");
 
         return Command::SUCCESS;
+    }
+
+    /**
+     * Soubory od hostů, ke kterým už nepatří žádná čekající nahrávka.
+     *
+     * Smazaný odkaz dřív vzal řádky nahrávek (`cascadeOnDelete`), ale ne
+     * soubory — ty ležely na disku napořád. Teď je smaže sám odkaz; tohle
+     * dočistí, co zbylo z dřívějška, a prázdné složky po schválených.
+     *
+     * Čerstvá složka zůstává: soubor se ukládá dřív než řádek, takže složka
+     * bez řádku může být nahrávka, která právě probíhá.
+     */
+    private function osireleNahravkyHostu(): int
+    {
+        $disk = Storage::disk('local');
+        $cekajici = GuestUpload::where('status', 'pending')
+            ->pluck('storage_path')
+            ->map(fn (string $cesta) => dirname($cesta))
+            ->flip();
+        $vcera = now()->subDay()->getTimestamp();
+        $smazano = 0;
+
+        foreach ($disk->directories('guest_uploads') as $slozka) {
+            // Jen složky přesně toho tvaru, který nahrávání zakládá.
+            if (isset($cekajici[$slozka]) || ! preg_match('#^guest_uploads/[0-9a-f-]{36}$#i', $slozka)) {
+                continue;
+            }
+
+            $cerstva = collect($disk->allFiles($slozka))->contains(fn (string $soubor) => $disk->lastModified($soubor) > $vcera);
+
+            if ($cerstva) {
+                continue;
+            }
+
+            $disk->deleteDirectory($slozka);
+            $smazano++;
+        }
+
+        return $smazano;
     }
 }
