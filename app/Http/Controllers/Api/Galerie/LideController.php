@@ -107,15 +107,9 @@ class LideController extends Controller
                 $cil->update(['cover_media_id' => $zdroj->cover_media_id]);
             }
 
-            // Poznámky k osobě patří k člověku, ne k záznamu — přejdou taky,
-            // pokud cílová osoba poznámku téhož druhu (`scope_key`) ještě nemá.
+            // Poznámky k osobě patří k člověku, ne k záznamu — přejdou taky.
             if (DB::getSchemaBuilder()->hasTable('person_notes')) {
-                $ma = DB::table('person_notes')->where('person_id', $cil->id)->pluck('scope_key')->all();
-
-                DB::table('person_notes')
-                    ->where('person_id', $zdroj->id)
-                    ->whereNotIn('scope_key', $ma)
-                    ->update(['person_id' => $cil->id]);
+                $this->prenesPoznamky($zdroj, $cil);
             }
 
             $zdroj->delete();
@@ -126,6 +120,38 @@ class LideController extends Controller
         AuditLog::record('person.merge', $cil, ['z' => $zdroj->name, 'fotek' => $pocet]);
 
         return $this->odpoved($prostor, 'Sloučeno do „'.$cil->name.'“ · fotek: '.$pocet, $cil);
+    }
+
+    /**
+     * Poznámky ze slučované osoby na cílovou — žádná se neztratí.
+     *
+     * Dřív přešly jen ty, jejichž `scope_key` cíl ještě neměl. Zdrojová osoba
+     * se pak mazala natvrdo a `person_notes.person_id` má kaskádu, takže co
+     * nepřešlo, zmizelo — typicky partnerova **soukromá** poznámka, o které
+     * ten, kdo slučoval, ani nevěděl. Odpověď přitom hlásila jen „Sloučeno".
+     *
+     * Dvě poznámky téhož druhu se proto spojí pod sebe. Unikát na dvojici
+     * `person_id` + `scope_key` nedovolí mít obě zvlášť a vybírat za dvojici,
+     * která verze je ta pravá, tady nikomu nepřísluší.
+     */
+    private function prenesPoznamky(Person $zdroj, Person $cil): void
+    {
+        $cilove = DB::table('person_notes')->where('person_id', $cil->id)->get()->keyBy('scope_key');
+
+        foreach (DB::table('person_notes')->where('person_id', $zdroj->id)->get() as $poznamka) {
+            $stavajici = $cilove[$poznamka->scope_key] ?? null;
+
+            if ($stavajici === null) {
+                DB::table('person_notes')->where('id', $poznamka->id)->update(['person_id' => $cil->id]);
+
+                continue;
+            }
+
+            $spojene = trim((string) $stavajici->content)."\n\n".trim((string) $poznamka->content);
+
+            DB::table('person_notes')->where('id', $stavajici->id)
+                ->update(['content' => $spojene, 'updated_at' => now()]);
+        }
     }
 
     private function najdi(GallerySpace $prostor, int $id): Person

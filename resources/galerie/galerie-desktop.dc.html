@@ -17550,7 +17550,12 @@ class Component extends DCLogic {
       dupHeadNote: 'Sloučení nechá vybranou kopii a ostatní pošle do koše — odtud jde 30 dní vrátit.',
       dupAutoPick: () => {
         const next = Object.assign({}, keep);
-        clear.forEach(g => { next[g.id] = g.items.findIndex(i => i.best); });
+        // Identifikátor, ne pořadí — stejně jako u ručního výběru níž.
+        clear.forEach(g => {
+          const idx = g.items.findIndex(i => i.best);
+          if (idx < 0) return;
+          next[g.id] = g.items[idx].id || idx;
+        });
         this.setState({ dupKeep: next });
         this.toast(this.pl(clear.length, 'nález', 'nálezy', 'nálezů') + ' má vybraného vítěze podle rozlišení a metadat', { icon: 'ph-magic-wand', undo: () => this.setState({ dupKeep: keep }) });
       },
@@ -17576,9 +17581,15 @@ class Component extends DCLogic {
           compare: () => toCompare(g.items.map(i => i.id || ('p' + i.n))),
           items: g.items.map((i, idx) => ({
             name: i.name, meta: i.meta, best: !!i.best, bg: i.bg || this.bg(i.n),
-            chosen: sel === idx,
-            ring: sel === idx ? '2px solid var(--g-acc)' : '1px solid var(--g-line)',
-            keep: () => this.setState({ dupKeep: Object.assign({}, keep, { [g.id]: idx }) })
+            // Vybráno se porovnává podle téhož, co se ukládá — identifikátoru
+            // fotky, u napsaných ukázek podle pořadí.
+            chosen: sel === (i.id || idx),
+            ring: sel === (i.id || idx) ? '2px solid var(--g-acc)' : '1px solid var(--g-line)',
+            // Identifikátor fotky, ne pořadí: než člověk klikne, může kterákoli
+            // kopie zmizet (partner ji vyhodil, doběhl noční úklid) a pořadí se
+            // posune — do koše by šla jiná fotka, než která tu svítí.
+            // Pořadí zůstává jen pro napsané ukázkové nálezy bez identifikátoru.
+            keep: () => this.setState({ dupKeep: Object.assign({}, keep, { [g.id]: i.id || idx }) })
           }))
         };
       }),

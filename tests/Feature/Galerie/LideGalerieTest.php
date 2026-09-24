@@ -78,6 +78,44 @@ class LideGalerieTest extends TestCase
         $this->assertTrue(DB::table('media_person')->where('person_id', $cil->id)->where('media_item_id', $jenZdroj->id)->exists());
     }
 
+    /**
+     * Slučování nesmí zahodit partnerovu soukromou poznámku.
+     *
+     * Přecházely jen poznámky, jejichž `scope_key` cílová osoba ještě neměla.
+     * Zdrojová osoba se pak mazala natvrdo a `person_notes.person_id` má
+     * kaskádu — takže co nepřešlo, zmizelo. Adrian sloučil dvě osoby a
+     * Makinčina soukromá poznámka byla pryč, aniž by o tom kdo věděl.
+     */
+    public function test_slouceni_nezahodi_partnerovu_poznamku(): void
+    {
+        $cil = $this->osoba('Klára');
+        $zdroj = $this->osoba('Klárka');
+
+        $maki = User::factory()->create(['name' => 'Makinka']);
+        $this->prostor->members()->syncWithoutDetaching([$maki->id => ['role' => 'editor']]);
+
+        foreach ([[$cil, 'Moje verze.'], [$zdroj, 'Její verze.']] as [$osoba, $text]) {
+            DB::table('person_notes')->insert([
+                'person_id' => $osoba->id,
+                'gallery_space_id' => $this->prostor->id,
+                'user_id' => $maki->id,
+                'visibility' => 'personal',
+                'scope_key' => 'personal:'.$maki->id,
+                'content' => $text,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+
+        $this->postJson('/api/osoby/'.$zdroj->id.'/sloucit', ['do' => $cil->id])->assertOk();
+
+        $zbylo = DB::table('person_notes')->where('person_id', $cil->id)->value('content');
+
+        $this->assertStringContainsString('Moje verze.', (string) $zbylo);
+        $this->assertStringContainsString('Její verze.', (string) $zbylo,
+            'Poznámka ze slučované osoby se nesmí ztratit.');
+    }
+
     public function test_osobu_nejde_sloucit_samu_se_sebou(): void
     {
         $osoba = $this->osoba('Klára');

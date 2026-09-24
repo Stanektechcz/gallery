@@ -117,6 +117,33 @@ class UklidVeStavuTest extends TestCase
         $this->assertEqualsWithDelta(3.0, $odpoved->json('data.clnFreed'), 0.05);
     }
 
+    /**
+     * Vybraná kopie se pozná podle identifikátoru, ne podle pořadí.
+     *
+     * Prohlížeč posílal pořadové číslo v seznamu. Když mezi vykreslením
+     * a kliknutím kterákoli kopie zmizela (partner ji mezitím vyhodil,
+     * doběhl noční úklid), pořadí se posunulo — a do koše šla jiná fotka,
+     * než která na obrazovce svítila.
+     */
+    public function test_vybrana_kopie_se_pozna_podle_identifikatoru(): void
+    {
+        $velka = $this->fotka(['size_bytes' => 8_388_608], 1);
+        $stredni = $this->fotka(['size_bytes' => 5_242_880], 2);
+        $mala = $this->fotka(['size_bytes' => 3_145_728], 3);
+        [, $uuid] = $this->nalez([$velka, $stredni, $mala]);
+
+        // Vybral si tu nejmenší (lepší výřez) — schválně jinou, než kterou by
+        // vzal záložní výběr. Než klikl, největší kopie zmizela a pořadí se
+        // posunulo.
+        $velka->update(['trashed_at' => now()]);
+
+        $this->stav(['dupDone' => [$uuid], 'dupKeep' => [$uuid => $mala->uuid]])->assertOk();
+
+        $this->assertNull($mala->refresh()->trashed_at,
+            'Do koše nesmí jít kopie, kterou si člověk vybral k ponechání.');
+        $this->assertNotNull($stredni->refresh()->trashed_at);
+    }
+
     /** Bez výběru zůstane největší kopie. */
     public function test_bez_vyberu_zustava_nejvetsi_kopie(): void
     {

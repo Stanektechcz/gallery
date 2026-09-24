@@ -213,7 +213,7 @@ class UklidVeStavu
     }
 
     /**
-     * @param  int|null  $vitez  pořadí vybrané kopie v seznamu ze serveru
+     * @param  string|int|null  $vitez  identifikátor vybrané kopie (starší klient posílal pořadí)
      * @return float uvolněné MB
      */
     private function sluc(object $skupina, $vitez): float
@@ -223,14 +223,31 @@ class UklidVeStavu
             ->where('p.duplicate_group_id', $skupina->id)
             ->whereNull('m.trashed_at')
             ->orderByDesc('m.size_bytes')
-            ->get(['p.id as vazba', 'm.id as media', 'm.size_bytes']);
+            // Pevný doplněk řazení: dvě stejně velké kopie by se jinak mohly
+            // při čtení a při zápisu seřadit opačně a do koše by šla ta, kterou
+            // obrazovka označila za vítěze.
+            ->orderBy('m.id')
+            ->get(['p.id as vazba', 'm.id as media', 'm.uuid', 'm.size_bytes']);
 
         // Nález o jedné položce už nález není — druhá kopie mezitím zmizela.
         if ($radky->count() < 2) {
             return 0.0;
         }
 
-        $nechat = is_int($vitez) && isset($radky[$vitez]) ? $radky[$vitez] : $radky->first();
+        /*
+         * Vybraná kopie podle identifikátoru, ne podle pořadí.
+         *
+         * Prohlížeč posílal pořadové číslo v seznamu. Stačilo, aby mezi
+         * vykreslením a kliknutím kterákoli kopie zmizela — partner ji vyhodil,
+         * doběhl noční úklid — a pořadí se posunulo: do koše šla jiná fotka,
+         * než která na obrazovce svítila. Pořadí se pro starší klienty pořád
+         * přijímá, ale je to záloha, ne první volba.
+         */
+        $nechat = match (true) {
+            is_string($vitez) && $vitez !== '' => $radky->firstWhere('uuid', $vitez),
+            is_int($vitez) => $radky[$vitez] ?? null,
+            default => null,
+        } ?? $radky->first();
         $doKose = $radky->reject(fn (object $r) => $r->media === $nechat->media);
 
         DB::table('duplicate_group_items')

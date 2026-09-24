@@ -1051,6 +1051,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereIn('p.duplicate_group_id', $skupiny->pluck('id'))
             ->whereNull('m.trashed_at')
             ->orderByDesc('m.size_bytes')
+            // Pevný doplněk řazení — musí sedět s `UklidVeStavu::sluc()`, jinak
+            // by dvě stejně velké kopie vyšly při čtení a zápisu opačně.
+            ->orderBy('m.id')
             ->get([
                 'p.duplicate_group_id', 'p.is_kept', 'm.id', 'm.uuid', 'm.original_filename',
                 'm.width', 'm.height', 'm.size_bytes', 'm.location_name',
