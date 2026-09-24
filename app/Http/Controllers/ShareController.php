@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\GuestUpload;
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
 use App\Models\SharedLink;
 use App\Services\Sharing\SharedContentService;
 use App\Support\SpaceContext;
@@ -158,7 +159,9 @@ class ShareController extends Controller
                 'variants' => $m->variants
                     // Originál jen tam, kde nic menšího není — stránka by jinak
                     // neměla co ukázat. S vypnutým stahováním se jinak nevydává.
-                    ->filter(fn ($v) => $v->type !== 'original' || $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty())
+                    // U odkazu bez data a místa nikdy: nese EXIF i se souřadnicemi.
+                    ->filter(fn ($v) => $v->type !== 'original'
+                        || (! $link->hide_gps && $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty()))
                     ->map(fn ($v) => ['type' => $v->type, 'url' => $v->url, 'width' => $v->width, 'height' => $v->height])
                     ->values(),
             ])
@@ -277,10 +280,39 @@ class ShareController extends Controller
         $link = SharedLink::where('token', $token)->firstOrFail();
         abort_unless($link->isAccessible() && $link->allow_download && (! $link->password_hash || session("share_verified_{$token}")), 403);
         $item = $this->mediaOdkazu($link)->where('uuid', $uuid)->firstOrFail();
-        $variant = $item->variants()->where('type', 'original')->firstOrFail();
+        [$variant, $jmeno] = $link->hide_gps ? $this->kopieBezPolohy($item) : [$item->variants()->where('type', 'original')->firstOrFail(), $item->original_filename];
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'download', 'ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'media_item_id' => $item->id, 'created_at' => now()]);
 
-        return Storage::disk($variant->disk)->download($variant->path, $item->original_filename);
+        return Storage::disk($variant->disk)->download($variant->path, $jmeno);
+    }
+
+    /**
+     * Co stáhnout z odkazu „bez data a místa".
+     *
+     * Dialog sdílení to slibuje („vypněte, když nechcete prozradit, kde jste
+     * byli"), a stažení přitom vydávalo originál i s EXIF — souřadnicemi
+     * obvykle domova. EXIF z originálu jen tak smazat nejde: je v něm i otočení
+     * snímku a fotka z telefonu by přišla převrácená. Zmenšeniny vznikají už
+     * otočené a bez metadat (`ImageVariantService`, `strip: true`), takže se
+     * stahuje největší z nich. Video má polohu přímo v souboru — to se nevydá.
+     *
+     * @return array{0: MediaVariant, 1: string}
+     */
+    private function kopieBezPolohy(MediaItem $item): array
+    {
+        abort_if($item->media_type === 'video', 403,
+            'U odkazu bez data a místa video stáhnout nejde — poloha je zapsaná přímo v souboru.');
+
+        $kopie = $item->variants()
+            ->whereIn('type', ['large', 'medium', 'small'])
+            ->orderByRaw("CASE type WHEN 'large' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END")
+            ->first();
+
+        abort_unless($kopie, 403, 'Kopie bez údajů o místě pro tuhle fotku zatím není.');
+
+        $pripona = pathinfo($kopie->path, PATHINFO_EXTENSION) ?: 'webp';
+
+        return [$kopie, pathinfo((string) $item->original_filename, PATHINFO_FILENAME).'.'.$pripona];
     }
 
     /**
