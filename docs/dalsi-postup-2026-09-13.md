@@ -804,6 +804,49 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ac. Třicáté kolo — poslední čtyři nálezy auditu (24. 9.)
+
+Tím je audit z kola 2y vyčerpaný: kritické, vysoké i střední nálezy jsou
+opravené. Ke každé opravě test, který bez ní spadne.
+
+### Protokol, který dvojice neviděla
+
+`AuditLog::record()` bere galerii z předmětu akce. Záznamy bez předmětu
+(`app_lock.*`, `vault.*`, `auth.login*`) i ty, jejichž předmětem je `User` —
+ten sloupec `gallery_space_id` nemá — se ukládaly s `null`, a panel Aktivita
+čte `where('gallery_space_id', …)`. Odemykání zámku, otevření trezoru ani
+přihlášení se tedy neukázalo nikdy, přestože obě obrazovky protokol slibují.
+
+Galerie se teď odvodí od toho, kdo akci vyvolal. Bez přihlášeného člověka
+zůstává `null` — u úloh z fronty se odvodit nedá a hádat se nemá.
+
+### Sdílení, které hlásilo uloženo
+
+Dialog `album` i `polozky` posílal a validace je přijímala, ale `update()` je
+nikam nezapsal. Odkaz dál servíroval původní sadu fotek a kdo z něj chtěl
+fotku odebrat, měl za to, že ji odebral.
+
+### Dvě večeře na jeden den
+
+Čtení bralo všechno kromě `cancelled`, zápis jen `planned` a `confirmed`.
+Uvařené jídlo se na obrazovce ukázalo, ale při uložení se nenašlo: výběr jiného
+receptu ten den založil druhý řádek a vyčištění dne neudělalo nic.
+
+Filtry jsou sjednocené. Uvolnění dne ale uvařené jídlo **nemaže** — je to
+záznam o tom, co dvojice jedla. Dva testy si v tomhle odporovaly a ten starší
+měl pravdu; rozhodnutí je zapsané v obou.
+
+### Střety u klíčů z tabulek
+
+`rev_keys` zapisoval až `applyPatch()`, jenže ten dostane patch teprve potom, co
+z něj každý převodník vytáhl své klíče. U všeho, co má vlastní tabulku —
+papírová záloha, pravidla, rozhodnutí, domácnost, kalendář, mapa energie,
+přání — revize nikdy nevznikla a `strety()` neměl co porovnat: vyhrál poslední
+zápis a nikomu se nic neřeklo. Dosud to jistily jen `__zmenene` a `__odebrane`
+v prohlížeči.
+
+---
+
 ## 2ab. Dvacáté deváté kolo — co zbylo po auditu (24. 9.)
 
 Kolo bez zadaného seznamu: pokračování v nálezech, které audit vedl jako
