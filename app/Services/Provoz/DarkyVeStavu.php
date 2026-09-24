@@ -209,6 +209,10 @@ class DarkyVeStavu
             });
         }
 
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('gift_ideas')
             ->where('gallery_space_id', $prostor->id)
             ->whereIn('status', $stavy)

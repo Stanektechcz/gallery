@@ -67,6 +67,27 @@ final class OdebraneVStavu
         return array_values(array_map(fn ($id) => (string) $id, array_filter(array_slice($vse[$klic], 0, 2000), 'is_scalar')));
     }
 
+    /**
+     * Smí se vůbec mazat?
+     *
+     * Převodníky mažou dotazem `->when($zustavaji !== [], whereNotIn)
+     * ->when($odebrane !== null, whereIn)`. Když prohlížeč pošle prázdný
+     * seznam **a** neřekne, co odebral, vypadnou obě podmínky — a ze `delete()`
+     * zbude „smaž všechno v tomhle prostoru". Stačilo by, aby některý seznam
+     * jednou přišel prázdný (nenačtená data, chyba v klientovi, starší verze),
+     * a dvojice by přišla o celou papírovou zálohu nebo nouzové kontakty.
+     *
+     * Prázdný seznam se od „nic jsem neodebral" nepozná, takže se v tom případě
+     * nemaže nic. Skutečné vyprázdnění prohlížeč pošle s `__odebrane`.
+     *
+     * @param  list<string>|null  $odebrane
+     * @param  list<mixed>  $zustavaji
+     */
+    public static function smiMazat(?array $odebrane, array $zustavaji): bool
+    {
+        return $zustavaji !== [] || $odebrane !== null;
+    }
+
     /** Přepsat řádek? Bez seznamu změn ano (starší klient), jinak jen změněný. */
     public static function zmeneno(?array $zmenene, mixed ...$identifikatory): bool
     {

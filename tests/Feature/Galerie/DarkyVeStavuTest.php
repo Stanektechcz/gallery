@@ -120,11 +120,28 @@ class DarkyVeStavuTest extends TestCase
     /** Zahozený nápad zmizí z tabulky. */
     public function test_zahozeny_napad_zmizi(): void
     {
-        $this->darek(['title' => 'Zahozený', 'status' => 'idea']);
+        $uuid = (string) Str::uuid();
+        $this->darek(['uuid' => $uuid, 'title' => 'Zahozený', 'status' => 'idea']);
+
+        $this->stav(['ideas' => [], '__odebrane' => ['ideas' => [$uuid]]])->assertOk();
+
+        $this->assertSame(0, DB::table('gift_ideas')->count());
+    }
+
+    /**
+     * Prázdný seznam bez `__odebrane` nezahodí nic.
+     *
+     * Dřív to smazalo všechny nápady v prostoru. Prázdný seznam se přitom nedá
+     * odlišit od „ještě jsem se nenačetl" — a starší klient rozdíl neposílá
+     * vůbec. Skutečné zahození pozná server jedině podle `__odebrane`.
+     */
+    public function test_prazdny_seznam_bez_odebranych_napad_nezahodi(): void
+    {
+        $this->darek(['title' => 'Zůstává', 'status' => 'idea']);
 
         $this->stav(['ideas' => []])->assertOk();
 
-        $this->assertSame(0, DB::table('gift_ideas')->count());
+        $this->assertSame(1, DB::table('gift_ideas')->count());
     }
 
     /**

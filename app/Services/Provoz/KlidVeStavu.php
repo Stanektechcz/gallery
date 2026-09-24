@@ -157,6 +157,11 @@ class KlidVeStavu
          * Odstranit řádek by znamenalo, že po tom nezbude stopa, a příště
          * se to samé zapíše znovu jako nová věc.
          */
+        // Prázdný seznam bez `__odebrane` by odškrtal všechno, co ještě čeká.
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('wellbeing_tasks')
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('done_at')

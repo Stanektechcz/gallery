@@ -31,6 +31,18 @@ class MechanismyVeStavu
         'couple_forgiven' => 'forgList',
         'couple_anti_budget' => 'antiList',
         'couple_family_contacts' => 'fam',
+        /*
+         * `truths` tu chyběl a stálo to obě pojistky naráz.
+         *
+         * `srovnej()` se bez záznamu ptá `OdebraneVStavu` na klíč jménem
+         * tabulky, tedy `couple_truths` — zatímco prohlížeč posílá `truths`.
+         * `zmenene()` proto vracel `null` (= přepiš každý řádek, i ten, co
+         * mezitím napsal ten druhý) a `pro()` prázdný seznam nebo `null`.
+         * V druhém případě zbylo v mazání jen `whereNotIn`, takže přidání
+         * jedné „dvě pravdy" smazalo všechny, které partner zapsal od chvíle,
+         * kdy se karta načetla.
+         */
+        'couple_truths' => 'truths',
     ];
 
     /** Právě zpracovávaný patch — nese `__odebrane` (viz OdebraneVStavu). */
@@ -257,6 +269,10 @@ class MechanismyVeStavu
 
         $odebrane = OdebraneVStavu::pro($this->patch, self::KLICE['couple_family_contacts']);
 
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('couple_family_contacts')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
@@ -338,6 +354,10 @@ class MechanismyVeStavu
 
         // Jen co prohlížeč sám odebral — položka druhého v jeho seznamu chybí taky.
         $odebrane = OdebraneVStavu::pro($this->patch, self::KLICE[$tabulka] ?? $tabulka);
+
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
 
         DB::table($tabulka)
             ->where('gallery_space_id', $prostor->id)

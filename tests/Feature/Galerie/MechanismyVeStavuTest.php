@@ -8,6 +8,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 /**
@@ -192,6 +193,119 @@ class MechanismyVeStavuTest extends TestCase
         $this->stav(['favList' => []])->assertOk();
 
         $this->assertSame(1, DB::table('couple_favours')->count());
+    }
+
+    /**
+     * Přidání „dvou pravd" nesmí smazat to, co mezitím zapsal ten druhý.
+     *
+     * `MechanismyVeStavu::KLICE` tabulku `couple_truths` neznala, takže se
+     * `OdebraneVStavu` ptal na klíč `couple_truths`, zatímco prohlížeč posílá
+     * `truths`. Obě pojistky proti staré kopii tím vypadly naráz a ze smazání
+     * zbylo `whereNotIn` — tedy „smaž všechno, co v mém seznamu není".
+     */
+    public function test_stara_kopie_neprepise_partnerovu_pravdu(): void
+    {
+        $uuid = $this->pravdaOdPartnera();
+
+        // Karta drží starý opis a v `__zmenene` říká, že sama nic nezměnila.
+        $this->stav([
+            'truths' => [
+                ['id' => $uuid, 'title' => 'Od Makinky', 'when' => 'dnes', 'a' => 'Starý opis.', 'm' => 'Starý opis.'],
+            ],
+            '__zmenene' => ['truths' => []],
+            '__odebrane' => ['truths' => []],
+        ])->assertOk();
+
+        $this->assertSame('Moje verze.', DB::table('couple_truths')->where('uuid', $uuid)->value('first_version'),
+            'Řádek, který karta nezměnila, se nesmí přepsat jejím starým opisem.');
+    }
+
+    /** A odebrání se naopak provést musí. */
+    public function test_odebrana_pravda_se_smaze(): void
+    {
+        $uuid = $this->pravdaOdPartnera();
+
+        $this->stav(['truths' => [], '__odebrane' => ['truths' => [$uuid]]])->assertOk();
+
+        $this->assertSame(0, DB::table('couple_truths')->count());
+    }
+
+    private function pravdaOdPartnera(): string
+    {
+        $uuid = (string) Str::uuid();
+
+        DB::table('couple_truths')->insert([
+            'uuid' => $uuid,
+            'gallery_space_id' => $this->prostor->id,
+            'title' => 'Od Makinky',
+            'first_version' => 'Moje verze.',
+            'second_version' => 'Tvoje verze.',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        return $uuid;
+    }
+
+    /**
+     * Prázdný seznam bez `__odebrane` nesmí smazat nic.
+     *
+     * Mazání stojí na dvojici `when(zustavaji !== [])` + `when(odebrane !== null)`.
+     * Když přijde prázdný seznam a prohlížeč neřekne, co odebral, vypadnou obě
+     * podmínky a ze `delete()` zbude „smaž všechno v tomhle prostoru".
+     * Starší klient `__odebrane` neposílá vůbec.
+     */
+    #[DataProvider('seznamyPrevodniku')]
+    public function test_prazdny_seznam_bez_odebranych_nemaze(string $klic, string $tabulka): void
+    {
+        DB::table($tabulka)->insert($this->radek($tabulka));
+
+        $this->stav([$klic => []])->assertOk();
+
+        $this->assertSame(1, DB::table($tabulka)->count(),
+            'Prázdný seznam bez `__odebrane` se nedá odlišit od „nic jsem neodebral".');
+    }
+
+    /** @return array<string, array{string, string}> */
+    public static function seznamyPrevodniku(): array
+    {
+        return [
+            'dvě pravdy' => ['truths', 'couple_truths'],
+            'laskavosti' => ['favList', 'couple_favours'],
+            'odpuštěné' => ['forgList', 'couple_forgiven'],
+            'anti-rozpočet' => ['antiList', 'couple_anti_budget'],
+            'rodina' => ['fam', 'couple_family_contacts'],
+            'pravidla' => ['rules', 'automation_rules'],
+            'kapitoly' => ['storyList', 'couple_story_chapters'],
+            'milníky' => ['msList', 'couple_story_milestones'],
+            'nouzový přístup' => ['emItems', 'emergency_access_items'],
+            'papírová záloha' => ['paper', 'paper_backup_rows'],
+        ];
+    }
+
+    /** @return array<string, mixed> */
+    private function radek(string $tabulka): array
+    {
+        $zaklad = [
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ];
+
+        return $zaklad + match ($tabulka) {
+            'couple_truths' => ['title' => 'Od partnera', 'first_version' => 'A', 'second_version' => 'B'],
+            'couple_favours' => ['from_user_id' => $this->maki->id, 'what' => 'Od partnera', 'happened_on' => now()->toDateString(), 'weight' => 1],
+            'couple_forgiven' => ['what' => 'Od partnera', 'happened_on' => now()->toDateString()],
+            'couple_anti_budget' => ['name' => 'Od partnera', 'kind' => 'nekoupeno', 'saved' => 100, 'decided_on' => now()->toDateString()],
+            'couple_family_contacts' => ['name' => 'Babička', 'every_days' => 30],
+            'automation_rules' => ['name' => 'Od partnera', 'trigger' => 'upload', 'action' => 'tag', 'is_enabled' => true],
+            'couple_story_chapters' => ['title' => 'Od partnera', 'year' => '2026'],
+            'couple_story_milestones' => ['title' => 'Od partnera', 'happened_on' => now()->toDateString()],
+            'emergency_access_items' => ['label' => 'Od partnera', 'note' => 'Kde to leží'],
+            'paper_backup_rows' => ['label' => 'Od partnera', 'value' => 'Zapsáno na papíře'],
+            default => [],
+        };
     }
 
     // ——— pomůcky ———

@@ -32510,7 +32510,7 @@ class Component extends DCLogic {
    * aby ho nepřepsal další zápis sloučený do téhož odeslání.
    */
   odebraneRozdil(prev, patch) {
-    const KLICE = ['wishes', 'ideas', 'buys', 'choreLog', 'dues', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools'];
+    const KLICE = ['wishes', 'ideas', 'buys', 'choreLog', 'dues', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools', 'truths'];
     const z = this._odebZ || (this._odebZ = {});
     const idcka = list => (Array.isArray(list) ? list : [])
       .map(r => Array.isArray(r) ? r[0] : (r && typeof r === 'object' ? r.id : undefined))
@@ -32527,7 +32527,8 @@ class Component extends DCLogic {
         rules: typeof RULEDEF !== 'undefined' ? RULEDEF : null, storyList: typeof STORY !== 'undefined' ? STORY : null,
         msList: typeof STORYMS !== 'undefined' ? STORYMS : null, emItems: typeof EM_ITEMS !== 'undefined' ? EM_ITEMS : null,
         paper: typeof PAPER_ROWS !== 'undefined' ? PAPER_ROWS : null, proms: typeof PROMISES !== 'undefined' ? PROMISES : null,
-        nudges: typeof NUDGES !== 'undefined' ? NUDGES : null, cools: typeof DEC_COOL !== 'undefined' ? DEC_COOL : null
+        nudges: typeof NUDGES !== 'undefined' ? NUDGES : null, cools: typeof DEC_COOL !== 'undefined' ? DEC_COOL : null,
+        truths: typeof TRUTHS !== 'undefined' ? TRUTHS : null
       };
       return Z[k] || [];
     };
@@ -32557,7 +32558,7 @@ class Component extends DCLogic {
      * seznam ze serveru (data nebo odpověď na zápis); pořadí je součást
      * podpisu (řazení je úprava). Neznámý základ = změněné všechno, jako dřív.
      */
-    const ZMENY = ['wishes', 'ideas', 'buys', 'chores', 'dues', 'inv', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools'];
+    const ZMENY = ['wishes', 'ideas', 'buys', 'chores', 'dues', 'inv', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools', 'truths'];
     const zakladZmen = k => k === 'chores' ? (typeof HOUSE_CHORES !== 'undefined' ? HOUSE_CHORES : []) : k === 'inv' ? (typeof HOUSE_INV !== 'undefined' ? HOUSE_INV : []) : zaklad(k);
     const podpis = list => {
       const m = {};

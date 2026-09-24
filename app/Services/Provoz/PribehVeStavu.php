@@ -164,6 +164,10 @@ class PribehVeStavu
         // o kapitolu, ne o to, že se staly.
         $odebrane = $this->odebrane('storyList');
 
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('couple_story_chapters')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
@@ -240,6 +244,10 @@ class PribehVeStavu
         }
 
         $odebrane = $this->odebrane('msList');
+
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
 
         DB::table('couple_story_milestones')
             ->where('gallery_space_id', $prostor->id)
@@ -412,6 +420,10 @@ class PribehVeStavu
 
         $odebrane = $this->odebrane('emItems');
 
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('emergency_access_items')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
@@ -475,6 +487,10 @@ class PribehVeStavu
         }
 
         $odebrane = $this->odebrane('paper');
+
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
 
         DB::table('paper_backup_rows')
             ->where('gallery_space_id', $prostor->id)

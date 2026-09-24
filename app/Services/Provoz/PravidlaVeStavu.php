@@ -141,6 +141,10 @@ class PravidlaVeStavu
          * rozdílem. Běhy zůstávají — historie o pravidle, které už není, je
          * pořád historie toho, co se stalo.
          */
+        if (! OdebraneVStavu::smiMazat($odebrane, $zustavaji)) {
+            return;
+        }
+
         DB::table('automation_rules')
             ->where('gallery_space_id', $prostor->id)
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
