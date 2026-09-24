@@ -804,6 +804,45 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ag. Třicáté čtvrté kolo — záloha databáze, která opravdu existuje (24. 9.)
+
+Bod 3.9 („obnova ze zálohy nebyla ověřená") se při prověrce ukázal horší:
+**záloha databáze neexistovala vůbec.** `BACKUP_AND_RESTORE.md` popisoval noční
+`BackupMetadataJob` a pět příkazů — žádný z nich v kódu nebyl. Originály fotek
+se kopírují do cloudu (`mirror-backlog`), ale deník, finance, alba, lidé,
+poznámky a zdravotní zápisy byly jen v MySQL.
+
+**`gallery:zaloha`** — plánovač denně ve 3:30, drží posledních 14
+(`GALLERY_BACKUP_KEEP`), do `storage/app/private/zalohy` (mimo web). Gzipovaný
+NDJSON: hlavička s migracemi a počty, pak data. Po zápisu se soubor přečte
+znovu a počty se porovnají; záloha, kterou nejde přečíst, se smaže a úloha
+skončí chybou — v administraci je vidět jako „Záloha databáze".
+
+**`gallery:obnova`** — bez `--opravdu` jen ukáže, co v záloze je. S ním
+nejdřív zazálohuje současný stav a pak v jedné transakci přepíše tabulky.
+Zálohu z novějšího kódu odmítne, zmizelý sloupec přeskočí a vypíše.
+
+Záloha nese **data, ne schéma** (schéma postaví `migrate`), takže funguje stejně
+na MySQL i SQLite a `ZalohaDatabazeTest` ji při každém běhu testů ověří celým
+kruhem. `mysqldump` by se tu vyzkoušet nedal a `shell_exec` je na serveru
+vypnutý. Vyzkoušeno i na vývojové databázi: 255 tabulek, 487 řádků, 39 kB.
+
+**Otevřené rozhodnutí — kopie mimo server.** Záloha leží na stejném serveru.
+Cloud je připojený po galeriích, záloha je za celou instalaci: nahrát ji do
+cloudu jedné galerie by znamenalo dát jí data všech. Pro dnešní jednu dvojici
+to nevadí, pro službu ano. Možnosti: (a) záloha panelu hostingu nebo `scp`
+(dnes, ručně — popsáno v návodu), (b) šifrovaně do cloudu **provozovatele**,
+(c) tlačítko „Stáhnout zálohu" v administraci jen pro provozovatele.
+
+| Commit | Co |
+|---|---|
+| `f349f9c6` | Databáze se konečně zálohuje — a ze zálohy jde obnovit |
+
+Testy: **1682 PHP testů**, všechny prošly. Bez migrace; nové nastavení
+`GALLERY_BACKUP_KEEP`.
+
+---
+
 ## 2af. Třicáté třetí kolo — co je vidět zvenku a kdo je provozovatel (24. 9.)
 
 Dokončený průchod starého API (zbylých 49 kontrolerů) a veřejné cesty bez
@@ -1841,8 +1880,9 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
    je potřeba udržovat a hlídat. Buď ho vypnout, nebo sjednotit oprávnění.
 8. **`npm audit`**: postcss a nanoid (jen nástroje sestavení, ne běh aplikace).
    `npm audit fix` + `npm run build` a zkontrolovat `public/build`.
-9. **Obnova ze zálohy nebyla ověřená** — `BACKUP_AND_RESTORE.md` popisuje
-   postup; vyzkoušet na kopii databáze a Disku.
+9. ~~**Obnova ze zálohy nebyla ověřená**~~ — záloha databáze neexistovala
+   vůbec; od kola 2ag `gallery:zaloha` / `gallery:obnova`, ověřené testem celým
+   kruhem. Zbývá kopie mimo server (viz 2ag).
 10. Vývojový přístupový klíč „mereni" v **lokální** databázi (produkce ne) —
     smazat v tinkeru: `DB::table('personal_access_tokens')->where('name', 'mereni')->delete()`.
 11. ~~**Pokusy o heslo k trezoru se počítají v sezení**~~ — hotovo (2d): cache
