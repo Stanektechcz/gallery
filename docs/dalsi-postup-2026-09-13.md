@@ -856,6 +856,31 @@ kontrola legitimnímu uživateli nic nebere.
 Ze 13 pravidel `exists:` nad tabulkami s galerií byla děravá čtyři; nahrávání,
 sdílení a alba si id po validaci ověřují podle galerie sama.
 
+**Druhý průchod** (dalších 28 kontrolerů starého API) našel stejný tvar chyby
+bez pravidla `exists:` vůbec — číslo prošlo jako `nullable|integer`:
+
+* **příběh alba — skutečný únik.** `PATCH …/story/{id}` omezil zápis na album,
+  ale odpověď četla blok podle čísla odkudkoli; prázdný požadavek s cizím
+  číslem vrátil text cizího příběhu. Tohle agent přehlédl, přišlo se na to
+  při ověřování jeho nálezů. Fotky v bloku se teď berou jen z galerie alba;
+* transakce, pravidelná platba a šablona vzaly partnera z cizí galerie;
+* rozpočet vzal cizí cestu, úkol při úpravě cizí `trip_id` (založení ji
+  ověřovalo, úprava ne);
+* rozpočet i cesta šly předat vlastníkovi mimo galerii — a pak se k nim
+  nedostal nikdo z dvojice; výchozí účet cesty a kategorie mohl být cizí.
+
+Kromě příběhu nic z toho cizí data neukázalo (globální rozsah je přihlášenému
+schová), ale záznam v naší galerii ukazoval do cizí.
+
+**Hlídky:** `ExistsVGaleriiTest` shodí každé nové `exists:` nad tabulkou
+s galerií bez omezení na galerii (ověřeno proti kódu před opravou — ukázal
+přesně pět děravých pravidel). `PravidlaDokumentuPrototypuTest` nově hlídá
+metody třídy `Component` definované dvakrát — druhá definice tiše přepíše
+první, a tak telefon jednou vůbec neukládal stav. Dnes jsou obě třídy čisté.
+
+**Pokrytí:** API galerie celé (116 tras), starší API v prioritních
+kontrolerech (~58 ze ~103). Zbytek starého API projitý není.
+
 **Nález zvlášť:** každá chyba validace na webových cestách starého rozhraní
 končí u klienta, který posílá JSON, chybou 500 („Call to a member function
 all() on array") — nezávisle na téhle opravě. Předáno jako samostatný úkol.
@@ -872,8 +897,12 @@ odhlášení. Dokud žádná obrazovka režim nezapíná, zůstává, jak je.
 |---|---|
 | `13ea1a68` | „Dnes" je dnes dvojice, ne dnes v UTC |
 | `526a700e` | Ke svým fotkám nejde připojit osobu, štítek ani místo z cizí galerie |
+| `8be7b281` | Hlídka na metody prototypu definované dvakrát |
+| `dd909778` | Hlídka na `exists:` nad tabulkami galerie |
+| `cce2bc98` | Příběh alba nevrací cizí blok, finance neukazují do cizí galerie |
+| `7110eef2` | Rozpočet ani cestu nejde předat mimo galerii |
 
-Testy: **1646 PHP testů**, všechny prošly. Bez migrace.
+Testy: **1657 PHP testů**, všechny prošly. Bez migrace.
 
 ---
 
