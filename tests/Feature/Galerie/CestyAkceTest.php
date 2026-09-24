@@ -58,6 +58,32 @@ class CestyAkceTest extends TestCase
         $this->postJson('/api/cesty/'.$cesta.'/program', ['den' => 30, 'nazev' => 'Mimo'])->assertStatus(422);
     }
 
+    /**
+     * Dny cesty jdou po sobě, ne pozpátku.
+     *
+     * `sort_order` se počítal jako `$datum->diffInDays($start)`, jenže Carbon 3
+     * vrací rozdíl **se znaménkem** a v tomhle pořadí je to `start − datum` —
+     * tedy záporné číslo pro každý den po tom prvním. Sloupec je
+     * `unsignedSmallInteger`, takže na MySQL ve striktním režimu celá
+     * transakce spadne; na SQLite se itinerář jen seřadí obráceně.
+     */
+    public function test_dny_cesty_maji_rostouci_poradi(): void
+    {
+        $cesta = $this->cesta();
+
+        foreach ([1, 3, 5] as $den) {
+            $this->postJson('/api/cesty/'.$cesta.'/program', ['den' => $den, 'nazev' => 'Den '.$den])
+                ->assertStatus(201);
+        }
+
+        $poradi = DB::table('trip_days')->orderBy('date')->pluck('sort_order')->map('intval')->all();
+
+        // `den => N` je N. den po začátku cesty (viz test výš), takže pořadí
+        // je rovnou N. Podstatné je, že roste a není záporné.
+        $this->assertSame([1, 3, 5], $poradi,
+            'Pořadí dne se počítá od začátku cesty a roste — záporné číslo se do sloupce ani nevejde.');
+    }
+
     public function test_posunuti_bodu_programu(): void
     {
         $cesta = $this->cesta();

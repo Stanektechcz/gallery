@@ -95,7 +95,17 @@ class CestyAkceController extends Controller
             $denId = $den?->id ?? DB::table('trip_days')->insertGetId([
                 'trip_id' => $radek->id,
                 'date' => $datum->toDateString(),
-                'sort_order' => (int) $datum->diffInDays(CarbonImmutable::parse($radek->start_date)),
+                /*
+                 * Kolikátý den cesty to je — počítáno od začátku, ne naopak.
+                 *
+                 * Carbon 3 vrací `diffInDays` **se znaménkem** a `$a->diffInDays($b)`
+                 * je `$b − $a`. V původním pořadí tedy vycházelo `start − datum`,
+                 * což je pro každý den po tom prvním záporné číslo. Sloupec je
+                 * `unsignedSmallInteger`: na MySQL ve striktním režimu spadne
+                 * celá transakce a bod programu nejde přidat na žádný den kromě
+                 * prvního; na SQLite se itinerář jen seřadí obráceně.
+                 */
+                'sort_order' => (int) CarbonImmutable::parse($radek->start_date)->diffInDays($datum),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
