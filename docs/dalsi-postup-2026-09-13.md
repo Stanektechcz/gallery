@@ -990,9 +990,16 @@ první, a tak telefon jednou vůbec neukládal stav. Dnes jsou obě třídy čis
 **Pokrytí:** API galerie celé (116 tras), starší API v prioritních
 kontrolerech (~58 ze ~103). Zbytek starého API projitý není.
 
-**Nález zvlášť:** každá chyba validace na webových cestách starého rozhraní
-končí u klienta, který posílá JSON, chybou 500 („Call to a member function
-all() on array") — nezávisle na téhle opravě. Předáno jako samostatný úkol.
+**Nález zvlášť — opraveno (tady šlo původně o chybný závěr):** tvrzení, že
+chyba validace na webových cestách starého rozhraní končí u JSON klienta
+chybou 500, **nebylo pravdivé**. Server vracel 302 zpět; „Call to a member
+function all() on array" hodil až Laravelův `TestResponseAssert` při skládání
+hlášky selhaného `assertStatus` (s `session.serialization = json` jsou chyby
+v sezení pole). Skutečná chyba byla jinde: axios přesměrování tiše následoval
+na 200 s HTML, ohlásil úspěch a hláška o chybě se neukázala. Samostatný úkol
+ji opravil ve větvích `claude/kind-perlman-108d25` (server vrací JSON klientovi
+422) a `claude/elated-tesla-64fdeb` (obrazovky chybu ukážou) — **zatím
+nesloučeno do `main`**.
 
 ### `read_only_mode` — ověřeno, zatím nevynuceno
 
