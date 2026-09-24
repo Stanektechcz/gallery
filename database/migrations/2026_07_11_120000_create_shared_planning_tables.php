@@ -154,7 +154,16 @@ return new class extends Migration
         Schema::create('push_subscriptions', function (Blueprint $table) {
             $table->id();
             $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('endpoint', 2048)->unique();
+            /*
+             * Adresa odběru je dlouhá a unikátní klíč se z ní udělat nedá.
+             *
+             * 2048 znaků je v utf8mb4 8192 bajtů proti stropu InnoDB 3072,
+             * takže `migrate` na MySQL padalo na ERROR 1071. Prefix by tu
+             * nestačil — dvě adresy téhož poskytovatele se liší až na konci
+             * a unikát by je prohlásil za tutéž. Jednoznačnost drží otisk.
+             */
+            $table->string('endpoint', 2048);
+            $table->char('endpoint_hash', 64)->unique();
             $table->json('keys');
             $table->string('user_agent', 1024)->nullable();
             $table->timestamp('last_seen_at')->nullable();

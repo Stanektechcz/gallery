@@ -1160,7 +1160,12 @@ class CalendarPlanningController extends Controller
         if (! Str::startsWith($data['endpoint'], 'https://')) {
             abort(422, 'Push endpoint musí používat HTTPS.');
         }
-        DB::table('push_subscriptions')->updateOrInsert(['endpoint' => $data['endpoint']], ['user_id' => $request->user()->id, 'keys' => json_encode($data['keys']), 'user_agent' => Str::limit((string) $request->userAgent(), 1024), 'last_seen_at' => now(), 'updated_at' => now(), 'created_at' => now()]);
+        // Klíčem je otisk, ne adresa: 2048 znaků se do unikátního klíče
+        // MySQL nevejde (viz migrace 2026_09_24_120000_indexy_pro_mysql).
+        DB::table('push_subscriptions')->updateOrInsert(
+            ['endpoint_hash' => hash('sha256', $data['endpoint'])],
+            ['endpoint' => $data['endpoint'], 'user_id' => $request->user()->id, 'keys' => json_encode($data['keys']), 'user_agent' => Str::limit((string) $request->userAgent(), 1024), 'last_seen_at' => now(), 'updated_at' => now(), 'created_at' => now()],
+        );
 
         return response()->json(['status' => 'saved'], 201);
     }
@@ -1168,7 +1173,10 @@ class CalendarPlanningController extends Controller
     public function destroyPushSubscription(Request $request): JsonResponse
     {
         $request->validate(['endpoint' => 'required|url|max:2048']);
-        DB::table('push_subscriptions')->where('user_id', $request->user()->id)->where('endpoint', $request->input('endpoint'))->delete();
+        DB::table('push_subscriptions')
+            ->where('user_id', $request->user()->id)
+            ->where('endpoint_hash', hash('sha256', (string) $request->input('endpoint')))
+            ->delete();
 
         return response()->json(['status' => 'deleted']);
     }

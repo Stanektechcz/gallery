@@ -2,6 +2,7 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -43,11 +44,31 @@ return new class extends Migration
             $table->softDeletes();
 
             $table->index(['gallery_space_id', 'parent_id']);
-            $table->index('materialized_path');
+            // `materialized_path` se indexuje až za vytvořením tabulky:
+            // celých 2048 znaků je v utf8mb4 8192 bajtů a InnoDB má strop
+            // 3072 — `migrate` na čisté MySQL padalo na ERROR 1071 hned tady.
+            // SQLite délky klíčů ignoruje, takže se to na vývoji neprojevilo.
             $table->index(['gallery_space_id', 'slug']);
             $table->index('sync_status');
             $table->index('drive_folder_id');
         });
+
+        /*
+         * Index na cestu stromem — na MySQL jen po prvních 191 znaků.
+         *
+         * Hledá se podle předpony (`LIKE '1/7/%'`), takže prefix stačí:
+         * dohledání zbytku už dělá databáze nad hrstkou řádků. 191 je tradiční
+         * bezpečná hodnota (191 × 4 = 764 bajtů) a projde i na starších
+         * serverech s formátem řádku COMPACT.
+         *
+         * Laravel prefix v `index()` neumí, proto raw — stejně jako ostatní
+         * ovladačem hlídané příkazy v tomhle projektu.
+         */
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('CREATE INDEX albums_materialized_path_index ON albums (materialized_path(191))');
+        } else {
+            Schema::table('albums', fn (Blueprint $table) => $table->index('materialized_path'));
+        }
 
         Schema::create('album_closure', function (Blueprint $table) {
             $table->foreignId('ancestor_id')->constrained('albums')->cascadeOnDelete();

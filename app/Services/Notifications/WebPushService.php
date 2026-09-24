@@ -107,7 +107,9 @@ class WebPushService
                 // 404 or 410 means the browser dropped the subscription for good;
                 // keeping it would mean retrying a dead endpoint forever.
                 if ($report->isSubscriptionExpired()) {
-                    DB::table('push_subscriptions')->where('endpoint', $report->getEndpoint())->delete();
+                    DB::table('push_subscriptions')
+                        ->where('endpoint_hash', hash('sha256', (string) $report->getEndpoint()))
+                        ->delete();
 
                     continue;
                 }
