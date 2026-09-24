@@ -16,6 +16,7 @@ use App\Services\Billing\EntitlementService;
 use App\Services\Media\ArchivMedii;
 use App\Services\Media\MediaFormatService;
 use App\Services\Media\UpravaFotky;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -359,7 +360,7 @@ class MediaController extends Controller
             ->with(['variants' => fn ($q) => $q->where('type', 'original')])
             ->get();
 
-        $odpoved = $archiv->stahnout($polozky, 'vybrane-fotky-'.now()->format('Y-m-d'));
+        $odpoved = $archiv->stahnout($polozky, 'vybrane-fotky-'.Cas::dnes()->toDateString());
 
         abort_if($odpoved === null, 404, 'Z výběru aplikace u sebe nemá ani jeden originál.');
 

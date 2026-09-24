@@ -4,6 +4,7 @@ namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -269,13 +270,37 @@ class ObsahKucharkaTest extends TestCase
         $this->assertSame(0, DB::table('planned_meals')->where('meal_type', 'dinner')->count());
     }
 
+    /**
+     * V pondělí po půlnoci je týden už ten nový.
+     *
+     * Okno menu začínalo `CarbonImmutable::now()->startOfWeek()` — pondělím
+     * v UTC. V pondělí mezi půlnocí a druhou ráno je v UTC ještě neděle, takže
+     * kuchařka ukazovala minulý týden a jídla na příští pondělí nebyla vidět.
+     */
+    public function test_menu_v_pondeli_po_pulnoci_ukazuje_tento_tyden(): void
+    {
+        // Pondělí 28. 9. ve 0:30 v Praze je neděle 27. 9. ve 22:30 UTC.
+        $this->travelTo(CarbonImmutable::parse('2026-09-28 00:30', 'Europe/Prague'));
+        $recept = $this->recept(['title' => 'Rizoto']);
+
+        $this->jidlo($recept, 'planned', '2026-09-21 18:00:00'); // minulé pondělí
+        $this->jidlo($recept, 'planned', '2026-10-05 18:00:00'); // příští pondělí
+
+        $menu = $this->getJson('/api/data/kucharka')->assertOk()->json('data.AL.weekMenu');
+        $this->assertIsArray($menu, 'Menu v odpovědi chybí úplně — test by nic nehlídal.');
+        $dny = array_column($menu, 1);
+
+        $this->assertContains('5. 10. · dinner', $dny, 'Příští pondělí patří do dvoutýdenního okna.');
+        $this->assertNotContains('21. 9. · dinner', $dny, 'Minulý týden už na obrazovce být nemá.');
+    }
+
     /** Název dnešního dne tak, jak jím kuchařka klíčuje menu. */
     private function denDnes(): string
     {
         return ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'][now()->dayOfWeek];
     }
 
-    private function jidlo(int $recept, string $stav): void
+    private function jidlo(int $recept, string $stav, ?string $kdy = null): void
     {
         DB::table('planned_meals')->insert([
             'uuid' => (string) Str::uuid(),
@@ -284,7 +309,7 @@ class ObsahKucharkaTest extends TestCase
             'recipe_id' => $recept,
             'meal_type' => 'dinner',
             'status' => $stav,
-            'planned_for' => now()->setTime(18, 0),
+            'planned_for' => $kdy ?? now()->setTime(18, 0),
             'created_at' => now(),
             'updated_at' => now(),
         ]);

@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToGallerySpace;
+use App\Support\Cas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -58,7 +59,7 @@ class Budget extends Model
      */
     public function activeWindow(?Carbon $today = null): array
     {
-        $today ??= Carbon::today();
+        $today ??= Carbon::instance(Cas::dnes());
 
         if (($this->period_mode ?? 'fixed') !== 'rolling') {
             return [$this->starts_on->copy(), $this->ends_on?->copy()];

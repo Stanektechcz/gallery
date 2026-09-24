@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Obsah\Uklid;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
@@ -126,7 +127,7 @@ class UklidVeStavu
     {
         $rok = trim((string) $hodnota);
 
-        return preg_match('/^\d{4}$/', $rok) && (int) $rok >= 1826 && (int) $rok <= (int) now()->year
+        return preg_match('/^\d{4}$/', $rok) && (int) $rok >= 1826 && (int) $rok <= Cas::dnes()->year
             ? $rok
             : null;
     }

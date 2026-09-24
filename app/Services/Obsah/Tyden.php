@@ -239,7 +239,7 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('trips')) {
-            DB::table('trips')->where('gallery_space_id', $prostor->id)->whereDate('start_date', '>', CarbonImmutable::today()->toDateString())
+            DB::table('trips')->where('gallery_space_id', $prostor->id)->whereDate('start_date', '>', Cas::dnes()->toDateString())
                 ->orderBy('start_date')->limit(10)->get(['name', 'start_date'])
                 ->each(function ($c) use (&$chceme) {
                     $chceme[] = [(string) $c->name, 'ph-airplane-tilt', 'cesta od '.CarbonImmutable::parse($c->start_date)->format('j. n. Y'), 'naplánováno'];

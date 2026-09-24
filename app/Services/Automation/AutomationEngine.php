@@ -6,6 +6,7 @@ use App\Models\AutomationRule;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\SharedTodo;
+use App\Support\Cas;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -279,7 +280,7 @@ class AutomationEngine
             'created_by' => $rule->created_by,
             'title' => $this->fill($config['title'] ?? 'Zápisek z automatizace', $payload),
             'body' => $this->fill($config['body'] ?? '', $payload),
-            'entry_date' => now()->toDateString(),
+            'entry_date' => Cas::dnes()->toDateString(),
             'visibility' => 'private',
         ]);
     }

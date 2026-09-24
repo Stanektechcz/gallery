@@ -245,7 +245,8 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $pondeli = CarbonImmutable::now()->startOfWeek();
+        // Pondělí dvojice: v UTC je v pondělí po půlnoci ještě neděle.
+        $pondeli = Cas::dnes()->startOfWeek();
         $obsazeno = $this->obsazenost($prostor, $pondeli);
 
         $dny = Tabulky::je('house_week')

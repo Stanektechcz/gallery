@@ -337,7 +337,8 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $od = CarbonImmutable::now()->startOfWeek();
+        // Pondělí dvojice: v UTC je v pondělí po půlnoci ještě neděle.
+        $od = Cas::dnes()->startOfWeek();
 
         return DB::table('planned_meals as j')
             ->leftJoin('recipes as r', 'r.id', '=', 'j.recipe_id')

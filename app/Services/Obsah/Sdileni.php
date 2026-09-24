@@ -276,7 +276,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereNull('trashed_at')
             ->where('is_hidden', false);
 
-        $letos = (clone $zaklad())->where('taken_at', '>=', CarbonImmutable::now()->startOfYear());
+        $letos = (clone $zaklad())->where('taken_at', '>=', Cas::dnes()->startOfYear());
         $letosPocet = (clone $letos)->count();
         $oblibene = (clone $zaklad())->where('is_favorite', true);
         $oblibenePocet = (clone $oblibene)->count();
@@ -291,7 +291,7 @@ class Sdileni implements MaPrazdneKolekce, PoskytovatelObsahu
         return array_values(array_filter([
             $letosPocet ? [
                 'letos',
-                'Letos ('.CarbonImmutable::now()->year.')',
+                'Letos ('.Cas::dnes()->year.')',
                 $this->pocet($letosPocet, 'položka', 'položky', 'položek').' v náhledové kvalitě',
                 $mb((int) ((clone $letos)->sum('size_bytes') / 10)),
                 'ph-images',

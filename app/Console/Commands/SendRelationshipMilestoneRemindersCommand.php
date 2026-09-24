@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\AutomationRegistryService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -18,7 +19,7 @@ class SendRelationshipMilestoneRemindersCommand extends Command
 
     public function handle(AutomationRegistryService $automations): int
     {
-        $today = today();
+        $today = Carbon::instance(Cas::dnes());
         $sent = 0;
         $spaces = GallerySpace::query()->get()->keyBy('id');
         $spaceIds = $spaces->filter(fn (GallerySpace $space) => $automations->enabled($space, AutomationRegistryService::RELATIONSHIP_MILESTONES))->keys()->all();

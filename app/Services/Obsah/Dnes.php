@@ -312,7 +312,7 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $zbyva = max(0.0, (float) $cil->target_amount - (float) $cil->saved_amount);
         $termin = $cil->target_on ? CarbonImmutable::parse($cil->target_on) : null;
-        $mesicu = $termin ? max(1, (int) ceil(CarbonImmutable::today()->diffInMonths($termin, false))) : null;
+        $mesicu = $termin ? max(1, (int) ceil(Cas::dnes()->diffInMonths($termin, false))) : null;
 
         return [
             'name' => (string) $cil->name,

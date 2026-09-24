@@ -73,11 +73,72 @@ class CasovaPasmaPrikazuTest extends TestCase
             "Úloha s pevnou hodinou musí mít `->timezone()`:\n".implode("\n", $bezPasma));
     }
 
+    /**
+     * Obrazovky, zápisy ze stavu a kontrolery galerie počítají „dnes" jako dvojice.
+     *
+     * Mezi půlnocí a druhou ráno (v zimě do jedné) je v UTC ještě včerejšek.
+     * Dnešní nálada se tak ukládala ke včerejšku a přepsala ho, kuchařka
+     * i domácnost v pondělí v noci ukazovaly minulý týden a první noc v měsíci
+     * se útrata počítala za ten minulý.
+     *
+     * Kromě kódu galerie se kontrolují i sdílené soubory, které z něj vedou —
+     * modely a automatizace. Starší API mimo galerii zůstává, jak je (viz
+     * dokument postupu, kolo 2ae).
+     */
+    public function test_obrazovky_a_stav_neberou_den_v_utc(): void
+    {
+        $soubory = collect([
+            app_path('Services/Obsah'),
+            app_path('Services/Provoz'),
+            app_path('Http/Controllers/Api/Galerie'),
+            app_path('Models'),
+        ])->flatMap(fn (string $slozka) => File::allFiles($slozka))
+            ->push(new \SplFileInfo(app_path('Services/Automation/AutomationEngine.php')));
+
+        $prehresky = [];
+
+        foreach ($soubory as $soubor) {
+            foreach ($this->radkySPrehreskem((string) file_get_contents($soubor->getPathname())) as $radek => $proc) {
+                $prehresky[] = '  '.str_replace(app_path().DIRECTORY_SEPARATOR, '', $soubor->getPathname()).":{$radek}: {$proc}";
+            }
+        }
+
+        $this->assertSame([], $prehresky,
+            "Den, týden, měsíc a rok dvojice se berou přes `App\\Support\\Cas`:\n".implode("\n", $prehresky));
+    }
+
+    /**
+     * Řádky, na kterých se den bere v UTC.
+     *
+     * @return array<int, string> číslo řádku => co je na něm špatně
+     */
+    private function radkySPrehreskem(string $kod): array
+    {
+        $nalezy = [];
+
+        foreach (preg_split('/\R/', $kod) as $i => $radek) {
+            foreach ($this->podezrele() as $vzor => $proc) {
+                if (preg_match($vzor, $radek)) {
+                    $nalezy[$i + 1] = $proc;
+                    break;
+                }
+            }
+        }
+
+        return $nalezy;
+    }
+
     /** @return array<string, string> vzor => co je na něm špatně */
     private function podezrele(): array
     {
+        // Holé `now()` — ne `->now()`, `::now()` ani `$now()`.
+        $ted = '(?:Carbon(?:Immutable)?::now\(\)|(?<![\w>:$])now\(\))';
+
         return [
-            '/Carbon::today\(\)/' => 'Carbon::today() je půlnoc v UTC — patří sem Cas::dnes()',
+            '/Carbon(?:Immutable)?::today\(\)|(?<![\w>:$])today\(\)/' => 'today() je půlnoc v UTC — patří sem Cas::dnes()',
+            '/'.$ted.'->(?:startOf|endOf)(?:Day|Week|Month|Year)\(/' => 'začátek dne, týdne, měsíce či roku v UTC — patří sem Cas::dnes()',
+            '/'.$ted.'->(?:toDateString\(\)|format\(\'Y-m-d)/' => 'dnešní datum v UTC — patří sem Cas::dnes()',
+            '/'.$ted.'->(?:year|month|day|dayOfWeek)\b/' => 'rok, měsíc či den v UTC — patří sem Cas::ted()',
             '/Carbon::now\(\)->between\(/' => 'okno spuštění se počítá v UTC — patří sem Cas::ted()',
         ];
     }

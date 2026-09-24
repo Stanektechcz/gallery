@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Models\CoupleState;
+use App\Support\Cas;
 use Carbon\CarbonImmutable;
 use Illuminate\Console\Command;
 
@@ -35,7 +36,7 @@ class GalerieExpireCommand extends Command
 
     public function handle(): int
     {
-        $dnes = CarbonImmutable::today();
+        $dnes = Cas::dnes();
         $vyprselo = 0;
 
         CoupleState::query()->each(function (CoupleState $stav) use ($dnes, &$vyprselo) {

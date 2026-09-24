@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Cas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -67,7 +68,7 @@ class FinanceProject extends Model
             return null;
         }
 
-        $dnes ??= Carbon::today();
+        $dnes ??= Carbon::instance(Cas::dnes());
 
         return max(0, (int) $dnes->diffInDays($this->ends_on, false));
     }

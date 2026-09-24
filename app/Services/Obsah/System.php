@@ -1136,7 +1136,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
-        $dnes = CarbonImmutable::today();
+        // Měsíc dvojice: první noc v měsíci je v UTC ještě ten minulý.
+        $dnes = Cas::dnes();
 
         $utraceno = (float) DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
@@ -1350,7 +1351,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rokVCislech(GallerySpace $prostor): array
     {
-        $letos = CarbonImmutable::now()->startOfYear();
+        $letos = Cas::dnes()->startOfYear();
         $loni = $letos->subYear();
 
         $radky = [];

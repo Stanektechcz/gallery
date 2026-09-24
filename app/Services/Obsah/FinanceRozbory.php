@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -172,7 +173,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         $platby = DB::table('finance_recurring')
             ->where('gallery_space_id', $prostor->id)
@@ -396,7 +397,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        $dnes = Cas::dnes();
 
         return DB::table('house_dues')
             ->where('gallery_space_id', $prostor->id)
@@ -451,7 +452,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->utraty()
-            ->where('occurred_at', '>=', CarbonImmutable::now()->startOfYear())
+            ->where('occurred_at', '>=', Cas::dnes()->startOfYear())
             // Výdaj se ukládá kladně a znaménko dělá `type`; záporná částka
             // je vratka, a ta je stejně velká událost jako nákup.
             ->where(fn ($q) => $q->where('amount_from', '>=', $hranice)
@@ -526,7 +527,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $utraceno = $this->utracenoPoKategoriich(
             $prostor,
-            CarbonImmutable::now()->startOfYear(),
+            Cas::dnes()->startOfYear(),
             CarbonImmutable::now(),
         );
 
@@ -557,7 +558,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function coToZnamenalo(GallerySpace $prostor): array
     {
-        $od = CarbonImmutable::now()->startOfYear();
+        $od = Cas::dnes()->startOfYear();
 
         $poKategoriich = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
@@ -643,7 +644,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $dvojice = $this->dvojice($prostor);
-        $od = CarbonImmutable::now()->startOfMonth()->subMonths(self::MESICU - 1);
+        $od = Cas::dnes()->startOfMonth()->subMonths(self::MESICU - 1);
 
         $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
@@ -686,7 +687,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function inflace(GallerySpace $prostor): array
     {
-        $letos = CarbonImmutable::now()->year;
+        $letos = Cas::dnes()->year;
 
         $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)

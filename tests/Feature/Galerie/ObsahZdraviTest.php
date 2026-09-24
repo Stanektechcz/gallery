@@ -7,6 +7,7 @@ use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WellbeingMood;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -337,6 +338,43 @@ class ObsahZdraviTest extends TestCase
 
         $this->assertCount(1, $moje);
         $this->assertSame(5, (int) $moje[0]->value);
+    }
+
+    /**
+     * Po půlnoci patří nálada dnešku — a včerejší zůstane, jak byla.
+     *
+     * Čtení bere okno podle `Cas::dnes()`, zápis bral půlnoc v UTC. Mezi
+     * půlnocí a druhou ráno (v zimě do jedné) je v UTC ještě včerejšek:
+     * poslední hodnota se tak uložila ke včerejšku a přes `updateOrCreate`
+     * **přepsala** jeho skutečnou náladu. A protože prototyp posílá celou
+     * řadu čtrnácti dnů, posunula se o den zpátky celá.
+     */
+    public function test_nalada_po_pulnoci_patri_dnesku(): void
+    {
+        // 25. 9. ve 0:30 v Praze je 24. 9. ve 22:30 UTC.
+        $this->travelTo(CarbonImmutable::parse('2026-09-25 00:30', 'Europe/Prague'));
+
+        WellbeingMood::create([
+            'gallery_space_id' => $this->prostor->id,
+            'user_id' => $this->maki->id,
+            'day' => '2026-09-24',
+            'value' => 3,
+        ]);
+
+        // Prototyp posílá, co mu server ukázal, plus dnešní hodnotu na konci.
+        $rada = $this->getJson('/api/data/zdravi')->json('data.KL_MOOD.Makinka');
+        $this->assertSame(3, $rada[12], 'Včerejšek má být předposlední den okna.');
+        $rada[13] = 5;
+
+        $this->patchJson('/api/state', ['data' => ['klMood' => ['Makinka' => $rada]]])->assertOk();
+
+        $podleDne = WellbeingMood::where('user_id', $this->maki->id)->get()
+            ->mapWithKeys(fn (WellbeingMood $m) => [CarbonImmutable::parse($m->day)->toDateString() => (int) $m->value])
+            ->all();
+
+        $this->assertSame(['2026-09-24' => 3, '2026-09-25' => 5], $podleDne,
+            'Dnešní nálada se uložila ke včerejšku a přepsala ho.');
+        $this->assertSame(5, $this->getJson('/api/data/zdravi')->json('data.KL_MOOD.Makinka.13'));
     }
 
     // ——— pomůcky ———

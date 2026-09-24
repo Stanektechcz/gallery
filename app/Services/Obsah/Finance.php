@@ -267,7 +267,8 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = Carbon::today();
+        // Měnitelný `Carbon`, protože ho bere `FinanceRecurring::terminy()`.
+        $dnes = Carbon::instance(Cas::dnes());
         $do = $dnes->copy()->addDays(60);
 
         $predpisy = FinanceRecurring::withoutGlobalScope(SpaceContext::SCOPE)
@@ -559,13 +560,13 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         $ctvrtleti = ['Leden – březen', 'Duben – červen', 'Červenec – září', 'Říjen – prosinec'];
-        $rok = CarbonImmutable::today()->year;
-        $ted = (int) ceil(CarbonImmutable::today()->month / 3);
+        $rok = Cas::dnes()->year;
+        $ted = (int) ceil(Cas::dnes()->month / 3);
 
         // `mesice` jde dvanáct měsíců zpět; pro rok se berou ty z letoška.
         $letos = [];
         foreach ($mesice as $i => $m) {
-            $kdy = CarbonImmutable::today()->startOfMonth()->subMonths(11 - $i);
+            $kdy = Cas::dnes()->startOfMonth()->subMonths(11 - $i);
             if ($kdy->year === $rok) {
                 $letos[(int) ceil($kdy->month / 3)] = ($letos[(int) ceil($kdy->month / 3)] ?? 0) + (int) $m[1];
             }
@@ -743,7 +744,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rozpocetVen(GallerySpace $prostor, Budget $rozpocet): array
     {
-        $dnes = CarbonImmutable::today();
+        $dnes = Cas::dnes();
         $limity = $this->limity($rozpocet);
         $mena = $rozpocet->currency ?: 'CZK';
 
@@ -815,7 +816,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function mesice(GallerySpace $prostor, string $mena): array
     {
-        $od = CarbonImmutable::today()->startOfMonth()->subMonths(11);
+        $od = Cas::dnes()->startOfMonth()->subMonths(11);
 
         $soucty = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
@@ -885,7 +886,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         return $rozpocet->goals()->get()->map(function ($cil) {
             $zbyva = max(0.0, (float) $cil->target_amount - (float) $cil->saved_amount);
             $mesicu = $cil->target_on
-                ? max(1, CarbonImmutable::today()->diffInMonths(CarbonImmutable::parse($cil->target_on), false))
+                ? max(1, Cas::dnes()->diffInMonths(CarbonImmutable::parse($cil->target_on), false))
                 : null;
 
             return [
@@ -1186,7 +1187,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereNull('t.deleted_at')
             // Návrh ani zamítnutý příjem na účet nepřišel.
             ->whereNotIn('t.state', ['draft', 'rejected'])
-            ->where('t.occurred_at', '>=', CarbonImmutable::now()->startOfMonth()->subMonths(2)->toDateString())
+            ->where('t.occurred_at', '>=', Cas::dnes()->startOfMonth()->subMonths(2)->toDateString())
             // Příjem v jiné měně by se k výplatě v korunách přičetl jako koruny.
             ->where(fn ($q) => $q->whereNull('t.currency_to')->orWhere('t.currency_to', $mena))
             ->selectRaw('COALESCE(prijemce.user_id, majitel.user_id) AS kdo, t.occurred_at, t.amount_to')

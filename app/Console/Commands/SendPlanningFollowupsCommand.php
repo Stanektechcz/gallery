@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\AutomationRegistryService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -56,7 +57,7 @@ class SendPlanningFollowupsCommand extends Command
         $gifts = DB::table('gift_ideas')->whereIn('gallery_space_id', $spaceIds)->whereNotNull('due_date')->whereNotIn('status', ['purchased', 'archived'])->where(fn ($q) => $q->whereNull('last_reminded_at')->orWhere('last_reminded_at', '<', now()->subDay()))->limit(max(0, $limit - $sent))->get();
         foreach ($gifts as $gift) {
             $days = array_map('intval', json_decode($gift->reminder_days ?: '[]', true) ?: []);
-            $remaining = (int) now()->startOfDay()->diffInDays(Carbon::parse($gift->due_date)->startOfDay(), false);
+            $remaining = (int) Cas::dnes()->diffInDays(Carbon::parse($gift->due_date)->startOfDay(), false);
             if (! in_array($remaining, $days, true)) {
                 continue;
             }

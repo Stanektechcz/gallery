@@ -7,6 +7,7 @@ use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WellbeingMood;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 
@@ -184,7 +185,9 @@ class ZdraviVeStavu
             return;
         }
 
-        $dnes = CarbonImmutable::now()->startOfDay();
+        // Den dvojice, ne UTC: čtení bere okno přes `Cas::dnes()`, a kdyby zápis
+        // počítal jinak, po půlnoci by se dnešek uložil ke včerejšku a přepsal ho.
+        $dnes = Cas::dnes();
         $pocet = count($moje);
 
         foreach (array_values($moje) as $i => $hodnota) {

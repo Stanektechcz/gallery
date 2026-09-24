@@ -8,7 +8,6 @@ use App\Services\Obsah\Mechanismy;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -181,13 +180,13 @@ class MechanismyVeStavu
                 return null;
             }
 
-            $mesic = $mesice[(string) ($a['month'] ?? '')] ?? CarbonImmutable::now()->month;
+            $mesic = $mesice[(string) ($a['month'] ?? '')] ?? Cas::dnes()->month;
 
             return [
                 'name' => $nazev,
                 'kind' => $this->druhAnti((string) ($a['type'] ?? '')),
                 'saved' => max(0, (int) ($a['saved'] ?? 0)),
-                'decided_on' => CarbonImmutable::now()->setDate(CarbonImmutable::now()->year, $mesic, 1)->toDateString(),
+                'decided_on' => Cas::dnes()->setDate(Cas::dnes()->year, $mesic, 1)->toDateString(),
                 'came_back' => (bool) ($a['back'] ?? false),
             ];
         });

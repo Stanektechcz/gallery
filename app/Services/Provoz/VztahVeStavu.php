@@ -13,6 +13,7 @@ use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
@@ -188,7 +189,8 @@ class VztahVeStavu
             return str_contains(mb_strtolower((string) ($r['due'] ?? '')), 'bez termínu') ? null : $puvodni;
         }
 
-        return CarbonImmutable::now()->startOfDay()->addDays((int) $dni);
+        // „Do pátku" počítá prototyp od dneška dvojice, ne od dneška v UTC.
+        return Cas::dnes()->addDays((int) $dni);
     }
 
     /**

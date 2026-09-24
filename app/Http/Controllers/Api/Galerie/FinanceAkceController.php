@@ -413,7 +413,7 @@ class FinanceAkceController extends Controller
                 'owner_user_id' => null,
                 'name' => 'Domácnost',
                 'currency' => FinanceSettings::proProstor($prostor->id)->home_currency ?: 'CZK',
-                'starts_on' => now()->startOfMonth()->toDateString(),
+                'starts_on' => Cas::dnes()->startOfMonth()->toDateString(),
                 'period_mode' => 'rolling',
                 'budget_kind' => 'monthly',
                 'scope' => 'ledger',
