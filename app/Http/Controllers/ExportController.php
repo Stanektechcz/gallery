@@ -19,9 +19,12 @@ class ExportController extends Controller
         $user = $request->user();
         $space = $user->gallerySpaces()->first();
 
+        // Koš hlídalo stažení odjakživa, trezor ne: stačilo znát `uuid` skryté
+        // fotky a ZIP ji vydal bez odemčení. Stejně jako archiv v prototypu.
         $items = MediaItem::where('gallery_space_id', $space->id)
             ->whereIn('uuid', $validated['uuids'])
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->with(['variants' => fn ($q) => $q->where('type', 'original')])
             ->get();
 

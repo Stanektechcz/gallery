@@ -9,7 +9,9 @@ use App\Models\MediaItem;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -98,6 +100,70 @@ class ExportAuthorizationTest extends TestCase
 
         $this->assertSame([$moje->id], $vybrane->pluck('id')->all(),
             'Do vývozu smí jen fotky z prostoru, který o něj požádal.');
+    }
+
+    /**
+     * Trezor a koš do vývozu nepatří — ani z alba, ani z výběru.
+     *
+     * Úloha filtrovala jen podle prostoru. Fotka schovaná v trezoru se tak
+     * dostala do ZIPu bez odemčení (jinde ji hlídá `ProtectVaultMedia`)
+     * a fotka vyhozená do koše se vrátila v archivu, jako by nic.
+     */
+    public function test_uloha_vynecha_trezor_a_kos(): void
+    {
+        $adri = $this->uzivatelSProstorem('Adrian');
+        $prostorId = (int) $adri->gallerySpaces()->sole()->id;
+        $album = Album::create([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $prostorId,
+            'title' => 'Dovolená',
+            'slug' => 'dovolena-'.Str::random(6),
+            'created_by' => $adri->id,
+        ]);
+
+        $bezna = $this->fotka($adri, 1);
+        $vTrezoru = $this->fotka($adri, 2);
+        $vKosi = $this->fotka($adri, 3);
+        $vTrezoru->forceFill(['is_hidden' => true])->save();
+        $vKosi->forceFill(['trashed_at' => now()])->save();
+        foreach ([$bezna, $vTrezoru, $vKosi] as $fotka) {
+            $fotka->forceFill(['primary_album_id' => $album->id])->save();
+        }
+
+        $zAlba = GenerateExportJob::vybraneFotky(['type' => 'album', 'target_id' => $album->id], $prostorId);
+        $zVyberu = GenerateExportJob::vybraneFotky(
+            ['type' => 'selection', 'media_ids' => [$bezna->id, $vTrezoru->id, $vKosi->id]],
+            $prostorId,
+        );
+
+        $this->assertSame([$bezna->id], $zAlba->pluck('id')->all(),
+            'Vývoz alba nesmí vydat fotku z trezoru ani z koše.');
+        $this->assertSame([$bezna->id], $zVyberu->pluck('id')->all(),
+            'Vývoz výběru nesmí vydat fotku z trezoru ani z koše.');
+    }
+
+    /**
+     * Staré webové stažení ZIPu hlídalo koš, ale ne trezor.
+     *
+     * Stačilo znát `uuid` skryté fotky a `/export/download` ji vydal
+     * bez odemčeného trezoru.
+     */
+    public function test_webove_stazeni_nevyda_fotku_z_trezoru(): void
+    {
+        Storage::fake('public');
+        $adri = $this->uzivatelSProstorem('Adrian');
+        $vTrezoru = $this->fotka($adri, 1);
+        $vTrezoru->forceFill(['is_hidden' => true])->save();
+        $cesta = 'media/'.$vTrezoru->uuid.'/original.jpg';
+        Storage::disk('public')->put($cesta, 'originál');
+        DB::table('media_variants')->insert([
+            'media_item_id' => $vTrezoru->id, 'type' => 'original', 'disk' => 'public', 'path' => $cesta,
+            'size_bytes' => 10, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->actingAs($adri)
+            ->postJson('/export/download', ['uuids' => [$vTrezoru->uuid]])
+            ->assertNotFound();
     }
 
     private function uzivatelSProstorem(string $jmeno): User

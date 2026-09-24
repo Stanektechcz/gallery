@@ -38,6 +38,9 @@ class GenerateExportJob implements ShouldQueue
      * s cizími identifikátory ZIP s fotkami jiné dvojice. Statická je proto,
      * aby na ni šel napsat test bez fronty a bez souborů na disku.
      *
+     * Trezor a koš se do vývozu nedostanou: úloha nemá sezení, a tedy ani
+     * odemčený trezor, a fotka z koše se dřív vracela v ZIPu, jako by nic.
+     *
      * @param  array<string, mixed>  $options
      * @return Collection<int, MediaItem>
      */
@@ -48,7 +51,8 @@ class GenerateExportJob implements ShouldQueue
         }
 
         $dotaz = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $spaceId);
+            ->where('gallery_space_id', $spaceId)
+            ->active();
 
         return match ($options['type'] ?? null) {
             'album' => $dotaz->where('primary_album_id', $options['target_id'] ?? 0)->get(),
