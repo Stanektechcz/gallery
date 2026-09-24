@@ -45,8 +45,12 @@ class ApplyMediaEditJob implements ShouldQueue
             return;
         }
 
-        // Find the local large or medium variant to use as source
-        $sourceVariant = $media->getVariant('large') ?? $media->getVariant('medium');
+        // Předloha úpravy. Zmenšenina má přednost (rychlejší dekódování), ale
+        // originál je v řadě taky — bez něj se u fotky bez zmenšenin úprava
+        // tiše neprovedla a v prohlížeči zůstal nezměněný snímek.
+        $sourceVariant = $media->getVariant('large')
+            ?? $media->getVariant('medium')
+            ?? $media->getVariant('original');
         if (! $sourceVariant) {
             return;
         }

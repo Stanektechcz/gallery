@@ -76,8 +76,13 @@ class GenerateExportJob implements ShouldQueue
             $zip->open($zipPath, \ZipArchive::CREATE | \ZipArchive::OVERWRITE);
 
             foreach ($media as $item) {
-                // Add the largest available local variant
-                $variant = $item->getVariant('large') ?? $item->getVariant('medium');
+                // Nejlepší místní kopie. Originál je poslední v řadě schválně —
+                // je mnohonásobně větší —, ale je v řadě: fotka bez zmenšenin se
+                // dřív z vývozu tiše ztratila a ZIP se tvářil hotově. Po úklidu
+                // variant kvůli místu na disku by se to dělo běžně.
+                $variant = $item->getVariant('large')
+                    ?? $item->getVariant('medium')
+                    ?? $item->getVariant('original');
                 if ($variant) {
                     $variantPath = Storage::disk('public')->path($variant->path);
                     if (file_exists($variantPath)) {
