@@ -192,8 +192,13 @@ class AdminController extends Controller
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
         $stary = $this->klic($prostor, $id);
+        $this->jenSvujKlic($request, $prostor, $stary);
 
-        $novy = $request->user()->createToken($stary->name, $stary->abilities ?? ['*']);
+        // Náhradu dostane ten, komu klíč patřil — ne ten, kdo klikl. Jinak by
+        // po „vygenerovat znovu" měl partnerův telefon klíč vlastníka galerie
+        // a partnerovi by přestal fungovat, aniž by o tom kdo věděl.
+        $komu = $stary->tokenable ?? $request->user();
+        $novy = $komu->createToken($stary->name, $stary->abilities ?? ['*']);
         $novy->accessToken->forceFill(['suffix' => substr($novy->plainTextToken, -4)])->save();
 
         // Starý klíč přestává platit hned — jinak by po „vygenerovat znovu"
@@ -211,6 +216,7 @@ class AdminController extends Controller
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
         $klic = $this->klic($prostor, $id);
+        $this->jenSvujKlic($request, $prostor, $klic);
 
         // Zrušený klíč se nemaže: v seznamu má zůstat jako zrušený, jinak by po
         // kliknutí zmizel řádek a nikdo by později nezjistil, který klíč to byl.
@@ -401,6 +407,23 @@ class AdminController extends Controller
         abort_if($klic === null, 404, 'Takový klíč tu není.');
 
         return $klic;
+    }
+
+    /**
+     * Na cizí klíč sahá jen vlastník galerie.
+     *
+     * `jenSpravce` pouští i roli `editor` a `klic()` hledá mezi tokeny všech
+     * členů — partner tedy mohl zrušit vlastníkův klíč a vydat si náhradní
+     * na sebe. V tom seznamu navíc nejsou jen API klíče: přihlašovací tokeny
+     * zařízení vypadají stejně, takže by se vlastník rázem nepřihlásil.
+     */
+    private function jenSvujKlic(Request $request, GallerySpace $prostor, PersonalAccessToken $klic): void
+    {
+        abort_unless(
+            (int) $klic->tokenable_id === $request->user()->id || $request->user()->id === $prostor->owner_id,
+            403,
+            'Tenhle klíč patří někomu jinému.',
+        );
     }
 
     private function jenVlastnik(Request $request, GallerySpace $prostor): void

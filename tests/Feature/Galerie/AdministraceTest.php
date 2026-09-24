@@ -275,6 +275,56 @@ class AdministraceTest extends TestCase
 
     // ——— klíče ———
 
+    /**
+     * Klíč patří tomu, komu byl vydán — správce na cizí nesahá.
+     *
+     * `jenSpravce` pouští i roli `editor`, a `klic()` hledá mezi tokeny
+     * **všech** členů. Partner tedy mohl zrušit vlastníkův klíč a vydat si
+     * náhradní na sebe. V tom seznamu navíc nejsou jen API klíče, ale
+     * i přihlašovací tokeny zařízení — vlastník by se rázem nepřihlásil.
+     */
+    public function test_spravce_nesmi_sahnout_na_cizi_klic(): void
+    {
+        $vlastnikuv = $this->adri->createToken('Telefon vlastníka');
+
+        Sanctum::actingAs($this->makinka);
+
+        $this->postJson('/api/admin/keys/'.$vlastnikuv->accessToken->id.'/regenerate')->assertStatus(403);
+        $this->deleteJson('/api/admin/keys/'.$vlastnikuv->accessToken->id)->assertStatus(403);
+
+        $this->assertNull($vlastnikuv->accessToken->fresh()->expires_at,
+            'Vlastníkův klíč musí dál platit.');
+    }
+
+    /** Svůj vlastní klíč si zrušit smí každý. */
+    public function test_svuj_klic_si_spravce_zrusit_smi(): void
+    {
+        $jeji = $this->makinka->createToken('Její telefon');
+
+        Sanctum::actingAs($this->makinka);
+        $this->deleteJson('/api/admin/keys/'.$jeji->accessToken->id)->assertOk();
+
+        $this->assertNotNull($jeji->accessToken->fresh()->expires_at);
+    }
+
+    /**
+     * Vlastník cizí klíč obnovit smí — ale novým klíčem zůstane cizí.
+     *
+     * Náhrada se razila na `$request->user()`, takže po „vygenerovat znovu"
+     * měl partnerův klíč najednou vlastníka galerie a partnerovi přestal
+     * fungovat, aniž by o tom kdo věděl.
+     */
+    public function test_obnoveny_klic_zustane_svemu_cloveku(): void
+    {
+        $jeji = $this->makinka->createToken('Její telefon');
+
+        $this->postJson('/api/admin/keys/'.$jeji->accessToken->id.'/regenerate')->assertOk();
+
+        $novy = PersonalAccessToken::where('name', 'Její telefon')->whereNull('expires_at')->sole();
+
+        $this->assertSame($this->makinka->id, (int) $novy->tokenable_id);
+    }
+
     public function test_klic_se_ukaze_cely_jen_jednou(): void
     {
         $odpoved = $this->postJson('/api/admin/keys', ['name' => 'Mobilní aplikace'])->assertOk();
