@@ -149,9 +149,14 @@ echo "== Kontrola před nasazením =="
 "$PHP" artisan galerie:pred-nasazenim
 
 echo
+echo "== Záloha před migrací =="
+# Migrace je jediný krok tohoto skriptu, který nejde vzít zpět — a do kola 2ag
+# před ní žádná záloha neběžela (žádná ani nebyla). Když se záloha nepovede,
+# `set -e` nasazení zastaví dřív, než se schéma změní. Obnova: BACKUP_AND_RESTORE.md.
+"$PHP" artisan gallery:zaloha
+
+echo
 echo "== Migrace =="
-# Nejdřív se ukáže, co se chystá, a teprve pak se to provede. Migrace je jediný krok
-# tohoto skriptu, který nejde vzít zpět.
 "$PHP" artisan migrate --force
 
 echo
