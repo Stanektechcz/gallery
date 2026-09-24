@@ -78,6 +78,12 @@ class AdminController extends Controller
         abort_if($stavajici && $prostor->members()->where('users.id', $stavajici->id)->exists(),
             422, 'Tenhle e-mail už do galerie přístup má.');
 
+        // Pozvánka zakládá účet. Účtu, který někdo už používá, by nasadila nové
+        // heslo — viz podmínka v `AdministraceZasahy::pozvi`. Tady stojí jen
+        // proto, aby vlastník dostal konkrétní důvod místo obecné hlášky.
+        abort_if($stavajici && $stavajici->invitation_accepted_at !== null, 422,
+            'Tenhle e-mail už má vlastní účet. Pozvánka by mu přepsala heslo, takže ji neposíláme.');
+
         $pozvany = $this->zasahy->pozvi($prostor, $request->user(), $data['email'], $data['role'] ?? 'host');
 
         abort_if($pozvany === null, 422, 'Pozvánku se nepodařilo vytvořit.');

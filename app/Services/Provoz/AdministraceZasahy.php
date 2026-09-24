@@ -129,6 +129,23 @@ class AdministraceZasahy
             return null;
         }
 
+        /*
+         * Účet, který pozvánku už jednou přijal, se znovu pozvat nedá.
+         *
+         * Bez téhle podmínky stačilo znát cizí e-mail: zápis níž přepsal tomu
+         * účtu `invitation_token`, vrátil `invitation_accepted_at` na `null`
+         * a odkaz se vrátil volajícímu. Kdo ho otevřel, nastavil si na cizí
+         * účet nové heslo a přihlásil se do cizího deníku, trezoru a financí —
+         * původní majitel se naopak nepřihlásil už nikdy.
+         *
+         * Vlastní registrace nastavuje `invitation_accepted_at` také, takže je
+         * to spolehlivé „tenhle účet už někdo má". Stojí to tady, a ne jen
+         * v kontroleru, protože zvát umí i stavová cesta (`AdminVeStavu`).
+         */
+        if ($stavajici && $stavajici->invitation_accepted_at !== null) {
+            return null;
+        }
+
         $token = Str::random(60);
 
         $pozvany = $stavajici ?? User::create([

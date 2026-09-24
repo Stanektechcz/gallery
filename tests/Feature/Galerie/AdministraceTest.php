@@ -153,6 +153,54 @@ class AdministraceTest extends TestCase
         $this->assertSame('host', $ucet['role']);
     }
 
+    /**
+     * Pozvánka nesmí přepsat účet, který už jednou přijal.
+     *
+     * Dosud stačilo, že e-mail není členem *téhle* galerie: převodník pak
+     * cizímu účtu přepsal `invitation_token`, vrátil `invitation_accepted_at`
+     * na `null` a odkaz podal volajícímu. Kdo ho otevřel, nastavil si na cizí
+     * účet nové heslo a přihlásil se — do cizího deníku, trezoru a financí.
+     * Původní majitel se naopak nepřihlásil už nikdy.
+     */
+    public function test_pozvanka_neprepise_ucet_ktery_ji_uz_prijal(): void
+    {
+        $cizi = User::factory()->create([
+            'email' => 'klara@jinde.test',
+            'invitation_token' => null,
+            'invitation_accepted_at' => now()->subYear(),
+        ]);
+        $jinyProstor = GallerySpace::create(['name' => 'Jiná galerie', 'owner_id' => $cizi->id]);
+        $jinyProstor->members()->syncWithoutDetaching([$cizi->id => ['role' => 'owner']]);
+
+        $heslo = $cizi->password;
+
+        $this->postJson('/api/admin/users', ['email' => 'klara@jinde.test'])->assertStatus(422);
+
+        $cizi->refresh();
+        $this->assertNull($cizi->invitation_token,
+            'Přijatá pozvánka se nesmí znovu natáhnout — je to cesta do cizího účtu.');
+        $this->assertNotNull($cizi->invitation_accepted_at,
+            'Datum přijetí se nesmí vynulovat.');
+        $this->assertSame($heslo, $cizi->password);
+        $this->assertFalse($this->prostor->members()->where('users.id', $cizi->id)->exists(),
+            'Cizí účet se nesmí stát členem jen tím, že ho někdo zkusil pozvat.');
+    }
+
+    /** Účet, který pozvánku ještě nepřijal, se pozvat znovu smí. */
+    public function test_pozvanka_se_da_zopakovat_dokud_ji_nikdo_neprijal(): void
+    {
+        $this->postJson('/api/admin/users', ['email' => 'klara@vzpominky.test'])->assertOk();
+
+        $klara = User::where('email', 'klara@vzpominky.test')->sole();
+        $prvni = $klara->invitation_token;
+
+        $this->prostor->members()->detach($klara->id);
+        $this->postJson('/api/admin/users', ['email' => 'klara@vzpominky.test'])->assertOk();
+
+        $this->assertNotSame($prvni, $klara->refresh()->invitation_token);
+        $this->assertNull($klara->invitation_accepted_at);
+    }
+
     public function test_role_se_da_zmenit(): void
     {
         $this->patchJson('/api/admin/users/'.$this->makinka->id.'/role', ['role' => 'host'])->assertOk();
