@@ -20,9 +20,16 @@ return [
     // Trash retention (days)
     'trash_retention_days' => env('GALLERY_TRASH_RETENTION', 30),
 
-    // Cache settings
+    // Cache settings. Vynucuje je `gallery:uklid-variant`: velikost rozhoduje,
+    // stáří jen vybírá, co zahodit dřív.
     'variant_cache_max_size_gb' => env('GALLERY_VARIANT_CACHE_GB', 20),
     'variant_cache_max_age_days' => env('GALLERY_VARIANT_CACHE_DAYS', 90),
+
+    // Kolik dní protokolu běhů úloh nechat. Sám tep plánovače je řádek každou
+    // minutu; bez úklidu tabulka roste o zhruba 1,8 milionu řádků ročně a čte
+    // se z ní při každém otevření administrace. Poslední běh každé úlohy
+    // zůstává i mimo tuhle lhůtu — bere se z něj sloupec „naposledy".
+    'task_log_retention_days' => env('GALLERY_TASK_LOG_DAYS', 90),
 
     // Upload limits
     'max_chunk_size_mb' => env('GALLERY_MAX_CHUNK_MB', 64),

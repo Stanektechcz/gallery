@@ -174,6 +174,7 @@ class PlanovaneUlohy
         'scheduler-heartbeat' => 'Tep plánovače',
         'billing-reminders' => 'Upozornění na konec předplatného',
         'variant-cache' => 'Úklid zmenšenin nad limit',
+        'protokol-uloh' => 'Úklid protokolu úloh',
     ];
 
     /** Výraz cronu česky. Pokrývá tvary, které aplikace používá. */

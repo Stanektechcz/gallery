@@ -221,6 +221,21 @@ Schedule::command('gallery:uklid-variant --no-interaction')
     ->withoutOverlapping($zamekMinut)
     ->name('variant-cache');
 
+// Protokol běhů úloh.
+//
+// `scheduled_task_runs` se od svého vzniku jen plnila: tep plánovače sám je
+// řádek každou minutu, se zbytkem úloh je to zhruba 1,8 milionu řádků ročně.
+// A čte se z ní při každém otevření administrace.
+//
+// Poslední běh každé úlohy zůstává vždycky — administrace z něj bere sloupec
+// „naposledy". Bez té výjimky by úloha, která běží jednou za rok, o sobě
+// tvrdila „nikdy".
+Schedule::command('gallery:uklid-protokol --no-interaction')
+    ->dailyAt('04:05')
+    ->timezone($pasmo)
+    ->withoutOverlapping($zamekMinut)
+    ->name('protokol-uloh');
+
 Schedule::command('gallery:scan-duplicates')
     ->weekly()
     ->name('weekly-duplicate-scan');
