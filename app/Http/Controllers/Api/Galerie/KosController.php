@@ -108,7 +108,10 @@ class KosController extends Controller
 
         AuditLog::record('media.purge', $polozka, ['filename' => $jmeno]);
         $this->mazani->purge($polozka);
-        $polozka->delete();
+        // `forceDelete`, ne `delete`: model má soft delete, takže by po
+        // „trvale odstraněno" zůstal řádek s `deleted_at` — bez souborů,
+        // neviditelný pro koš i pro noční úklid, který se ptá na `trashed_at`.
+        $polozka->forceDelete();
 
         return response()->json([
             'ok' => true,
@@ -130,7 +133,7 @@ class KosController extends Controller
         foreach ($polozky as $polozka) {
             AuditLog::record('media.purge', $polozka, ['via' => 'empty_trash']);
             $this->mazani->purge($polozka);
-            $polozka->delete();
+            $polozka->forceDelete();
         }
 
         $kolik = $polozky->count();

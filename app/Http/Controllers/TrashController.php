@@ -75,7 +75,9 @@ class TrashController extends Controller
         AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
 
         $this->deleteMediaFiles($media);
-        $media->delete();
+        // `forceDelete`, ne `delete`: soft delete by nechal řádek bez souborů,
+        // neviditelný pro koš i pro noční úklid.
+        $media->forceDelete();
 
         return response()->json(['status' => 'purged', 'uuid' => $uuid]);
     }
@@ -94,7 +96,7 @@ class TrashController extends Controller
         foreach ($items as $item) {
             AuditLog::record('media.purge', $item, ['via' => 'empty_trash']);
             $this->deleteMediaFiles($item);
-            $item->delete();
+            $item->forceDelete();
         }
 
         return response()->json(['count' => $items->count()]);

@@ -4,10 +4,9 @@ namespace App\Console\Commands;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Services\Media\MediaPurger;
 use App\Support\SpaceContext;
 use Illuminate\Console\Command;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Koš po třiceti dnech.
@@ -24,6 +23,11 @@ class PurgeTrashCommand extends Command
     protected $signature = 'gallery:purge-trash {--dny= : Přepíše lhůtu z config/gallery.php} {--nasucho : Jen vypíše, co by se smazalo}';
 
     protected $description = 'Trvale smaže položky, které jsou v koši déle než nastavená lhůta';
+
+    public function __construct(private readonly MediaPurger $mazani)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -57,7 +61,21 @@ class PurgeTrashCommand extends Command
                 'duvod' => 'lhůta koše',
             ]);
 
-            $this->smazSoubory($media);
+            /*
+             * Přes `MediaPurger`, ne vlastní kopií mazání.
+             *
+             * Tenhle příkaz měl vlastní `smazSoubory()`, které o Google Disku
+             * nevědělo — fotka, kterou aplikace hlásila jako trvale smazanou,
+             * ležela dál v cizím cloudu. `MediaPurger` je to jedno místo, kam
+             * patří všechno mazání souborů; jeho docblock přesně před dvěma
+             * kopiemi varuje.
+             *
+             * Navíc volalo `Storage::disk($varianta->disk)`, jenže zrcadlení
+             * zapisuje do `disk` jméno poskytovatele (`dropbox`, `onedrive`),
+             * které v `config/filesystems.php` není — výjimka spadla do logu
+             * a mazání pokračovalo dál.
+             */
+            $this->mazani->purge($media);
             // `forceDelete`, ne `delete`: model má soft delete, a měkce smazaný
             // řádek by dál držel místo v součtu i v databázi.
             $media->forceDelete();
@@ -66,41 +84,40 @@ class PurgeTrashCommand extends Command
             $bajtu += (int) $media->size_bytes;
         });
 
+        $sirotku = $nasucho ? 0 : $this->uklidSirotky();
+
         $this->info($smazano
             ? ($nasucho ? 'Ke smazání: ' : 'Smazáno: ').$smazano.' položek · '.round($bajtu / 1048576, 1).' MB'
             : 'Koš je prázdný.');
 
+        if ($sirotku > 0) {
+            $this->info('Uklizeno '.$sirotku.' řádků po dřívějším měkkém mazání.');
+        }
+
         return self::SUCCESS;
     }
 
-    private function smazSoubory(MediaItem $media): void
+    /**
+     * Sirotci po dřívějším měkkém mazání.
+     *
+     * Obě obrazovky koše dřív volaly `->delete()` na modelu se `SoftDeletes`,
+     * takže soubory zmizely a řádek zůstal s `deleted_at`. Do koše se nevrátí
+     * (dotaz ho nevidí) a tenhle příkaz ho taky míjel, protože měkce smazané
+     * řádky z dotazu vypadnou. Zůstávaly tedy navždy a držely místo v součtu.
+     */
+    private function uklidSirotky(): int
     {
-        foreach ($media->variants as $varianta) {
-            if (! $varianta->path) {
-                continue;
-            }
+        $sirotci = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->onlyTrashed()
+            ->get();
 
-            try {
-                Storage::disk($varianta->disk ?: 'public')->delete($varianta->path);
-            } catch (\Throwable $e) {
-                Log::warning('Soubor varianty se nepodařilo smazat', [
-                    'path' => $varianta->path,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        foreach ($sirotci as $media) {
+            // Soubory už nejsou; `purge` je bezpečné volat znovu a postará se
+            // i o kopii na Disku, kterou dřívější cesta nechala ležet.
+            $this->mazani->purge($media);
+            $media->forceDelete();
         }
 
-        try {
-            Storage::disk('public')->deleteDirectory('media/'.$media->uuid);
-        } catch (\Throwable $e) {
-            Log::warning('Adresář média se nepodařilo smazat', ['uuid' => $media->uuid]);
-        }
-
-        $slozene = storage_path('app/uploads/'.$media->uuid);
-
-        if (is_dir($slozene)) {
-            array_map('unlink', glob($slozene.'/*') ?: []);
-            @rmdir($slozene);
-        }
+        return $sirotci->count();
     }
 }

@@ -113,9 +113,11 @@ class KosTest extends TestCase
     /**
      * Trvalé odstranění doopravdy maže a zapisuje se do protokolu.
      *
-     * Řádek v tabulce zůstává jako náhrobek (`deleted_at`) — soubory, náhledy
-     * a kopie na Disku ne. Fotka je tím pádem opravdu nevratná, což je přesně
-     * to, co dialog slibuje.
+     * Dřív tu stálo, že řádek zůstává jako náhrobek (`deleted_at`). To byla
+     * chyba, ne záměr: takový řádek koš nevidí ani ho neuklidí noční
+     * `gallery:purge-trash`, takže držel místo v součtu navždy. Nevratnost
+     * zajišťuje smazání souborů a kopie na Disku — záznam o tom zůstává
+     * v protokolu, ne v `media_items`.
      */
     public function test_trvale_odstraneni_maze_a_zapisuje_se(): void
     {
@@ -126,7 +128,7 @@ class KosTest extends TestCase
             ->assertJsonPath('ok', true);
 
         $this->assertNull(MediaItem::find($fotka->id));
-        $this->assertNotNull(MediaItem::withTrashed()->find($fotka->id)->deleted_at);
+        $this->assertNull(MediaItem::withTrashed()->find($fotka->id));
         $this->assertDatabaseHas('audit_logs', ['action' => 'media.purge']);
     }
 
@@ -163,6 +165,35 @@ class KosTest extends TestCase
     public function test_cizi_polozka_neni_v_kosi(): void
     {
         $this->postJson('/api/kos/odstranit', ['id' => (string) Str::uuid()])->assertNotFound();
+    }
+
+    /**
+     * „Trvale odstraněno" musí řádek opravdu smazat.
+     *
+     * `MediaItem` má `SoftDeletes`, takže `->delete()` jen nastavilo
+     * `deleted_at`. Soubory zmizely, řádek zůstal — a noční úklid ho nevidí,
+     * protože měkké mazání ho z dotazu vyřadí. Vznikl tím sirotek ukazující
+     * na bajty, které už nejsou.
+     */
+    public function test_trvale_odstraneni_smaze_radek_doopravdy(): void
+    {
+        $foto = $this->fotka(['trashed_at' => now()->subDay()]);
+
+        $this->postJson('/api/kos/odstranit', ['id' => $foto->uuid])->assertOk();
+
+        $this->assertSame(0, MediaItem::withTrashed()->where('uuid', $foto->uuid)->count(),
+            'Po „trvale odstraněno" nesmí zůstat ani měkce smazaný řádek.');
+    }
+
+    /** Totéž pro vysypání celého koše. */
+    public function test_vyprazdneni_kose_smaze_radky_doopravdy(): void
+    {
+        $this->fotka(['trashed_at' => now()->subDay()], 1);
+        $this->fotka(['trashed_at' => now()->subDay()], 2);
+
+        $this->postJson('/api/kos/vyprazdnit')->assertOk();
+
+        $this->assertSame(0, MediaItem::withTrashed()->whereNotNull('trashed_at')->count());
     }
 
     private function fotka(array $navic = [], int $poradi = 1): MediaItem
