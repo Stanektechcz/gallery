@@ -804,6 +804,79 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ae. Třicáté druhé kolo — den dvojice a cizí záznamy ve starém API (24. 9.)
+
+Kolo bez zadaného seznamu: hledání chyb napříč kódem. Dvě třídy chyb, obě
+s hlídkou, která je příště chytí dřív než člověk.
+
+### „Dnes" bylo dnes v UTC
+
+Server běží v UTC, dvojice v Praze. Mezi půlnocí a druhou ráno (v zimě do
+jedné) je v UTC ještě včerejšek — a 36 míst bralo den, týden, měsíc či rok
+právě odtud: obsah obrazovek, zápisy ze stavu, modely, automatizace, příkazy.
+
+Nejhorší byla **nálada**. Čtení bralo okno přes `Cas::dnes()`, zápis půlnoc
+v UTC. Dnešní hodnota se po půlnoci uložila ke včerejšku a přes
+`updateOrCreate` **přepsala jeho skutečnou náladu**; protože prototyp posílá
+celou řadu čtrnácti dnů, posunula se o den zpátky celá. Test to ukázal přesně:
+z {24.: 3, 25.: 5} se stalo {23.: 3, 24.: 5}.
+
+Dál: kuchařka a domácí týden v pondělí v noci ukazovaly minulý týden, první
+noc v měsíci počítal rozpočet útratu minulého měsíce, 1. ledna patřil
+„letošek" loňsku, a termín slibu, automatický zápis do deníku, odpočet dárku
+i výročí dostaly včerejší datum.
+
+`CasovaPasmaPrikazuTest` dřív chytal jen `Carbon::today()` a jen v příkazech —
+`CarbonImmutable::today()`, `today()` ani `now()->startOfWeek()` neviděl.
+Teď zná všechny tvary a kontroluje i obsah, stav, kontrolery galerie, modely
+a automatizaci, s číslem řádku.
+
+**Zůstává:** asi 60 stejných míst ve starším API (`Api/*` mimo galerii a jeho
+služby — `CycleService`, `FinanceService`, `RecurringService`, `FinanceFilter`…).
+Patří zamrzlé aplikaci a hlídka je záměrně nekontroluje.
+
+### Cizí osoby, štítky a místa ve starém API
+
+Dva agenti prošli trasy API galerie (116, bez nálezu) a starého API; každý
+nález jsem ověřil testem, který bez opravy spadne.
+
+Starší API ověřovalo `exists:people,id`, `exists:tags,id` a `exists:places,id`
+— celou tabulku, ne galerii. S číslem cizí osoby (čísla jdou po sobě) si ji
+kdokoli připojil k vlastní fotce a odpověď na úpravu mu ji vrátila celou:
+jméno, přezdívku, narozeniny; u místa adresu a souřadnice. Opraveno v úpravě
+fotky i v hromadné akci (tam navíc ke každé fotce jen z její galerie), a stejně
+u obalu alba — ten by se cizí fotkou ukázal na veřejném sdíleném odkazu, kde
+globální rozsah bez přihlášení ustupuje.
+
+Místa bez galerie (z doby před sloupcem `gallery_space_id` nebo po smazané
+galerii) šla číst, přepsat i smazat odkudkoli: kontrola platila jen tehdy,
+když galerie vyplněná **byla**. Seznam míst je nikomu neukazuje, takže přísná
+kontrola legitimnímu uživateli nic nebere.
+
+Ze 13 pravidel `exists:` nad tabulkami s galerií byla děravá čtyři; nahrávání,
+sdílení a alba si id po validaci ověřují podle galerie sama.
+
+**Nález zvlášť:** každá chyba validace na webových cestách starého rozhraní
+končí u klienta, který posílá JSON, chybou 500 („Call to a member function
+all() on array") — nezávisle na téhle opravě. Předáno jako samostatný úkol.
+
+### `read_only_mode` — ověřeno, zatím nevynuceno
+
+Z bodu 3.5: klient odmítnutý zápis stavu dokola neopakuje (401/403 zápisy
+zastaví), ale 403 bere jako **odebraný přístup a odhlásí**. Protože každý toast
+je zápis stavu, účet „jen pro čtení" by vyhodilo při první hlášce. Vynutit to
+chce odpověď, kterou klient pozná zvlášť — zápis zahodí a řekne proč, místo
+odhlášení. Dokud žádná obrazovka režim nezapíná, zůstává, jak je.
+
+| Commit | Co |
+|---|---|
+| `13ea1a68` | „Dnes" je dnes dvojice, ne dnes v UTC |
+| `526a700e` | Ke svým fotkám nejde připojit osobu, štítek ani místo z cizí galerie |
+
+Testy: **1646 PHP testů**, všechny prošly. Bez migrace.
+
+---
+
 ## 2ad. Třicáté první kolo — drobnosti z auditu: co nespouštělo nic (24. 9.)
 
 Tři věci, které audit vedl jako drobnosti, protože nic nerozbíjely. Každá
