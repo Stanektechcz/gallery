@@ -837,8 +837,9 @@ to nevadí, pro službu ano. Možnosti: (a) záloha panelu hostingu nebo `scp`
 | Commit | Co |
 |---|---|
 | `f349f9c6` | Databáze se konečně zálohuje — a ze zálohy jde obnovit |
+| `04dd449a` | Před migrací v `deploy.sh` se zazálohuje databáze; selhání nasazení zastaví |
 
-Testy: **1682 PHP testů**, všechny prošly. Bez migrace; nové nastavení
+Testy: **1684 PHP testů**, všechny prošly. Bez migrace; nové nastavení
 `GALLERY_BACKUP_KEEP`.
 
 ---
