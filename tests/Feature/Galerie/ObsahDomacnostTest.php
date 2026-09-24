@@ -240,10 +240,13 @@ class ObsahDomacnostTest extends TestCase
      * „Volný čas se počítá z kalendáře, směn a cest," stojí na ní. Ve
      * skutečnosti se četla tabulka, do které nikdo nepsal, takže obrazovka
      * ukazovala sedm dní cizí dvojice z ukázkových dat.
+     *
+     * Pondělí je pondělí dvojice (`dnes()`): v pondělí po půlnoci je v UTC
+     * ještě neděle a událost z „tohoto" týdne v UTC by ležela v minulém.
      */
     public function test_volny_cas_ubyva_podle_kalendare(): void
     {
-        $pondeli = CarbonImmutable::now()->startOfWeek();
+        $pondeli = $this->dnes()->startOfWeek();
 
         $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
 
@@ -259,7 +262,7 @@ class ObsahDomacnostTest extends TestCase
     /** Celodenní věc — třeba cesta — zabere den celý. */
     public function test_celodenni_udalost_zabere_cely_den(): void
     {
-        $streda = CarbonImmutable::now()->startOfWeek()->addDays(2);
+        $streda = $this->dnes()->startOfWeek()->addDays(2);
 
         $this->udalost($streda->startOfDay(), $streda->endOfDay(), [$this->adri->id, $this->maki->id], true);
 
@@ -277,7 +280,7 @@ class ObsahDomacnostTest extends TestCase
      */
     public function test_oprava_kapacity_se_ulozi_a_prebije_kalendar(): void
     {
-        $pondeli = CarbonImmutable::now()->startOfWeek();
+        $pondeli = $this->dnes()->startOfWeek();
         $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
 
         $tyden = $this->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK');
@@ -310,7 +313,7 @@ class ObsahDomacnostTest extends TestCase
      */
     public function test_druhemu_z_dvojice_patri_jeho_vlastni_radek(): void
     {
-        $pondeli = CarbonImmutable::now()->startOfWeek();
+        $pondeli = $this->dnes()->startOfWeek();
         $this->udalost($pondeli->setTime(9, 0), $pondeli->setTime(17, 0), [$this->adri->id]);
 
         Sanctum::actingAs($this->maki);

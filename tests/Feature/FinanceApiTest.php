@@ -9,6 +9,7 @@ use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -262,6 +263,34 @@ class FinanceApiTest extends TestCase
         // (1500 − 300 − 100 rezerva) / 21 dní včetně dneška
         $this->assertSame(52.38, $prehled->json('budget.safe_daily.per_day'));
         $this->assertSame(21, $prehled->json('budget.safe_daily.days_left'));
+    }
+
+    /**
+     * Po půlnoci se „zbývá dní" a „bezpečně na den" u téže cesty neroztrhnou.
+     *
+     * Model cesty počítá zbývající dny podle dne dvojice, starší API rozpočtu
+     * ale počítá dnešek v UTC. Ve 0:30 v Praze je v UTC ještě včerejšek, takže
+     * cesta ukazovala o den méně zbývajících dní, než s kolika dny počítala
+     * denní částka hned vedle („19 dní" vs. „21 dní včetně dneška").
+     */
+    public function test_zbyvajici_dny_cesty_sedi_s_denni_castkou_i_po_pulnoci(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-09-25 00:30', 'Europe/Prague'));
+        $ucet = $this->penezenka('EUR', 'EUR', 2000);
+
+        $cesta = FinanceProject::create([
+            'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Německo',
+            'starts_on' => '2026-09-15', 'ends_on' => '2026-10-15',
+            'base_currency' => 'EUR', 'budget_amount' => 1500, 'reserve_amount' => 100,
+            'state' => 'active', 'default_wallet_id' => $ucet->id,
+        ]);
+        $cesta->aktivuj();
+
+        $zbyva = $this->getJson('/api/v1/rozpocet/ciselniky')->assertOk()->json('active_trip.days_left');
+        $vcetneDneska = $this->getJson('/api/v1/rozpocet/prehled?obdobi=cesta')->assertOk()->json('budget.safe_daily.days_left');
+
+        $this->assertSame($zbyva + 1, $vcetneDneska,
+            'Denní částka počítá dny včetně dneška — o jeden víc než „zbývá", ne o dva.');
     }
 
     /** Druhá aktivní cesta zhasne tu první — dvě by tiše dělily výdaje. */

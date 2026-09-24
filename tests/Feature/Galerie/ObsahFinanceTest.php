@@ -310,9 +310,11 @@ class ObsahFinanceTest extends TestCase
         $potraviny = FinanceCategory::where('gallery_space_id', $this->prostor->id)->where('name', 'Potraviny')->sole();
         $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'wallet_from_id' => $penezenka->id, 'currency_from' => 'EUR', 'category_id' => $potraviny->id, 'state' => 'approved', 'created_by' => $this->adri->id];
 
-        Transaction::create($zaklad + ['occurred_at' => now()->startOfMonth()->addDay(), 'amount_from' => 30, 'description' => 'Lidl']);
-        Transaction::create($zaklad + ['occurred_at' => now()->startOfMonth()->addDays(2), 'amount_from' => 12.6, 'description' => 'Pekárna']);
-        Transaction::create($zaklad + ['occurred_at' => now()->subMonthNoOverflow()->startOfMonth()->addDay(), 'amount_from' => 90, 'description' => 'Loni']);
+        // Měsíc dvojice a dny, které už nastaly: první noc v měsíci je v UTC
+        // ještě ten minulý, a „druhého" by prvního ležel v budoucnu.
+        Transaction::create($zaklad + ['occurred_at' => $this->dnes()->startOfMonth(), 'amount_from' => 30, 'description' => 'Lidl']);
+        Transaction::create($zaklad + ['occurred_at' => $this->dnes(), 'amount_from' => 12.6, 'description' => 'Pekárna']);
+        Transaction::create($zaklad + ['occurred_at' => $this->dnes()->subMonthNoOverflow()->startOfMonth()->addDay(), 'amount_from' => 90, 'description' => 'Loni']);
 
         $zaplaceno = $this->getJson('/api/data/finance')->assertOk()->json('data.BUD.paid');
 

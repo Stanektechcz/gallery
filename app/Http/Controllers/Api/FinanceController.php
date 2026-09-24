@@ -847,7 +847,15 @@ class FinanceController extends Controller
             'city' => $c->city,
             'starts_on' => $c->starts_on?->toDateString(),
             'ends_on' => $c->ends_on?->toDateString(),
-            'days_left' => $c->dniDoKonce(),
+            /*
+             * Týž „dnešek" jako zbytek tohohle API (`FinanceFilter`, `safeDaily`).
+             *
+             * Model počítá od kola 2ae podle dne dvojice, starší API ale dál
+             * v UTC. Mezi půlnocí a druhou ráno pak tatáž cesta měla „zbývá 19
+             * dní" vedle „bezpečně na den · 21 dní včetně dneška" — dvě čísla,
+             * která se rozcházela o dva dny místo o jeden.
+             */
+            'days_left' => $c->dniDoKonce(Carbon::today()),
             'budget' => $c->budget_amount !== null ? (float) $c->budget_amount : null,
             'reserve' => $c->reserve_amount !== null ? (float) $c->reserve_amount : null,
             'currency' => $c->base_currency,

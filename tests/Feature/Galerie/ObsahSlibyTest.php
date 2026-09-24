@@ -201,7 +201,8 @@ class ObsahSlibyTest extends TestCase
         $s->refresh();
 
         $this->assertSame('do konce příštího týdne', $s->due_label);
-        $this->assertSame(now()->startOfDay()->addDays(11)->toDateString(), $s->due_on->toDateString());
+        // „Za N dní" se počítá od dneška dvojice — po půlnoci je v UTC ještě včera.
+        $this->assertSame($this->dnes()->addDays(11)->toDateString(), $s->due_on->toDateString());
     }
 
     /** Stav `late` se neukládá — odvozuje se z data. */

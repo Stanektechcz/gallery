@@ -144,6 +144,9 @@ class FinanceStrategieTest extends TestCase
      */
     public function test_prubeh_konci_dneskem(): void
     {
+        // Uprostřed měsíce: poslední den měsíce je dnešek, ne budoucnost, a test
+        // by tam neměl co ověřit (v noci na prvního je v UTC právě poslední den).
+        $this->travelTo(Carbon::parse('2026-09-15 12:00'));
         $this->rozpocet(1000, rezerva: 0);
         $this->vydaj('Potraviny', 100, Carbon::today()->startOfMonth());
 

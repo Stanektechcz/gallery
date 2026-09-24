@@ -4,6 +4,7 @@ namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -42,8 +43,9 @@ class ObsahSloupceTest extends TestCase
             'created_by' => $this->adri->id,
             'name' => 'Rozpočet',
             'currency' => 'CZK',
-            'starts_on' => now()->startOfMonth()->toDateString(),
-            'ends_on' => now()->endOfMonth()->toDateString(),
+            // Měsíc dvojice: první noc v měsíci je v UTC ještě ten minulý.
+            'starts_on' => $this->dnes()->startOfMonth()->toDateString(),
+            'ends_on' => $this->dnes()->endOfMonth()->toDateString(),
             'is_shared' => true,
             'created_at' => now(),
             'updated_at' => now(),
@@ -85,10 +87,10 @@ class ObsahSloupceTest extends TestCase
     public function test_rok_se_sklada_po_ctvrtletich(): void
     {
         $this->limit('Potraviny', 6000);
-        $this->transakce(['amount_from' => 4210, 'occurred_at' => now()->toDateString()]);
+        $this->transakce(['amount_from' => 4210]);
 
         $rok = $this->getJson('/api/data/finance')->assertOk()->json('data.ABARS.year');
-        $ted = (int) ceil(now()->month / 3);
+        $ted = (int) ceil($this->dnes()->month / 3);
         $nase = collect($rok)->firstWhere(2, 100);
 
         $this->assertNotNull($nase);
@@ -115,9 +117,18 @@ class ObsahSloupceTest extends TestCase
         $this->assertSame(['Volné', '10 800 Kč'], [$s[2][0], $s[2][1]]);
     }
 
-    /** Předpověď říká, kolik zbývá do konce měsíce a kdo utrácí rychleji. */
+    /**
+     * Předpověď říká, kolik zbývá do konce měsíce a kdo utrácí rychleji.
+     *
+     * Pevně desátého: „rychleji" znamená podíl útraty nad podílem uběhlého
+     * měsíce (+ 10 %). Koncem měsíce je uběhlo skoro všechno, 99 % útraty
+     * už rychlé není a test padal od sedmadvacátého bez ohledu na kód.
+     */
     public function test_predpoved_rozdeli_kategorie_podle_tempa(): void
     {
+        $this->travelTo(CarbonImmutable::parse('2026-09-10 12:00', 'Europe/Prague'));
+        DB::table('budgets')->where('id', $this->rozpocet)->update(['starts_on' => '2026-09-01', 'ends_on' => '2026-09-30']);
+
         $rychla = $this->limit('Restaurace', 2000);
         $this->limit('Cesty', 14000);
 
@@ -186,7 +197,11 @@ class ObsahSloupceTest extends TestCase
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->adri->id,
             'type' => 'expense',
-            'occurred_at' => now()->toDateString(),
+            // Dnešek dvojice — datum útraty je to, co by napsala ona. S časem,
+            // jak ho zapíše přetypování `date` v modelu: holé „2026-10-01"
+            // je v SQLite menší než „2026-10-01 00:00:00", a prvního v měsíci
+            // by tak výdaj z měsíce vypadl jen kvůli tvaru řetězce.
+            'occurred_at' => $this->dnes()->toDateTimeString(),
             'amount_from' => 100,
             'currency_from' => 'CZK',
             'description' => 'Výdaj',

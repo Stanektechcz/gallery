@@ -1565,7 +1565,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->min('occurred_at');
 
-        return $prvni ? (int) floor(CarbonImmutable::parse($prvni)->diffInMonths(now())) : 0;
+        // Do dneška dvojice: `occurred_at` je datum podle jejích hodin, a s „teď"
+        // v UTC by první noc v měsíci měla historie o měsíc méně.
+        return $prvni ? (int) floor(CarbonImmutable::parse($prvni)->diffInMonths(Cas::dnes())) : 0;
     }
 
     /**

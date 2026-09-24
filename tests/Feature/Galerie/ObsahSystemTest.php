@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -117,13 +118,33 @@ class ObsahSystemTest extends TestCase
     public function test_jistota_odhadu_roste_s_delkou_rady(): void
     {
         $this->rozpocet();
-        $this->transakce(['occurred_at' => now()->subMonths(10)->toDateString()]);
+        // Od dneška dvojice a bez přetečení (31. minus deset měsíců nesmí
+        // skončit o pár dní dál a ubrat měsíc historie).
+        $this->transakce(['occurred_at' => $this->dnes()->subMonthsNoOverflow(10)->toDateTimeString()]);
 
         $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.DATA_HEALTH'))
             ->firstWhere('label', 'Zbývá v rozpočtu tento měsíc');
 
         $this->assertSame('guess', $r['kind']);
         // 45 + 10 měsíců × 4, zastropováno na 84.
+        $this->assertSame(84, $r['conf']);
+    }
+
+    /**
+     * První noc v měsíci nemá historie o měsíc méně.
+     *
+     * Délka řady se počítala do „teď" v UTC: 1. října ve 0:30 v Praze je
+     * v UTC ještě 30. září, a deset měsíců od 1. prosince bylo jen devět.
+     */
+    public function test_jistota_odhadu_po_pulnoci_pocita_mesice_dvojice(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-01 00:30', 'Europe/Prague'));
+        $this->rozpocet();
+        $this->transakce(['occurred_at' => '2025-12-01 00:00:00']);
+
+        $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.DATA_HEALTH'))
+            ->firstWhere('label', 'Zbývá v rozpočtu tento měsíc');
+
         $this->assertSame(84, $r['conf']);
     }
 
@@ -268,9 +289,10 @@ class ObsahSystemTest extends TestCase
      */
     public function test_rok_v_cislech_porovnava_s_lonskem(): void
     {
-        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonth()], 1);
-        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonths(2)], 2);
-        $this->fotka(['uploaded_at' => now()->startOfYear()->subMonths(3)], 3);
+        // Rok dvojice: v noci na 1. ledna je v UTC ještě ten starý.
+        $this->fotka(['uploaded_at' => $this->dnes()->startOfYear()->addMonth()], 1);
+        $this->fotka(['uploaded_at' => $this->dnes()->startOfYear()->addMonths(2)], 2);
+        $this->fotka(['uploaded_at' => $this->dnes()->startOfYear()->subMonths(3)], 3);
 
         $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.ABARS.zprCisla'))->keyBy(0);
 
@@ -283,7 +305,7 @@ class ObsahSystemTest extends TestCase
     /** Sekce, do které letos nic nepřibylo, do ročního přehledu nepatří. */
     public function test_letos_prazdna_sekce_v_prehledu_neni(): void
     {
-        $this->fotka(['uploaded_at' => now()->startOfYear()->addMonth()]);
+        $this->fotka(['uploaded_at' => $this->dnes()->startOfYear()->addMonth()]);
 
         $r = collect($this->getJson('/api/data/system')->assertOk()->json('data.ABARS.zprCisla'))->pluck(0);
 

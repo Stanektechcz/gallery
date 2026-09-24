@@ -380,9 +380,16 @@ class PlanningExpansionTest extends TestCase
         $this->deleteJson("/api/v1/relationship-milestones/{$shared['uuid']}")->assertForbidden();
     }
 
+    /**
+     * Připomínka výročí odejde jednou za den.
+     *
+     * Výročí „dnes" je dnes dvojice — příkaz počítá podle `Cas::dnes()`. Datum
+     * z `today()` (UTC) by po pražské půlnoci bylo včerejší a výročí by vyšlo
+     * až za rok.
+     */
     public function test_relationship_milestone_reminder_notifies_shared_space_only_once_per_day(): void
     {
-        $this->postJson('/api/v1/relationship-milestones', ['gallery_space_id' => $this->space->id, 'title' => 'Naše výročí', 'occurred_on' => today()->subYears(2)->toDateString(), 'visibility' => 'shared', 'remind_annually' => true])->assertCreated();
+        $this->postJson('/api/v1/relationship-milestones', ['gallery_space_id' => $this->space->id, 'title' => 'Naše výročí', 'occurred_on' => $this->dnes()->subYears(2)->toDateString(), 'visibility' => 'shared', 'remind_annually' => true])->assertCreated();
         $this->artisan(SendRelationshipMilestoneRemindersCommand::class)->assertSuccessful();
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->partner->id]);
@@ -407,9 +414,16 @@ class PlanningExpansionTest extends TestCase
         $this->assertDatabaseMissing('media_private_notes', ['encrypted_content' => 'Jen pro mě']);
     }
 
+    /**
+     * Dárky, poznámky ke dni a připomínky zůstávají soukromé a chodí samy.
+     *
+     * Termín dárku je dnešek dvojice: příkaz odpočítává dny od `Cas::dnes()`,
+     * takže datum z `now()` (UTC) by po pražské půlnoci vyšlo „před dnem"
+     * a připomínka na den 0 by neodešla.
+     */
     public function test_gift_ideas_day_notes_and_followups_are_private_and_automated(): void
     {
-        $gift = $this->postJson('/api/v1/calendar/gifts', ['gallery_space_id' => $this->space->id, 'title' => 'Kniha', 'due_date' => now()->toDateString(), 'reminder_days' => [0]])->assertCreated()->json();
+        $gift = $this->postJson('/api/v1/calendar/gifts', ['gallery_space_id' => $this->space->id, 'title' => 'Kniha', 'due_date' => $this->dnes()->toDateString(), 'reminder_days' => [0]])->assertCreated()->json();
         $this->putJson('/api/v1/calendar/day-note', ['gallery_space_id' => $this->space->id, 'content' => 'Nezapomenout na květiny'])->assertOk();
         $this->getJson('/api/v1/calendar/day-note?gallery_space_id='.$this->space->id)->assertOk()->assertJsonPath('content', 'Nezapomenout na květiny');
         $tomorrow = now()->addDay()->toDateString();

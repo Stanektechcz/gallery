@@ -1139,7 +1139,9 @@ class FinanceSetupController extends Controller
             'starts_on' => $c->starts_on?->toDateString(),
             'ends_on' => $c->ends_on?->toDateString(),
             'days_total' => $dni,
-            'days_left' => $c->dniDoKonce(),
+            // Týž „dnešek" jako `per_day_so_far` a `safe_daily` o pár řádků níž
+            // (starší API počítá v UTC) — viz `FinanceController::cestaRadek()`.
+            'days_left' => $c->dniDoKonce(Carbon::today()),
             'currency' => $mena,
             'budget' => $limit,
             'reserve' => $c->reserve_amount !== null ? (float) $c->reserve_amount : null,

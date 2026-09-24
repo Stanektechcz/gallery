@@ -4,6 +4,7 @@ namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -119,7 +120,9 @@ class ObsahRozboryTest extends TestCase
     public function test_horizont_bere_jen_pravidelne_vydaje(): void
     {
         $this->transakce();
-        $this->pravidelna('Předplatná', 687, 1, 'expense', now()->subMonths(6));
+        // Bez přetečení: 31. prosince minus šest měsíců je 30. červen, ne 1. červenec
+        // — s ním by platba běžela jen pět měsíců a test by padal každého 31.
+        $this->pravidelna('Předplatná', 687, 1, 'expense', $this->dnes()->subMonthsNoOverflow(6));
         $this->pravidelna('Mzda', 38200, 7, 'income');
 
         $horizont = $this->getJson('/api/data/rozbory')->assertOk()->json('data.HORIZON');
@@ -127,6 +130,23 @@ class ObsahRozboryTest extends TestCase
         $this->assertCount(1, $horizont);
         $this->assertSame('Předplatná 687 / měs.', $horizont[0]['what']);
         $this->assertSame(687, $horizont[0]['monthly']);
+        $this->assertStringContainsString('6 měsíců', $horizont[0]['note']);
+    }
+
+    /**
+     * První noc v měsíci platba neomládne o měsíc.
+     *
+     * Délka se počítala do „teď" v UTC. 1. října ve 0:30 v Praze je v UTC
+     * ještě 30. září večer, takže platba od 1. dubna „běžela 5 měsíců".
+     */
+    public function test_horizont_po_pulnoci_pocita_mesice_dvojice(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-10-01 00:30', 'Europe/Prague'));
+        $this->transakce();
+        $this->pravidelna('Předplatná', 687, 1, 'expense', CarbonImmutable::parse('2026-04-01'));
+
+        $horizont = $this->getJson('/api/data/rozbory')->assertOk()->json('data.HORIZON');
+
         $this->assertStringContainsString('6 měsíců', $horizont[0]['note']);
     }
 
@@ -171,9 +191,10 @@ class ObsahRozboryTest extends TestCase
         $adrian = $this->partner($this->adri);
         $makinka = $this->partner($this->maki);
 
-        $this->transakce(['category_id' => $kategorie, 'amount_from' => 1100, 'payer_partner_id' => $adrian, 'occurred_at' => now()]);
-        $this->transakce(['category_id' => $kategorie, 'amount_from' => 640, 'payer_partner_id' => $makinka, 'occurred_at' => now()]);
-        $this->transakce(['category_id' => $kategorie, 'amount_from' => 300, 'payer_partner_id' => $adrian, 'occurred_at' => now()->subMonth()]);
+        // Dnešek dvojice: první noc v měsíci je v UTC ještě ten minulý měsíc.
+        $this->transakce(['category_id' => $kategorie, 'amount_from' => 1100, 'payer_partner_id' => $adrian, 'occurred_at' => $this->dnes()]);
+        $this->transakce(['category_id' => $kategorie, 'amount_from' => 640, 'payer_partner_id' => $makinka, 'occurred_at' => $this->dnes()]);
+        $this->transakce(['category_id' => $kategorie, 'amount_from' => 300, 'payer_partner_id' => $adrian, 'occurred_at' => $this->dnes()->subMonthNoOverflow()]);
 
         $obalka = $this->getJson('/api/data/rozbory')->assertOk()->json('data.ENV');
         $tento = collect($obalka['months'])->last();
@@ -200,14 +221,15 @@ class ObsahRozboryTest extends TestCase
     public function test_inflace_bere_median(): void
     {
         $jidlo = $this->kategorie('Jídlo');
-        $loni = now()->subYear();
+        // Letošek a loňsko dvojice: v noci na 1. ledna je v UTC ještě starý rok.
+        $loni = $this->dnes()->subYear();
 
         foreach ([60, 62, 64, 900] as $castka) {
             $this->transakce(['description' => 'Káva v podniku', 'amount_from' => $castka, 'occurred_at' => $loni, 'category_id' => $jidlo]);
         }
 
         foreach ([78, 79, 80] as $castka) {
-            $this->transakce(['description' => 'Káva v podniku', 'amount_from' => $castka, 'occurred_at' => now(), 'category_id' => $jidlo]);
+            $this->transakce(['description' => 'Káva v podniku', 'amount_from' => $castka, 'occurred_at' => $this->dnes(), 'category_id' => $jidlo]);
         }
 
         $i = collect($this->getJson('/api/data/rozbory')->assertOk()->json('data.INFL'))
@@ -222,9 +244,9 @@ class ObsahRozboryTest extends TestCase
     /** Co se loni nekupovalo, se do inflace nepočítá — není s čím porovnávat. */
     public function test_inflace_potrebuje_oba_roky(): void
     {
-        $this->transakce(['description' => 'Novinka', 'amount_from' => 100, 'occurred_at' => now()]);
-        $this->transakce(['description' => 'Káva', 'amount_from' => 60, 'occurred_at' => now()->subYear()]);
-        $this->transakce(['description' => 'Káva', 'amount_from' => 79, 'occurred_at' => now()]);
+        $this->transakce(['description' => 'Novinka', 'amount_from' => 100, 'occurred_at' => $this->dnes()]);
+        $this->transakce(['description' => 'Káva', 'amount_from' => 60, 'occurred_at' => $this->dnes()->subYear()]);
+        $this->transakce(['description' => 'Káva', 'amount_from' => 79, 'occurred_at' => $this->dnes()]);
 
         $nazvy = collect($this->getJson('/api/data/rozbory')->assertOk()->json('data.INFL'))->pluck('name');
 
@@ -311,13 +333,13 @@ class ObsahRozboryTest extends TestCase
         $cizi = User::factory()->create();
         $ciziProstor = GallerySpace::create(['name' => 'Cizí', 'owner_id' => $cizi->id]);
 
-        $this->transakce(['description' => 'Naše', 'amount_from' => 60, 'occurred_at' => now()->subYear()]);
-        $this->transakce(['description' => 'Naše', 'amount_from' => 79, 'occurred_at' => now()]);
+        $this->transakce(['description' => 'Naše', 'amount_from' => 60, 'occurred_at' => $this->dnes()->subYear()]);
+        $this->transakce(['description' => 'Naše', 'amount_from' => 79, 'occurred_at' => $this->dnes()]);
 
         foreach ([60, 79] as $i => $castka) {
             $this->transakce([
                 'description' => 'Cizí', 'amount_from' => $castka,
-                'occurred_at' => $i ? now() : now()->subYear(),
+                'occurred_at' => $i ? $this->dnes() : $this->dnes()->subYear(),
                 'gallery_space_id' => $ciziProstor->id,
             ]);
         }
@@ -378,7 +400,9 @@ class ObsahRozboryTest extends TestCase
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->adri->id,
             'type' => 'expense',
-            'occurred_at' => now()->toDateString(),
+            // Dnešek dvojice, s časem jako z modelu (holé datum je v SQLite
+            // menší než půlnoc téhož dne a prvního by z měsíce vypadlo).
+            'occurred_at' => $this->dnes()->toDateTimeString(),
             'amount_from' => 100,
             'currency_from' => 'CZK',
             'description' => 'Výdaj',

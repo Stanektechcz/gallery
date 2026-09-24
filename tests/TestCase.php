@@ -9,6 +9,47 @@ use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 abstract class TestCase extends BaseTestCase
 {
     /**
+     * Volitelně pustí test v zadaném okamžiku z proměnné `TESTY_CAS`.
+     *
+     * Chyby „kterým dnem je dnes" se ukážou jen mezi pražskou půlnocí a druhou
+     * (v zimě první) hodinou ranní, kdy má dvojice už nové datum a UTC ještě
+     * staré. Aby šly najít kdykoli, ne jen v noci:
+     *
+     *     TESTY_CAS="2026-09-25 00:30 Europe/Prague" vendor/bin/phpunit
+     *     TESTY_CAS="2026-01-15 00:30 Europe/Prague" vendor/bin/phpunit
+     *
+     * Hodiny se jen posunou a běží dál — nezmrazí se. Zmrazený čas by sám
+     * rozbil testy, které čekají, že „později" je opravdu později (pořadí
+     * podle `created_at`, zneplatnění klíče), a noční chyby by se v nich
+     * ztratily. Test, který si čas nastavuje sám, ho svým `travelTo()`
+     * přebije. Bez proměnné se nic nemění.
+     */
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $testovaciCas = getenv('TESTY_CAS');
+
+        if (! is_string($testovaciCas) || trim($testovaciCas) === '') {
+            return;
+        }
+
+        $posunVSekundach = CarbonImmutable::parse(trim($testovaciCas))->getTimestamp() - time();
+
+        // Z hodin systému, ne z parametru, který Carbon uzávěru předává: ten
+        // pro `now('Europe/Prague')` nese čas UTC označený pražským pásmem,
+        // takže by se okamžik posunul ještě jednou o dvě hodiny. Přes holý
+        // `DateTimeImmutable`: `createFromTimestamp()` by se uvnitř uzávěru
+        // ptal na „teď" a volal sám sebe, a bez `instance()` by `create()`
+        // dostal objekt, který neumí `rawFormat()`.
+        CarbonImmutable::setTestNow(
+            static fn () => CarbonImmutable::instance(
+                new \DateTimeImmutable('@'.sprintf('%.6F', microtime(true) + $posunVSekundach)),
+            ),
+        );
+    }
+
+    /**
      * Dnešek dvojice — tím, co aplikace považuje za „dnes".
      *
      * Aplikace běží v UTC a obsah pro obrazovky počítá dny podle pásma

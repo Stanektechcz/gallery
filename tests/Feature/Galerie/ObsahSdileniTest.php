@@ -179,8 +179,10 @@ class ObsahSdileniTest extends TestCase
     /** Balíčky do offline se počítají z knihovny, ne z katalogu. */
     public function test_baliky_do_offline_se_pocitaji_z_knihovny(): void
     {
-        $this->fotka(['is_favorite' => true, 'taken_at' => now()]);
-        $this->fotka(['taken_at' => now()], 2);
+        // Pořízeno „teď" podle hodin dvojice — `taken_at` je čas z hodin, ne
+        // okamžik v UTC; v noci na 1. ledna by jinak fotka patřila loňsku.
+        $this->fotka(['is_favorite' => true, 'taken_at' => $this->ted()]);
+        $this->fotka(['taken_at' => $this->ted()], 2);
 
         $baliky = collect($this->getJson('/api/data/sdileni')->assertOk()->json('data.OFFPACKS'))
             ->keyBy(0);

@@ -190,14 +190,19 @@ class ObsahOdvozeneTest extends TestCase
         $this->assertSame('1 platba za tenhle rok.', $z['Potraviny'][3]);
     }
 
-    /** Cena odkladu se bere ze zapsané, ne dopočítává. */
+    /**
+     * Cena odkladu se bere ze zapsané, ne dopočítává.
+     *
+     * Lhůty se počítají od dneška dvojice — po půlnoci v Praze by datum
+     * z `now()` (UTC, ještě včera) dalo o den delší zpoždění.
+     */
     public function test_cena_odkladu_je_zapsana(): void
     {
         DB::table('house_dues')->insert([
             [
                 'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id,
                 'what' => 'Reklamace pračky', 'kind' => 'lhůta',
-                'due_on' => now()->subDays(41)->toDateString(),
+                'due_on' => $this->dnes()->subDays(41)->toDateString(),
                 'delay_cost' => 4200, 'delay_note' => 'Reklamace pračky po lhůtě',
                 'created_at' => now(), 'updated_at' => now(),
             ],
@@ -205,7 +210,7 @@ class ObsahOdvozeneTest extends TestCase
                 // Bez zapsané ceny odkladu se řádek neposílá.
                 'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id,
                 'what' => 'Servis kola', 'kind' => 'lhůta',
-                'due_on' => now()->subDays(10)->toDateString(),
+                'due_on' => $this->dnes()->subDays(10)->toDateString(),
                 'delay_cost' => null, 'delay_note' => null,
                 'created_at' => now(), 'updated_at' => now(),
             ],
@@ -237,6 +242,27 @@ class ObsahOdvozeneTest extends TestCase
         $this->assertSame('Potraviny', $e[0]['name']);
         $this->assertSame(6000, $e[0]['est']);
         $this->assertSame(8450, $e[0]['real']);
+    }
+
+    /**
+     * Dnešní útrata se do skutečnosti počítá i po půlnoci.
+     *
+     * Okno bylo „od Nového roku dvojice do teď v UTC". 2. ledna ve 0:30
+     * v Praze je v UTC ještě 1. ledna večer, takže jediná letošní útrata —
+     * dnešní — ze skutečnosti vypadla a odhad zmizel z obrazovky. (1. ledna
+     * v noci skončilo okno dřív, než začalo, a nebylo vidět nic.)
+     */
+    public function test_odhad_pocita_dnesni_utratu_i_po_pulnoci(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2027-01-02 00:30', 'Europe/Prague'));
+        $jidlo = $this->kategorie('Potraviny');
+        $this->limit($this->rozpocet(), $jidlo, 6000);
+        $this->transakce(450, $jidlo);
+
+        $e = $this->getJson('/api/data/rozbory')->assertOk()->json('data.EST');
+
+        $this->assertCount(1, $e, 'Dnešní útrata patří do letošní skutečnosti i po půlnoci.');
+        $this->assertSame(450, $e[0]['real']);
     }
 
     /**
@@ -379,7 +405,7 @@ class ObsahOdvozeneTest extends TestCase
             'created_by' => $this->adri->id,
             'name' => 'Rozpočet',
             'currency' => 'CZK',
-            'starts_on' => now()->startOfYear()->toDateString(),
+            'starts_on' => $this->dnes()->startOfYear()->toDateString(),
             'is_shared' => true,
             'created_at' => now(),
             'updated_at' => now(),
@@ -405,7 +431,16 @@ class ObsahOdvozeneTest extends TestCase
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->adri->id,
             'type' => 'expense',
-            'occurred_at' => now()->startOfYear()->addMonth()->toDateString(),
+            /*
+             * Dnešek dvojice — vždycky letos a nikdy v budoucnu.
+             *
+             * Dřív tu byl 1. únor: v lednu tak výdaj ležel v budoucnu a odhad
+             * proti skutečnosti ho (správně) nezapočítal. A dnešní datum navíc
+             * hlídá, že se dnešní útrata po půlnoci neztratí. S časem, jak
+             * datum zapíše model (v SQLite je holé „2027-01-01" menší než
+             * „2027-01-01 00:00:00" a 1. ledna by výdaj vypadl z letoška).
+             */
+            'occurred_at' => $this->dnes()->toDateTimeString(),
             'amount_from' => $castka,
             'currency_from' => 'CZK',
             'category_id' => $kategorie,

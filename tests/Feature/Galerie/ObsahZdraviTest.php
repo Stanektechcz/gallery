@@ -307,7 +307,8 @@ class ObsahZdraviTest extends TestCase
         $this->assertCount(2, $moje);
         $this->assertSame(2, (int) $moje[0]->value);
         $this->assertSame(4, (int) $moje[1]->value);
-        $this->assertTrue($moje[1]->day->isToday());
+        // Dnešek dvojice: `isToday()` by po půlnoci porovnával s UTC, kde je ještě včera.
+        $this->assertSame($this->dnes()->toDateString(), $moje[1]->day->toDateString());
         // Cizí řádek se ignoruje: náladu za druhého nikdo vyplňovat nemůže.
         $this->assertSame(0, WellbeingMood::where('user_id', $this->adri->id)->count());
     }

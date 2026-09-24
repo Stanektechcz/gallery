@@ -294,10 +294,16 @@ class ObsahKucharkaTest extends TestCase
         $this->assertNotContains('21. 9. · dinner', $dny, 'Minulý týden už na obrazovce být nemá.');
     }
 
-    /** Název dnešního dne tak, jak jím kuchařka klíčuje menu. */
+    /**
+     * Název dnešního dne tak, jak jím kuchařka klíčuje menu.
+     *
+     * Dnešek dvojice, ne UTC: po půlnoci v Praze je v UTC ještě včerejšek,
+     * takže „dnes" z `now()` mířilo na den, který už je za námi — a zápis
+     * ho správně vzal jako tentýž den **příští** týden.
+     */
     private function denDnes(): string
     {
-        return ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'][now()->dayOfWeek];
+        return ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'][$this->dnes()->dayOfWeek];
     }
 
     private function jidlo(int $recept, string $stav, ?string $kdy = null): void
@@ -309,7 +315,8 @@ class ObsahKucharkaTest extends TestCase
             'recipe_id' => $recept,
             'meal_type' => 'dinner',
             'status' => $stav,
-            'planned_for' => $kdy ?? now()->setTime(18, 0),
+            // Čas podle hodin dvojice (večeře v 18:00 jejího dne), jako ho zapíše kuchařka.
+            'planned_for' => $kdy ?? $this->dnes()->setTime(18, 0),
             'created_at' => now(),
             'updated_at' => now(),
         ]);

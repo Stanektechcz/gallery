@@ -340,7 +340,10 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now();
+        // Dnešek dvojice: `starts_on` a `ends_on` jsou data podle jejích hodin.
+        // S okamžikem v UTC platba, která skončila včera, v noci ještě „běžela"
+        // a první noc v měsíci se jí ubral jeden měsíc („5 měsíců" místo 6).
+        $dnes = Cas::dnes();
 
         return DB::table('finance_recurring')
             ->where('gallery_space_id', $prostor->id)
@@ -525,10 +528,18 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        /*
+         * Do konce dneška dvojice, ne do „teď" v UTC.
+         *
+         * `occurred_at` je datum (půlnoc), horní mez byl okamžik v UTC. Mezi
+         * pražskou půlnocí a druhou ráno je to ještě včerejší večer, takže
+         * dnešní útrata ze skutečnosti vypadla — a 1. ledna v noci bylo okno
+         * „od Nového roku do teď" prázdné a odhady zmizely úplně.
+         */
         $utraceno = $this->utracenoPoKategoriich(
             $prostor,
             Cas::dnes()->startOfYear(),
-            CarbonImmutable::now(),
+            Cas::dnes()->endOfDay(),
         );
 
         return $limity
