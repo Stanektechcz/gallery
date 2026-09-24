@@ -58,6 +58,21 @@ class CoupleState extends Model
         'acDlg',
         // Nastavení upozornění ze serveru — každého zvlášť, ne dvojice.
         'klSrv',
+        /*
+         * Srdíčka. V databázi jsou každého vlastní (`user_favorites` má
+         * `user_id` a knihovna čte jen své), ale tady se ukládala společně —
+         * a klient sdílenou mapu čte **přednostně** před serverovým příznakem.
+         * Druhý z dvojice tak viděl cizích čtyřicet srdíček jako svá a svá
+         * skutečná neviděl; když některé odebral, zmizelo z obrazovky i tomu
+         * prvnímu, i když jeho řádek v databázi zůstal.
+         *
+         * Zahazuje se až **po** převodnících (`MediaVeStavu` běží dřív než
+         * `applyPatch`), takže se pořád zapíše do `user_favorites` — jen se
+         * nedrží ve společném dokumentu. Vyřadit ho už v prohlížeči
+         * (`persistSkip`) by znamenalo neposlat ho vůbec a srdíčka by se
+         * přestala ukládat.
+         */
+        'favs',
     ];
 
     /**
@@ -372,15 +387,19 @@ class CoupleState extends Model
     }
 
     /**
-     * Klíče, jejichž zápis do tabulek se nepovedl a má se zopakovat.
+     * Co se nepovedlo zapsat do tabulek — klíč a hodnota k zopakování.
      *
-     * @return list<string>
+     * Nese se hodnota, ne jen jméno klíče: některé klíče se do společného
+     * dokumentu schválně neukládají (`favs`), takže by nebylo odkud je při
+     * dalším požadavku vzít.
+     *
+     * @return array<string, mixed>
      */
     public function dluh(): array
     {
         $dluh = ($this->data ?? [])['__dluh'] ?? [];
 
-        return array_values(array_filter((array) $dluh, 'is_string'));
+        return is_array($dluh) ? $dluh : [];
     }
 
     /**
@@ -390,21 +409,20 @@ class CoupleState extends Model
      * zařízeními a dluh není nic, o co by se ti dva přetahovali — kdyby zvedal
      * revizi, druhý klient by dostal 409 za chybu serveru.
      *
-     * @param  list<string>  $klice
+     * @param  array<string, mixed>  $dluh
      */
-    public function zapisDluh(array $klice): void
+    public function zapisDluh(array $dluh): void
     {
         $data = $this->surovy('data');
-        $klice = array_values(array_unique(array_filter($klice, 'is_string')));
 
-        if ($klice === [] && ! array_key_exists('__dluh', $data)) {
+        if ($dluh === [] && ! array_key_exists('__dluh', $data)) {
             return;
         }
 
-        if ($klice === []) {
+        if ($dluh === []) {
             unset($data['__dluh']);
         } else {
-            $data['__dluh'] = $klice;
+            $data['__dluh'] = $dluh;
         }
 
         $this->zapisData($data);

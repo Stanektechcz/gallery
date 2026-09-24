@@ -148,7 +148,9 @@ class MediaVeStavuTest extends TestCase
 
         // Zbytek patche se uložil — chyba u srdíček nesmí vzít všechno ostatní.
         $this->assertSame('big', $this->stav()->data['grid']);
-        $this->assertSame(['favs'], $this->stav()->dluh());
+        // Dluh nese i hodnotu: `favs` se do sdíleného stavu neukládá, takže by
+        // se při dalším požadavku nebylo odkud dozvědět, co se mělo zapsat.
+        $this->assertSame([$foto->uuid => true], (array) $this->stav()->dluh()['favs']);
 
         $this->obnovOblibene();
 
@@ -165,7 +167,7 @@ class MediaVeStavuTest extends TestCase
     /** Dluh je serverová věc — klient ho nedostane a nesmí ho zrušit. */
     public function test_dluh_se_klientovi_neposila_a_neda_se_od_nej_nastavit(): void
     {
-        CoupleState::forCouple($this->prostor->id)->zapisDluh(['favs']);
+        CoupleState::forCouple($this->prostor->id)->zapisDluh(['favs' => []]);
 
         $odpoved = $this->actingAs($this->adri)
             ->patchJson('/api/state', ['data' => ['__dluh' => [], 'grid' => 'med']])->assertOk();
@@ -173,6 +175,37 @@ class MediaVeStavuTest extends TestCase
         $this->assertArrayNotHasKey('__dluh', (array) $odpoved->json('data'));
         $this->assertSame([], $this->stav()->dluh(),
             'Dluh se zaplatil hned v tomhle požadavku, ne proto, že ho klient smazal.');
+    }
+
+    /**
+     * Srdíčka jsou každého vlastní a ve sdíleném stavu nemají co dělat.
+     *
+     * V databázi per-uživatele jsou (`user_favorites`), jenže `favs` se
+     * ukládalo i do společného stavu dvojice — a klient ho čte **přednostně**
+     * před serverovým příznakem. Druhý pak viděl cizích čtyřicet srdíček jako
+     * svá; když některé odebral, zmizelo na obrazovce tomu prvnímu, i když
+     * jeho řádek v databázi zůstal.
+     *
+     * Klíč se proto přijímá a zapisuje, ale neukládá — `persistSkip()`
+     * v prohlížeči by ho naopak vůbec neodeslal a srdíčka by se přestala
+     * ukládat úplně.
+     */
+    public function test_srdicka_nezustanou_ve_sdilenem_stavu(): void
+    {
+        $foto = $this->fotka();
+
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['favs' => [$foto->uuid => true], 'grid' => 'big']])
+            ->assertOk();
+
+        $this->assertTrue(
+            DB::table('user_favorites')->where('user_id', $this->adri->id)->where('media_item_id', $foto->id)->exists(),
+            'Srdíčko se pořád musí zapsat do databáze — jen ne do sdíleného stavu.',
+        );
+
+        $this->assertArrayNotHasKey('favs', (array) $this->stav()->data);
+        $this->assertArrayNotHasKey('favs', (array) $this->actingAs($this->adri)
+            ->getJson('/api/state')->assertOk()->json('data'));
     }
 
     private function stav(): CoupleState

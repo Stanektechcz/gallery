@@ -41,12 +41,49 @@ class KlidVeStavuTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
+    /**
+     * Do mapy energie smí každý psát jen svůj řádek.
+     *
+     * Počítač posílá mřížku obou lidí naráz, takže kliknutí na jednu buňku
+     * vzalo i všech 42 buněk toho druhého — a protože je `klEn` mezi
+     * serverovými klíči, ze stavu se vzít zpátky nedá. Mapa přitom existuje
+     * právě proto, aby se našlo okno, kdy mají sílu **oba**.
+     */
+    public function test_energie_partnera_se_neda_prepsat(): void
+    {
+        // Makinka si vyplní pondělí.
+        Sanctum::actingAs($this->maki);
+        $this->stav(['klEn' => ['Makinka' => ['222', '000', '000', '000', '000', '000', '000']]])->assertOk();
+
+        // Adrian má starou záložku: posílá mřížku obou, v ní Makinku prázdnou.
+        Sanctum::actingAs($this->adri);
+        $this->stav(['klEn' => [
+            'Adrian' => ['111', '000', '000', '000', '000', '000', '000'],
+            'Makinka' => ['000', '000', '000', '000', '000', '000', '000'],
+        ]])->assertOk();
+
+        $jeji = DB::table('wellbeing_energy')
+            ->where('user_id', $this->maki->id)->where('weekday', 0)->where('slot', 0)->value('level');
+
+        $this->assertSame(2, (int) $jeji, 'Adrianův zápis nesmí sáhnout na Makinčin řádek.');
+
+        $jeho = DB::table('wellbeing_energy')
+            ->where('user_id', $this->adri->id)->where('weekday', 0)->where('slot', 0)->value('level');
+
+        $this->assertSame(1, (int) $jeho, 'Svůj vlastní řádek zapsat musí.');
+    }
+
     /** Mřížka se rozloží na buňky — a uloží se za toho, komu patří. */
     public function test_mapa_energie_se_ulozi_po_bunkach(): void
     {
+        // Každý svůj řádek: počítač sice posílá mřížku obou, ale zapsat se smí
+        // jen ten vlastní (viz test výš).
+        Sanctum::actingAs($this->maki);
+        $this->stav(['klEn' => ['Makinka' => ['000', '000', '000', '000', '000', '000', '020']]])->assertOk();
+
+        Sanctum::actingAs($this->adri);
         $odpoved = $this->stav(['klEn' => [
             'Adrian' => ['201', '000', '000', '000', '000', '000', '000'],
-            'Makinka' => ['000', '000', '000', '000', '000', '000', '020'],
         ]])->assertOk();
 
         $bunky = DB::table('wellbeing_energy')->where('level', '>', 0)->get();

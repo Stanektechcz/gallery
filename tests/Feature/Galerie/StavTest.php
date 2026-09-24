@@ -56,15 +56,20 @@ class StavTest extends TestCase
      * Klíče jsou schválně takové, které si stav vede sám. Ty, které patří
      * databázi (`rules`, `season`, `quarGone`, …), se cestou vyzvedávají
      * a ve stavu nezůstávají — na to jsou vlastní testy.
+     *
+     * Jako ukázkový klíč tu dřív sloužilo `favs`. Srdíčka jsou ale každého
+     * vlastní a do sdíleného dokumentu se od té doby neukládají, takže by
+     * tyhle testy měřily něco jiného, než co popisují; `zkouska` nepatří
+     * žádnému převodníku.
      */
     public function test_patch_sloucí_po_klicich(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a'], 'pins' => ['p1']]])
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['a'], 'pins' => ['p1']]])
             ->assertOk()->assertJsonPath('rev', 1);
 
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a', 'b']]])
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['a', 'b']]])
             ->assertOk()
-            ->assertJsonPath('data.favs', ['a', 'b'])
+            ->assertJsonPath('data.zkouska', ['a', 'b'])
             ->assertJsonPath('data.pins', ['p1'])
             ->assertJsonPath('rev', 2);
     }
@@ -78,16 +83,16 @@ class StavTest extends TestCase
      */
     public function test_starsi_rev_konci_konfliktem_a_vrati_aktualni_stav(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['nové']]])->assertOk();
 
         $this->actingAs($this->adri)
-            ->patchJson('/api/state', ['data' => ['favs' => ['staré']], 'rev' => 0])
+            ->patchJson('/api/state', ['data' => ['zkouska' => ['staré']], 'rev' => 0])
             ->assertStatus(409)
             ->assertJsonPath('conflict', true)
-            ->assertJsonPath('strety', ['favs'])
-            ->assertJsonPath('data.favs', ['nové']);
+            ->assertJsonPath('strety', ['zkouska'])
+            ->assertJsonPath('data.zkouska', ['nové']);
 
-        $this->assertSame(['nové'], CoupleState::first()->toClientArray()['favs']);
+        $this->assertSame(['nové'], CoupleState::first()->toClientArray()['zkouska']);
     }
 
     /**
@@ -100,19 +105,19 @@ class StavTest extends TestCase
      */
     public function test_zmena_jineho_klice_se_zapise_i_na_starsi_revizi(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['nové']]])->assertOk();
 
         $this->actingAs($this->maki)
             ->patchJson('/api/state', ['data' => ['pins' => ['moje']], 'rev' => 0])
             ->assertOk()
             ->assertJsonPath('data.pins', ['moje'])
-            ->assertJsonPath('data.favs', ['nové'])
+            ->assertJsonPath('data.zkouska', ['nové'])
             ->assertJsonPath('strety', []);
 
         $stav = CoupleState::first()->toClientArray();
 
         $this->assertSame(['moje'], $stav['pins'], 'Zápis do jiného klíče nemá co ztratit.');
-        $this->assertSame(['nové'], $stav['favs']);
+        $this->assertSame(['nové'], $stav['zkouska']);
     }
 
     /**
@@ -123,25 +128,25 @@ class StavTest extends TestCase
      */
     public function test_ze_smiseneho_patche_se_zahodi_jen_stret(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['nové']]])->assertOk();
 
         $this->actingAs($this->maki)
-            ->patchJson('/api/state', ['data' => ['favs' => ['staré'], 'pins' => ['moje']], 'rev' => 0])
+            ->patchJson('/api/state', ['data' => ['zkouska' => ['staré'], 'pins' => ['moje']], 'rev' => 0])
             ->assertOk()
-            ->assertJsonPath('strety', ['favs'])
-            ->assertJsonPath('data.favs', ['nové'])
+            ->assertJsonPath('strety', ['zkouska'])
+            ->assertJsonPath('data.zkouska', ['nové'])
             ->assertJsonPath('data.pins', ['moje']);
     }
 
     /** Bez čísla revize se nekontroluje nic — klient neřekl, na čem staví. */
     public function test_bez_revize_se_zapise_vse(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['nové']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['nové']]])->assertOk();
 
         $this->actingAs($this->maki)
-            ->patchJson('/api/state', ['data' => ['favs' => ['přepsané']]])
+            ->patchJson('/api/state', ['data' => ['zkouska' => ['přepsané']]])
             ->assertOk()
-            ->assertJsonPath('data.favs', ['přepsané']);
+            ->assertJsonPath('data.zkouska', ['přepsané']);
     }
 
     /**
@@ -289,10 +294,10 @@ class StavTest extends TestCase
     /** Shodná verze projde — klient staví na tom, co server má. */
     public function test_shodny_rev_projde(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['a']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['a']]])->assertOk();
 
         $this->actingAs($this->adri)
-            ->patchJson('/api/state', ['data' => ['favs' => ['a', 'b']], 'rev' => 1])
+            ->patchJson('/api/state', ['data' => ['zkouska' => ['a', 'b']], 'rev' => 1])
             ->assertOk()->assertJsonPath('rev', 2);
     }
 
@@ -305,15 +310,15 @@ class StavTest extends TestCase
     public function test_citlive_klice_jdou_do_sifrovaneho_sloupce(): void
     {
         $this->actingAs($this->adri)
-            ->patchJson('/api/state', ['data' => ['kidsStance' => 'zatím ne', 'favs' => ['a']]])
+            ->patchJson('/api/state', ['data' => ['kidsStance' => 'zatím ne', 'zkouska' => ['a']]])
             ->assertOk()
             ->assertJsonPath('data.kidsStance', 'zatím ne')
-            ->assertJsonPath('data.favs', ['a']);
+            ->assertJsonPath('data.zkouska', ['a']);
 
         $radek = \DB::table('couple_states')->first();
 
         $this->assertStringNotContainsString('zatím ne', $radek->data, 'Citlivý klíč nesmí ležet v otevřeném sloupci.');
-        $this->assertStringContainsString('favs', $radek->data);
+        $this->assertStringContainsString('zkouska', $radek->data);
     }
 
     /** Oba partneři čtou a píší tentýž záznam — stav patří páru, ne člověku. */
@@ -322,10 +327,10 @@ class StavTest extends TestCase
         $makinka = User::factory()->create();
         $makinka->gallerySpaces()->syncWithoutDetaching([$this->prostor->id => ['role' => 'owner']]);
 
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['spolecne']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['spolecne']]])->assertOk();
 
         $this->actingAs($makinka)->getJson('/api/state')
-            ->assertOk()->assertJsonPath('data.favs', ['spolecne']);
+            ->assertOk()->assertJsonPath('data.zkouska', ['spolecne']);
 
         $this->assertSame(1, CoupleState::count(), 'Na pár patří jeden záznam, ne jeden na člověka.');
     }
@@ -333,7 +338,7 @@ class StavTest extends TestCase
     /** Cizí pár nevidí nic z našeho stavu. */
     public function test_cizi_par_nas_stav_nevidi(): void
     {
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['tajne']]])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['tajne']]])->assertOk();
 
         $cizi = User::factory()->create();
         $cizProstor = GallerySpace::create(['name' => 'Jiní', 'owner_id' => $cizi->id]);
@@ -353,7 +358,7 @@ class StavTest extends TestCase
     public function test_smazani_stav_vynuluje(): void
     {
         $this->actingAs($this->adri)->patchJson('/api/state', [
-            'data' => ['favs' => ['a'], 'kidsStance' => ['Adrian' => 'ano'], 'optIn' => ['kids' => true]],
+            'data' => ['zkouska' => ['a'], 'kidsStance' => ['Adrian' => 'ano'], 'optIn' => ['kids' => true]],
         ])->assertOk();
 
         $pred = CoupleState::first();
@@ -367,7 +372,7 @@ class StavTest extends TestCase
         $this->assertSame([], $po->rev_keys ?? [], 'Revize klíčů nesmí přežít nulování.');
 
         // A po smazání jde zase psát, bez konfliktu.
-        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => ['b']], 'rev' => 0])->assertOk();
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['b']], 'rev' => 0])->assertOk();
     }
 
     public function test_bez_prihlaseni_stav_nedostane(): void
@@ -390,12 +395,12 @@ class StavTest extends TestCase
     public function test_prazdny_objekt_zustane_objektem(): void
     {
         $this->actingAs($this->adri)
-            ->patchJson('/api/state', ['data' => ['favs' => new \stdClass, 'sel' => []]])
+            ->patchJson('/api/state', ['data' => ['zkouska' => new \stdClass, 'sel' => []]])
             ->assertOk();
 
         $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
 
-        $this->assertStringContainsString('"favs":{}', $telo, 'Prázdný objekt se vrátil jako pole.');
+        $this->assertStringContainsString('"zkouska":{}', $telo, 'Prázdný objekt se vrátil jako pole.');
         // A pole zůstane polem — obojí platí, jinak se smyčka jen otočí.
         $this->assertStringContainsString('"sel":[]', $telo);
     }
@@ -412,12 +417,12 @@ class StavTest extends TestCase
         // Přes `stdClass`, ne pole: `['0' => 'x']` by PHP odeslalo jako `["x"]`
         // a test by zkoušel něco jiného, než co posílá prohlížeč.
         $this->actingAs($this->adri)
-            ->patchJson('/api/state', ['data' => ['favs' => json_decode('{"0":"adrianovo"}')]])
+            ->patchJson('/api/state', ['data' => ['zkouska' => json_decode('{"0":"adrianovo"}')]])
             ->assertOk();
 
         $telo = $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->getContent();
 
-        $this->assertStringContainsString('"favs":{"0":"adrianovo"}', $telo);
+        $this->assertStringContainsString('"zkouska":{"0":"adrianovo"}', $telo);
     }
 
     /**
