@@ -96,7 +96,7 @@ class InitiateDriveResumableUploadJob implements ShouldQueue
             ]);
 
             // Dispatch chunk upload job
-            UploadDriveChunkJob::dispatch($media, $session, $sessionUri, 0, $totalSize)->onQueue('drive');
+            UploadDriveChunkJob::dispatch($media->id, $session?->id, $sessionUri, 0, $totalSize)->onQueue('drive');
 
         } catch (\Throwable $e) {
             Log::error("Drive upload initiation failed for media #{$media->id}", ['error' => $e->getMessage()]);

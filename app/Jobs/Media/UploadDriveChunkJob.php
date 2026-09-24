@@ -9,7 +9,6 @@ use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
@@ -102,10 +101,19 @@ class UploadDriveChunkJob implements ShouldQueue
             if ($result['status'] === 'complete') {
                 $this->finalizeMedia($media, $session, $result['file'] ?? []);
             } else {
-                // Dispatch next chunk
+                /*
+                 * Další část.
+                 *
+                 * Tahle třída měla vlastní `dispatch()`, které slibovalo
+                 * `PendingDispatch` a vracelo samotnou úlohu — tedy `TypeError`
+                 * při každém volání a nic ve frontě. Volající to má uvnitř
+                 * `try`, takže se z toho stal `release()` a každý pokus založil
+                 * na Googlu novou osiřelou relaci. Teď se posílají
+                 * identifikátory, jak čeká zděděný `Dispatchable`.
+                 */
                 $session?->update(['drive_uploaded_bytes' => $endByte + 1]);
                 static::dispatch(
-                    $media, $session, $this->driveSessionUri, $endByte + 1, $this->totalSize
+                    $media->id, $session?->id, $this->driveSessionUri, $endByte + 1, $this->totalSize
                 )->onQueue('drive');
             }
 
@@ -154,10 +162,5 @@ class UploadDriveChunkJob implements ShouldQueue
 
         // Google Drive requires all non-final chunks to be 256 KB aligned.
         return intdiv($bytes, self::CHUNK_ALIGNMENT) * self::CHUNK_ALIGNMENT;
-    }
-
-    public static function dispatch(MediaItem $media, ?UploadSession $session, string $uri, int $start, int $total): PendingDispatch
-    {
-        return new static($media->id, $session?->id, $uri, $start, $total);
     }
 }
