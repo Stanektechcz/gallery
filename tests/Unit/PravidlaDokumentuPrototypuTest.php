@@ -19,6 +19,69 @@ class PravidlaDokumentuPrototypuTest extends TestCase
     }
 
     /**
+     * Žádná metoda třídy `Component` není definovaná dvakrát.
+     *
+     * JavaScript to nehlásí: druhá definice tiše přepíše první. Takhle telefon
+     * jednou vůbec neukládal stav — metoda ukládání existovala, jen ji o pár
+     * tisíc řádků níž přepsala stará verze se stejným jménem, a v prohlížeči
+     * se to nedalo poznat jinak než tím, že se nic neuložilo.
+     */
+    public function test_trida_nema_dvakrat_tutez_metodu(): void
+    {
+        // Hlídka musí dvojí definici poznat — jinak by prošla naprázdno.
+        $ukazka = "class Component extends DCLogic {\n  uloz() {\n  }\n  jine = () => 1;\n  uloz() {\n  }\n}\n";
+        $this->assertSame(['uloz' => [2, 5]], self::dvakratDefinovane($ukazka));
+
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dvakrat = self::dvakratDefinovane(self::dokument($nazev));
+
+            $this->assertSame([], $dvakrat, "{$nazev}: druhá definice tiše přepíše první —\n"
+                .implode("\n", array_map(
+                    fn (string $jmeno, array $radky) => "  {$jmeno} na řádcích ".implode(', ', $radky),
+                    array_keys($dvakrat), $dvakrat,
+                )));
+        }
+    }
+
+    /**
+     * Členové třídy `Component`, kteří jsou v ní víckrát, s čísly řádků.
+     *
+     * Třída má členy odsazené dvěma mezerami a končí `}` na začátku řádku;
+     * hlubší odsazení jsou těla metod a do výčtu nepatří.
+     *
+     * @return array<string, list<int>>
+     */
+    private static function dvakratDefinovane(string $kod): array
+    {
+        $radky = preg_split('/\R/', $kod);
+        $zacatek = null;
+
+        foreach ($radky as $i => $radek) {
+            if (str_starts_with($radek, 'class Component extends DCLogic {')) {
+                $zacatek = $i;
+                break;
+            }
+        }
+
+        if ($zacatek === null) {
+            return ['(třída Component nenalezena)' => []];
+        }
+
+        $clenove = [];
+        $klicova = ['if', 'for', 'while', 'switch', 'return', 'const', 'let', 'var', 'catch'];
+
+        for ($i = $zacatek + 1, $n = count($radky); $i < $n && ! str_starts_with($radky[$i], '}'); $i++) {
+            $metoda = '/^  (?:async\s+|static\s+|get\s+|set\s+)?([A-Za-z_$][\w$]*)\s*(?:\(|=\s*(?:\(|async|function|[A-Za-z_$][\w$]*\s*=>))/';
+
+            if (preg_match($metoda, $radky[$i], $shoda) && ! in_array($shoda[1], $klicova, true)) {
+                $clenove[$shoda[1]][] = $i + 1;
+            }
+        }
+
+        return array_filter($clenove, fn (array $kde) => count($kde) > 1);
+    }
+
+    /**
      * Šablonové adresy s předponou `sc-camel-`.
      *
      * Prohlížeč čte šablonu dřív, než ji běhové prostředí vyplní:
