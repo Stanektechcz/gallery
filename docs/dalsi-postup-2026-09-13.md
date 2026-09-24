@@ -804,6 +804,95 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ad. Třicáté první kolo — drobnosti z auditu: co nespouštělo nic (24. 9.)
+
+Tři věci, které audit vedl jako drobnosti, protože nic nerozbíjely. Každá
+z nich ale znamenala, že něco slíbeného nefunguje.
+
+### Patnáct příkazů, které nespouštělo nic
+
+Z 38 příkazů jich 14 nespouštěl ani plánovač, ani `deploy.sh`, ani
+`Artisan::call`. Dvanáct z nich je opravné nářadí pro člověka a to je
+v pořádku — ale dva tam nepatřily:
+
+`gallery:billing-reminders` posílá upozornění „zkušební období končí za tři
+dny", „předplatné se obnoví za týden" a „prošlo". Dvojici nepřišlo ani jedno;
+o konci zkoušky se dozvěděla tím, že jí galerie spadla na základní tarif. Teď
+běží denně v 9:30. Denní běh je bezpečný: příkaz si každé upozornění hlídá sám
+přes protokol (`billing.reminder` v `audit_logs`, porovnané proti začátku
+období), takže z denního plánu nevznikne každodenní připomínání téhož.
+
+`gallery:upravy-ze-stavu` dohání popisky, místa, data a štítky, které zůstaly
+jen ve společném stavu. Jeho vlastní docblock říká „jednou po nasazení", a tak
+je teď v `deploy.sh`. Opakování nevadí — od kola 2aa se srovnává proti databázi.
+
+Rozdíl mezi „ručně schválně" a „zapomněli jsme to zapojit" se z kódu nepozná,
+takže tenhle nález nemá zůstat jednorázovou opravou. `PrikazySeSpoustiTest`
+projde všechny příkazy a shodí se na každém, který nespouští nic, dokud u něj
+někdo nenapíše do seznamu `RUCNE` důvod. Druhý test hlídá, aby ten seznam
+nezastaral. `PopisyUlohTest` hlídá zase to, aby nová úloha nedostala
+v administraci anglický název ze záchranného převodu klíče — to se už jednou
+stalo třem úlohám a všimlo si toho až oko.
+
+### Limity mezipaměti variant, které nikdo nečetl
+
+`variant_cache_max_size_gb` (20) a `variant_cache_max_age_days` (90) byly
+v konfiguraci od začátku a nečetl je nikdo. Dvacet gigabajtů byl údaj
+v souboru, ne limit.
+
+`gallery:uklid-variant` je čte a je schválně dvakrát opatrný:
+
+* **Velikost rozhoduje, stáří jen vybírá.** Dokud se mezipaměť do limitu vejde,
+  neděje se nic — ani u variant starých roky. Zmenšenina, kterou nic netlačí,
+  je užitečná; mazat ji podle data by z galerie udělalo pomalou galerii bez
+  důvodu. Teprve nad limitem je stáří nejlepším vodítkem, co zahodit dřív.
+* **Zahodit jde jen to, co nikomu nechybí:** zmenšeniny (`small`, `medium`,
+  `large`) a převod videa. Bez nich se pošle originál — pomalejší, ale správné.
+  Originál je sama fotka, náhled a plakát videa jsou tvář galerie a `edited_*`
+  je výsledek úpravy dvojice; těch se úklid nedotkne.
+* **Bez originálu na disku se nemaže nic.** Tam je zmenšenina poslední kopie
+  a smazat ji není úklid, ale ztráta.
+
+Když ani po vyklizení všeho dovoleného limit nestačí, příkaz to řekne nahlas.
+To je pro správce informace, že problém je velikost knihovny, ne mezipaměti —
+dosud neexistovala vůbec. `--nasucho` vypíše, co by šlo pryč, a nesmaže nic.
+
+Příprava k tomu odhalila vlastní chybu: `GenerateExportJob` bral `large ??
+medium` a fotku bez obou **tiše přeskočil** — stažený ZIP se tvářil hotově
+a pár snímků v něm prostě nebylo. Stejná díra byla v `ApplyMediaEditJob`: bez
+obou se úprava neprovedla vůbec. Originál byl v obou případech celou dobu
+vedle a je teď poslední v řadě. Bez téhle opravy by z výjimky udělal úklid
+variant každodennost.
+
+### Tabulka, která se jen plnila
+
+`scheduled_task_runs` rostla od svého vzniku. Sám tep plánovače je řádek každou
+minutu — přes půl milionu ročně; se zbytkem úloh zhruba 1,8 milionu. A čte se
+z ní při každém otevření administrace.
+
+`gallery:uklid-protokol` nechává posledních 90 dní (`GALLERY_TASK_LOG_DAYS`)
+a k tomu **vždycky poslední běh každé úlohy**, ať je jakkoli starý.
+Administrace z něj bere sloupec „naposledy"; bez té výjimky by úloha, která
+běží jednou za rok, o sobě tvrdila „nikdy", a to je horší informace než žádná.
+
+Druhá půlka je rejstřík. `ScheduledTaskRun::posledni()` počítá `MAX(id)` podle
+úlohy a tabulka měla jen `(task, started_at)`, podle kterého se `MAX(id)`
+spočítat nedá — databáze musela projít všechny řádky úlohy. S `(task, id)` si
+vezme z každé poslední položku rejstříku a dál nečte. Zmenšit tabulku bez
+rejstříku je jen polovina práce.
+
+| Commit | Co |
+|---|---|
+| `5312ec37` | Upozornění na konec zkušební doby nespouštělo nic |
+| `96db89b6` | Vývoz tiše vynechával fotky bez zmenšenin |
+| `99d48ffe` | Limity mezipaměti variant konečně něco dělají |
+| `ff038703` | Protokol běhů úloh se zkracuje a hledá se v něm přes rejstřík |
+
+Testy: **1635 PHP testů**, všechny prošly. **Jedna migrace** (rejstřík
+`(task, id)` nad `scheduled_task_runs`).
+
+---
+
 ## 2ac. Třicáté kolo — poslední čtyři nálezy auditu (24. 9.)
 
 Tím je audit z kola 2y vyčerpaný: kritické, vysoké i střední nálezy jsou
