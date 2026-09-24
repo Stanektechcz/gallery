@@ -804,6 +804,66 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2aa. Dvacáté sedmé kolo — šířky sloupců, soukromí, koš (24. 9.)
+
+Body 6–10 z pořadí v auditu 2y. Ke každému test, který bez opravy spadne.
+
+### Co projde přes stav, se vejde do sloupce
+
+Devatenáct sloupců mělo `Vejde` širší než sloupec, nebo `Vejde` nemělo vůbec.
+Nejostřejší byl `couple_story_chapters.year` — volné pole pro rok s devíti
+znaky, do kterého šel syrový text z prohlížeče. Na MySQL (`strict`) by první
+takový zápis shodil celý `PATCH /api/state`, a protože `galerie-api.js` bere
+500 jako výpadek sítě, patch by se týden vracel do fronty bez jediné hlášky:
+aplikace by přestala ukládat cokoli a nikde by to nevypadalo jako porucha.
+
+Šířku `client_id` (64 na devíti místech) drží `Vejde::KLIENT`.
+
+Hlídá to `SirkySloupcuTest`: pošle přes stav dlouhé texty a projde **každý**
+znakový sloupec v databázi proti šířce z migrací. Šířky se nečtou ze schématu
+testovací databáze — SQLite je do `CREATE TABLE` vůbec nezapíše, takže by sken
+neměl co kontrolovat; vlastní test proto hlídá i to, že sken není prázdný.
+
+### Srdíčka a mapa energie
+
+`favs` bylo v databázi per-uživatele, ale ukládalo se do **společného** stavu —
+a klient sdílenou mapu čte přednostně před serverovým příznakem. Druhý viděl
+cizích čtyřicet srdíček jako svá. Klíč je teď v `CoupleState::NEUKLADAT`:
+přijme se, zapíše do `user_favorites` a do společného dokumentu nejde.
+`persistSkip()` v prohlížeči by ho neposlal vůbec a srdíčka by se přestala
+ukládat — tím se ta cesta vylučuje.
+
+Tím padl výpočet rozdílu proti stavu (proti prázdnému „předtím" vypadá odebrání
+jako žádná změna), takže se `oblibene()` ptá databáze. Vedle toho zmizel celý
+problém staré kopie. Dluh zápisu proto nese i hodnotu, ne jen jméno klíče.
+
+Mapa energie: počítač posílá mřížku obou lidí a zapisovala se oběma, takže
+kliknutí ze starší záložky vrátilo partnerovi všech 42 buněk. Teď jen svůj
+řádek — táž pojistka, jakou má `FilmyVeStavu` u známek.
+
+### Koš a nahrávání na Disk
+
+Všechny čtyři cesty koše volaly `->delete()` na modelu se `SoftDeletes`:
+soubory zmizely, řádek zůstal a noční úklid ho nevidí. `gallery:purge-trash`
+měl navíc vlastní kopii mazání, která o Google Disku nevěděla a `disk`
+z variant brala jako jméno filesystemu (u zrcadlení je to `dropbox`), takže
+výjimka spadla do logu a mazalo se dál. Vede teď přes `MediaPurger` a uklidí
+i sirotky po dřívějším měkkém mazání.
+
+`UploadDriveChunkJob::dispatch()` slibovalo `PendingDispatch` a vracelo úlohu —
+`TypeError` při každém volání a nic ve frontě. Nahrávání po částech tedy
+nikdy neběželo a každý z pěti pokusů nechal na Googlu osiřelou relaci.
+
+### Indexy pro MySQL
+
+`albums.materialized_path` a `push_subscriptions.endpoint` mají 2048 znaků =
+8192 bajtů proti stropu klíče 3072. Cesta stromem se indexuje po 191 znacích
+(hledá se podle předpony); u odběru upozornění by prefix nestačil, protože se
+adresy liší až na konci — jednoznačnost drží `endpoint_hash` (SHA-256).
+`DelkaIndexuTest` čte migrace, ne schéma testovací databáze.
+
+---
+
 ## 2z. Dvacáté šesté kolo — opravy z auditu a vlastní adresy (24. 9.)
 
 Pět nálezů z auditu 2y opraveno, ke každému test, který bez opravy spadne.
