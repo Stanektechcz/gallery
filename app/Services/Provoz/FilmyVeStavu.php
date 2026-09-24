@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Pribeh;
 use App\Support\Tabulky;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -240,7 +241,7 @@ class FilmyVeStavu
                     'created_by' => $uzivatel?->id,
                     'title' => mb_substr($nazev, 0, 180),
                     'kind' => $seznam === 'series' ? 'seriál' : 'film',
-                    'status' => $seznam === 'watchlist' ? 'chceme' : (string) ($r['g'] ?? 'hotovo'),
+                    'status' => Vejde::do($seznam === 'watchlist' ? 'chceme' : ($r['g'] ?? 'hotovo'), 12),
                     'sort_order' => 0,
                     'created_at' => now(),
                     'updated_at' => now(),

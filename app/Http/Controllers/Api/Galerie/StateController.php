@@ -237,7 +237,7 @@ class StateController extends Controller
             $dluh = $this->zaplatDluh($state, $coupleId, $uzivatel);
 
             if ($this->media->tykaSe($patch)) {
-                $dluh = array_merge($dluh, $this->media->zpracuj(
+                $dluh += $this->zDluhu($patch, $this->media->zpracuj(
                     $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel,
                 ));
             }
@@ -251,10 +251,11 @@ class StateController extends Controller
              */
             if ($this->finance->tykaSe($patch)) {
                 $dluhFinance = [];
+                $puvodni = $patch;
                 $patch = $this->finance->zpracuj(
                     $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $dluhFinance,
                 );
-                $dluh = array_merge($dluh, $dluhFinance);
+                $dluh += $this->zDluhu($puvodni, $dluhFinance);
             }
 
             /*
@@ -555,27 +556,38 @@ class StateController extends Controller
             return $dluh;
         }
 
-        $stav = $state->toClientArray();
         $prostor = GallerySpace::findOrFail($coupleId);
         $zbyva = [];
 
-        $media = array_values(array_intersect($dluh, ['favs', 'edits']));
+        $media = array_intersect_key($dluh, array_flip(['favs', 'edits']));
 
         if ($media !== []) {
-            $zbyva = $this->media->zpracuj(
-                array_intersect_key($stav, array_flip($media)), [], $prostor, $uzivatel,
-            );
+            $zbyva += $this->zDluhu($media, $this->media->zpracuj($media, [], $prostor, $uzivatel));
         }
 
-        if (in_array('txCat', $dluh, true) && $this->finance->tykaSe($stav)) {
+        if ($this->finance->tykaSe($dluh)) {
             $dluhFinance = [];
-            $this->finance->zpracuj(
-                array_intersect_key($stav, array_flip(['txCat', 'txCatPuvodni'])), [], $prostor, $dluhFinance,
-            );
-            $zbyva = array_merge($zbyva, $dluhFinance);
+            $this->finance->zpracuj($dluh, [], $prostor, $dluhFinance);
+            $zbyva += $this->zDluhu($dluh, $dluhFinance);
         }
 
         return $zbyva;
+    }
+
+    /**
+     * Ze jmen klíčů udělá dluh i s hodnotami.
+     *
+     * Dluh musí nést, **co** se má zapsat, ne jen který klíč selhal: `favs` se
+     * do společného dokumentu schválně neukládá, takže by při dalším
+     * požadavku nebylo odkud tu hodnotu vzít.
+     *
+     * @param  array<string, mixed>  $patch
+     * @param  list<string>  $klice
+     * @return array<string, mixed>
+     */
+    private function zDluhu(array $patch, array $klice): array
+    {
+        return array_intersect_key($patch, array_flip($klice));
     }
 
     /**

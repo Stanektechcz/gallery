@@ -64,7 +64,7 @@ class KlidVeStavu
 
         // Jen skutečný seznam: vynulovaná místní kopie (`null`) nic nemaže.
         if (is_array($patch['klEn'] ?? null)) {
-            $this->energie($patch['klEn'], $prostor, $jmena);
+            $this->energie($patch['klEn'], $prostor, $jmena, $uzivatel);
         }
 
         if (is_array($patch['klAttn'] ?? null)) {
@@ -126,9 +126,9 @@ class KlidVeStavu
             $radek = [
                 'name' => mb_substr($nazev, 0, 180),
                 'needs_people' => max(0, min(2, (int) ($u['need'] ?? 1))),
-                'route' => ((string) ($u['route'] ?? '')) ?: null,
-                'tab' => ((string) ($u['tab'] ?? '')) ?: null,
-                'label' => ((string) ($u['label'] ?? '')) ?: null,
+                'route' => Vejde::neboNic($u['route'] ?? null, 40),
+                'tab' => Vejde::neboNic($u['tab'] ?? null, 40),
+                'label' => Vejde::neboNic($u['label'] ?? null),
                 'sort_order' => $poradi,
                 'updated_at' => now(),
             ];
@@ -181,7 +181,7 @@ class KlidVeStavu
      * @param  array<string, mixed>  $mapa
      * @param  array<string, int>  $jmena
      */
-    private function energie(array $mapa, GallerySpace $prostor, array $jmena): void
+    private function energie(array $mapa, GallerySpace $prostor, array $jmena, User $kdoPise): void
     {
         if (! Tabulky::je('wellbeing_energy')) {
             return;
@@ -191,6 +191,22 @@ class KlidVeStavu
             $kdo = $jmena[(string) $jmeno] ?? null;
 
             if ($kdo === null) {
+                continue;
+            }
+
+            /*
+             * Jen svůj řádek.
+             *
+             * Počítač posílá mřížku obou lidí naráz, takže jedno kliknutí
+             * přepsalo i všech 42 buněk toho druhého — a protože je `klEn`
+             * mezi serverovými klíči, ze stavu se to vzít zpátky nedá. Stačilo
+             * mít otevřenou starší záložku. Mapa přitom existuje právě proto,
+             * aby se našlo okno, kdy mají sílu **oba**.
+             *
+             * Táž pojistka je ve `FilmyVeStavu` u známek a ve `VztahVeStavu`
+             * u sporu; tady chyběla.
+             */
+            if ($kdo !== $kdoPise->id) {
                 continue;
             }
 

@@ -149,7 +149,7 @@ class VztahVeStavu
             }
 
             CouplePromise::create([
-                'client_id' => Vejde::do($r['id'], 80),
+                'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
                 'gallery_space_id' => $prostor->id,
                 'promised_by' => $slibil,
                 'promised_to' => $jmena[$r['to'] ?? ''] ?? null,
@@ -225,7 +225,7 @@ class VztahVeStavu
 
                 $z->update([
                     'text' => Vejde::do($r['text']),
-                    'kind' => Vejde::do($r['kind'] ?? $z->kind, 40),
+                    'kind' => Vejde::do($r['kind'] ?? $z->kind, 16),
                     'state' => $stav,
                     'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
                     'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? ($z->closed_at ?? now()) : null,
@@ -244,12 +244,12 @@ class VztahVeStavu
             }
 
             $nova = CoupleNudge::create([
-                'client_id' => Vejde::do($r['id'], 80),
+                'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
                 'gallery_space_id' => $prostor->id,
                 'asked_by' => $odKoho,
                 'asked_of' => $komu,
                 'text' => Vejde::do($r['text']),
-                'kind' => Vejde::do($r['kind'] ?? 'cestou', 40),
+                'kind' => Vejde::do($r['kind'] ?? 'cestou', 16),
                 'state' => $stav,
                 'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
                 'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? now() : null,
@@ -372,13 +372,13 @@ class VztahVeStavu
         $spolecne = str_contains($kdo, ' a ') || $kdo === '';
 
         CoupleDecision::create([
-            'client_id' => Vejde::do($r['id'], 80),
+            'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
             'gallery_space_id' => $prostor->id,
             'title' => Vejde::do($r['title']),
             'decided_on' => $this->datum((string) ($r['date'] ?? '')) ?? CarbonImmutable::now(),
             'together' => $spolecne,
             'decided_by' => $spolecne ? null : ($jmena[$kdo] ?? null),
-            'status' => Vejde::do($r['status'] ?? 'platí', 40),
+            'status' => Vejde::do($r['status'] ?? 'platí', 24),
             'why' => array_values(array_filter((array) ($r['why'] ?? []))),
             'rejected' => array_values(array_filter((array) ($r['rejected'] ?? []))),
             'review_note' => Vejde::neboNic($r['review'] ?? null),
@@ -416,9 +416,9 @@ class VztahVeStavu
                 }
 
                 $podle[$r['id']]->update([
-                    'opinion' => $r['opinion'] ?? null,
+                    'opinion' => Vejde::neboNic($r['opinion'] ?? null),
                     'opinion_by' => isset($r['opinionBy']) ? ($jmena[$r['opinionBy']] ?? null) : null,
-                    'verdict' => $r['verdict'] ?? null,
+                    'verdict' => Vejde::neboNic($r['verdict'] ?? null, 24),
                 ]);
 
                 continue;
@@ -427,16 +427,16 @@ class VztahVeStavu
             $hodin = (int) ($r['left'] ?? 72);
 
             CoupleCoolingPurchase::create([
-                'client_id' => Vejde::do($r['id'], 80),
+                'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
                 'gallery_space_id' => $prostor->id,
                 'what' => Vejde::do($r['what']),
                 'price' => (int) ($r['price'] ?? 0),
                 'requested_by' => $jmena[$r['who'] ?? ''] ?? null,
                 'opened_at' => now(),
                 'cools_until' => now()->addHours($hodin > 0 ? $hodin : 72),
-                'opinion' => $r['opinion'] ?? null,
+                'opinion' => Vejde::neboNic($r['opinion'] ?? null),
                 'opinion_by' => isset($r['opinionBy']) ? ($jmena[$r['opinionBy']] ?? null) : null,
-                'verdict' => $r['verdict'] ?? null,
+                'verdict' => Vejde::neboNic($r['verdict'] ?? null, 24),
             ]);
         }
 
@@ -480,7 +480,7 @@ class VztahVeStavu
             $bod = $vDatabazi[$r['text']] ?? null;
 
             if ($bod) {
-                $bod->update(['kind' => (string) ($r['kind'] ?? $bod->kind)]);
+                $bod->update(['kind' => Vejde::do($r['kind'] ?? $bod->kind, 16)]);
 
                 continue;
             }
@@ -489,8 +489,8 @@ class VztahVeStavu
                 'gallery_space_id' => $prostor->id,
                 'author_user_id' => $autor,
                 'text' => Vejde::do($r['text']),
-                'tag' => $r['tag'] ?? null,
-                'kind' => Vejde::do($r['kind'] ?? 'podmínka', 40),
+                'tag' => Vejde::neboNic($r['tag'] ?? null, 40),
+                'kind' => Vejde::do($r['kind'] ?? 'podmínka', 16),
             ]);
         }
     }
@@ -511,7 +511,7 @@ class VztahVeStavu
             }
 
             if ($podle->has($r['id'])) {
-                $podle[$r['id']]->update(['outcome' => $r['done'] ?? null]);
+                $podle[$r['id']]->update(['outcome' => Vejde::neboNic($r['done'] ?? null, 16)]);
 
                 continue;
             }
@@ -523,13 +523,13 @@ class VztahVeStavu
             }
 
             CoupleVetoProposal::create([
-                'client_id' => Vejde::do($r['id'], 80),
+                'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
                 'gallery_space_id' => $prostor->id,
                 'proposed_by' => $navrhl,
                 'text' => Vejde::do($r['text']),
                 'price' => (int) ($r['price'] ?? 0),
                 'proposed_on' => now(),
-                'outcome' => $r['done'] ?? null,
+                'outcome' => Vejde::neboNic($r['done'] ?? null, 16),
             ]);
         }
     }

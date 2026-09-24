@@ -61,9 +61,12 @@ class DlouheTextyVeStavuTest extends TestCase
 
         $prace = DB::table('house_chores')->where('gallery_space_id', $this->prostor->id)->first();
         $this->assertNotNull($prace, 'Práce se měla zapsat, ne spadnout na délce.');
-        $this->assertSame(255, mb_strlen($prace->name));
+        // Šířky sloupců, ne kulatá čísla: `name` je 160 a `icon` 40. Dřív tu
+        // stálo 255 a 60, takže test tvrdil, že je v pořádku zapsat víc, než
+        // se do sloupce vejde. Proti schématu to hlídá SirkySloupcuTest.
+        $this->assertSame(160, mb_strlen($prace->name));
         $this->assertLessThanOrEqual(40, mb_strlen((string) $prace->every));
-        $this->assertLessThanOrEqual(60, mb_strlen((string) $prace->icon));
+        $this->assertLessThanOrEqual(40, mb_strlen((string) $prace->icon));
         // Ořez po znacích, ne po bajtech — jinak by v databázi skončil rozseknutý znak.
         $this->assertSame($prace->name, mb_convert_encoding($prace->name, 'UTF-8', 'UTF-8'));
 

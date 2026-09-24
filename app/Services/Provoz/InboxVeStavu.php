@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Support\Tabulky;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -167,6 +168,10 @@ class InboxVeStavu
     /** @param  array<string, string>  $nazvy */
     private function uloz(GallerySpace $prostor, string $klic, string $stav, array $nazvy, ?User $uzivatel): void
     {
+        // Ořez hned tady, aby se stejná hodnota použila pro hledání i zápis —
+        // jinak by se řádek našel podle dlouhého klíče a uložil pod kratším.
+        $klic = Vejde::do($klic, 64);
+
         $drive = DB::table('inbox_states')
             ->where('gallery_space_id', $prostor->id)
             ->where('item_key', $klic)

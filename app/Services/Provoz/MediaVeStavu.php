@@ -54,7 +54,7 @@ class MediaVeStavu
          */
         if (array_key_exists('favs', $patch)) {
             try {
-                $this->oblibene($this->mapa($patch['favs']), $this->mapa($predtim['favs'] ?? []), $prostor, $kdo);
+                $this->oblibene($this->mapa($patch['favs']), $prostor, $kdo);
             } catch (\Throwable $e) {
                 $dluh[] = 'favs';
                 Log::warning('Oblíbené ze stavu se nepodařilo propsat', ['chyba' => $e->getMessage()]);
@@ -100,21 +100,43 @@ class MediaVeStavu
     }
 
     /**
+     * Srdíčka podle toho, co je v databázi — ne podle minulého stavu.
+     *
+     * Dřív se rozdíl počítal proti `favs` ve sdíleném stavu dvojice. Jenže
+     * srdíčka jsou každého vlastní, takže se ten klíč do společného dokumentu
+     * neukládá (`CoupleState::NEUKLADAT`) — a proti prázdnému „předtím" vypadá
+     * odebrání srdíčka jako žádná změna. Pravda je v `user_favorites`: co tam
+     * pro tohohle člověka leží a co přišlo z prohlížeče.
+     *
+     * Jako vedlejší efekt zmizel celý problém staré kopie: nezáleží na tom,
+     * co měl prohlížeč naposledy, jen na tom, co má teď.
+     *
      * @param  array<string, bool>  $ted
-     * @param  array<string, bool>  $predtim
      */
-    private function oblibene(array $ted, array $predtim, GallerySpace $prostor, User $kdo): void
+    private function oblibene(array $ted, GallerySpace $prostor, User $kdo): void
     {
-        $zmeny = array_filter($ted, fn (bool $v, string $id) => ($predtim[$id] ?? false) !== $v, ARRAY_FILTER_USE_BOTH);
-
-        if ($zmeny === []) {
+        if ($ted === []) {
             return;
         }
 
-        $id = $this->media($prostor, array_keys($zmeny))->pluck('id', 'uuid');
+        $id = $this->media($prostor, array_keys($ted))->pluck('id', 'uuid');
 
-        foreach ($zmeny as $uuid => $zapnuto) {
+        if ($id->isEmpty()) {
+            return;
+        }
+
+        $uz = DB::table('user_favorites')
+            ->where('user_id', $kdo->id)
+            ->whereIn('media_item_id', $id->values()->all())
+            ->pluck('media_item_id')
+            ->flip();
+
+        foreach ($ted as $uuid => $zapnuto) {
             if (! isset($id[$uuid])) {
+                continue;
+            }
+
+            if ($zapnuto === $uz->has($id[$uuid])) {
                 continue;
             }
 

@@ -133,8 +133,10 @@ class PribehVeStavu
             }
 
             $radek = [
-                'title' => $nazev,
-                'year' => (string) ($k['year'] ?? $k[2] ?? '') ?: null,
+                'title' => Vejde::do($nazev),
+                // `year` je volné pole pro rok a má devět znaků: „2019 – 2021"
+                // je jedenáct, takže se tam ani rozsah nevejde celý.
+                'year' => Vejde::neboNic($k['year'] ?? $k[2] ?? '', 9),
                 'status' => $this->stav((string) ($k['status'] ?? $k[3] ?? '')),
                 'body' => Vejde::do($k['text'] ?? $k[6] ?? '', 20000),
                 'sort_order' => $poradi,
@@ -219,9 +221,9 @@ class PribehVeStavu
             $radek = [
                 'chapter_id' => $kapitoly[$kapitola] ?? null,
                 'happened_on' => $kdy->format('Y-m-d'),
-                'title' => $nazev,
+                'title' => Vejde::do($nazev),
                 'note' => Vejde::do($m['note'] ?? $m[4] ?? ''),
-                'icon' => Vejde::do($m['icon'] ?? $m[5] ?? '', 60) ?: 'ph-sparkle',
+                'icon' => Vejde::do($m['icon'] ?? $m[5] ?? '', 40) ?: 'ph-sparkle',
                 'updated_at' => now(),
             ];
 
@@ -385,7 +387,7 @@ class PribehVeStavu
             $puvodni = $stav[$uuid] ?? null;
 
             $radek = [
-                'label' => $popis,
+                'label' => Vejde::do($popis),
                 'note' => Vejde::do($p['note'] ?? ''),
                 'is_shared' => $sdilet,
                 'sort_order' => $poradi,
@@ -460,7 +462,7 @@ class PribehVeStavu
             }
 
             $radek = [
-                'label' => $popis,
+                'label' => Vejde::do($popis),
                 'value' => Vejde::do($r['value'] ?? ''),
                 'is_done' => (bool) ($r['on'] ?? false),
                 'changed' => (bool) ($r['changed'] ?? false),

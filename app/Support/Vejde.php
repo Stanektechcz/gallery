@@ -23,6 +23,15 @@ final class Vejde
     /** Výchozí délka `string()` sloupce v Laravelu. */
     public const SLOUPEC = 255;
 
+    /**
+     * Šířka sloupce `client_id`, tedy identifikátoru z prohlížeče.
+     *
+     * Je stejná ve všech jedenácti tabulkách, ale ořezávalo se na 80 — o
+     * šestnáct znaků víc, než se tam vejde. Klient si identifikátory skládá
+     * sám (`'c-' + Date.now()` a podobně), takže délku nikdo nehlídá.
+     */
+    public const KLIENT = 64;
+
     /** Text pro sloupec dané délky; prázdný řetězec zůstane prázdný. */
     public static function do(mixed $text, int $max = self::SLOUPEC): string
     {

@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Services\Obsah\Pravidla;
 use App\Services\Obsah\SlovnikPravidel;
 use App\Support\Tabulky;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -100,7 +101,7 @@ class PravidlaVeStavu
             $akce = $this->slovnik->akceDovnitr((string) ($p['act'] ?? 'notify'));
 
             $radek = [
-                'name' => $nazev,
+                'name' => Vejde::do($nazev, 120),
                 'trigger' => $spoustec,
                 'conditions' => json_encode($this->podminky($spoustec, (string) ($p['targ'] ?? '')), JSON_UNESCAPED_UNICODE),
                 'action' => $akce,

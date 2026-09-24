@@ -197,7 +197,7 @@ class PlanovaniVeStavu
         }
 
         $u->update([
-            'title' => Vejde::do($e['t']),
+            'title' => Vejde::do($e['t'], 160),
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
             'activity_kind' => $this->cinnost($e),
@@ -223,7 +223,7 @@ class PlanovaniVeStavu
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
             'created_by' => $kdo->id,
-            'title' => Vejde::do($e['t']),
+            'title' => Vejde::do($e['t'], 160),
             'description' => $e['note'] ?? null,
             'type' => $this->typ((string) ($e['kind'] ?? 'jine')),
             'activity_kind' => $this->cinnost($e),
@@ -829,7 +829,7 @@ class PlanovaniVeStavu
                         'status' => 'open',
                     ],
                     'dropped' => ['title' => Vejde::do($r['text']), 'status' => 'cancelled'],
-                    default => ['title' => (string) $r['text']],
+                    default => ['title' => Vejde::do($r['text'])],
                 });
 
                 continue;

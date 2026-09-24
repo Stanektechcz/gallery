@@ -5,6 +5,7 @@ namespace App\Services\Provoz;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Support\Tabulky;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -216,7 +217,7 @@ class SeznamyVeStavu
                 'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $prostor->id,
                 'created_by' => $uzivatel?->id,
-                'name' => mb_substr($nazev, 0, 180),
+                'name' => Vejde::do($nazev, 160),
                 'origin' => '',
                 'destination' => '',
                 'created_at' => now(),

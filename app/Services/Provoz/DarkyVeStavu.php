@@ -132,11 +132,11 @@ class DarkyVeStavu
         }
 
         $radek = [
-            'title' => $nazev,
+            'title' => Vejde::do($nazev),
             'budget' => (int) ($p['price'] ?? 0),
             'source_url' => Vejde::do($p['note'] ?? $p['text'] ?? $p['where'] ?? ''),
             'status' => $this->stav($p, $druh),
-            'occasion' => Vejde::do($p['occasion'] ?? '', 120),
+            'occasion' => Vejde::do($p['occasion'] ?? '', 80),
             'updated_at' => now(),
         ];
 
