@@ -6,6 +6,7 @@ use App\Models\CycleSetting;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Health\CycleService;
+use App\Support\Cas;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -28,11 +29,19 @@ class CycleRemindersCommand extends Command
 
     public function handle(CycleService $cycles): int
     {
-        $dnes = Carbon::today();
+        $dnes = Cas::dnes();
 
-        // Jednou denně dopoledne. Bez toho by minutový plánovač poslal totéž
-        // upozornění tisíckrát za den.
-        if (! $this->option('force') && ! Carbon::now()->between(Carbon::today()->setTime(8, 0), Carbon::today()->setTime(10, 0))) {
+        /*
+         * Jednou denně dopoledne. Bez toho by minutový plánovač poslal totéž
+         * upozornění tisíckrát za den.
+         *
+         * V pásmu dvojice, ne v UTC: `config('app.timezone')` je UTC, takže
+         * „8 až 10" vycházelo v létě na 10 až 12 pražského času — proti tomu,
+         * co slibuje komentář i obrazovka nastavení.
+         */
+        $ted = Cas::ted();
+
+        if (! $this->option('force') && ! $ted->between($ted->setTime(8, 0), $ted->setTime(10, 0))) {
             return self::SUCCESS;
         }
 

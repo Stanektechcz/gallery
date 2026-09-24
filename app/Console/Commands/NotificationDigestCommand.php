@@ -5,8 +5,8 @@ namespace App\Console\Commands;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Notifications\NotificationPreferenceService;
+use App\Support\Cas;
 use Illuminate\Console\Command;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
@@ -29,11 +29,20 @@ class NotificationDigestCommand extends Command
 
     public function handle(NotificationPreferenceService $preferences): int
     {
-        if (! $this->option('force') && ! Carbon::now()->between(Carbon::today()->setTime(19, 0), Carbon::today()->setTime(21, 0))) {
+        /*
+         * Podvečer v pásmu dvojice, ne v UTC.
+         *
+         * „19 až 21" vycházelo v létě na 21 až 23 pražského času a `$od` jako
+         * půlnoc UTC znamenalo druhou ráno — do „dnešního souhrnu" se tedy
+         * nedostalo nic z prvních dvou hodin dne.
+         */
+        $ted = Cas::ted();
+
+        if (! $this->option('force') && ! $ted->between($ted->setTime(19, 0), $ted->setTime(21, 0))) {
             return self::SUCCESS;
         }
 
-        $od = Carbon::today();
+        $od = Cas::dnes();
         $posláno = 0;
 
         foreach (User::all() as $user) {

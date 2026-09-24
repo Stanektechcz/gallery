@@ -141,6 +141,14 @@ else
 fi
 
 echo
+echo "== Kontrola před nasazením =="
+# `galerie:pred-nasazenim` vrací FAILURE při zapnutém ladění, chybějícím APP_KEY,
+# HTTP adrese, nešifrovaných sezeních, frontě v režimu `sync` nebo chybějícím
+# prototypu. Příkaz existoval a měl vlastní test, jen ho nikdo nespouštěl —
+# takže z brány zbyla věta v dokumentu. Díky `set -e` nasazení opravdu zastaví.
+"$PHP" artisan galerie:pred-nasazenim
+
+echo
 echo "== Migrace =="
 # Nejdřív se ukáže, co se chystá, a teprve pak se to provede. Migrace je jediný krok
 # tohoto skriptu, který nejde vzít zpět.
@@ -167,6 +175,37 @@ echo "== Čistím cache =="
 # příštího restartu serveru zpracovávali úlohy starým kódem. Když žádný neběží,
 # je to prázdná operace.
 "$PHP" artisan queue:restart >/dev/null 2>&1 || true
+
+echo
+echo "== Práva a PHP-FPM =="
+# `artisan` běží pod tím, kdo nasazuje (často root), takže nově vzniklé soubory
+# v `storage/framework` patří jemu. PHP-FPM do nich pak nesmí zapisovat a
+# aplikace odpoví 500 — na obrazovce to nevypadá jako chyba nasazení, ale jako
+# rozbitá aplikace. Uživatele webu bere z vlastníka `public/index.php`, aby se
+# nemuselo hádat mezi `www-data`, `www` a jménem podle panelu.
+WEB_USER="$(stat -c '%U:%G' public/index.php 2>/dev/null || echo '')"
+
+if [ -n "$WEB_USER" ] && [ "$(id -u)" = "0" ]; then
+    chown -R "$WEB_USER" storage bootstrap/cache
+    echo "Vlastník storage a bootstrap/cache: $WEB_USER"
+else
+    echo "Práva neměním (nejsem root nebo neznám uživatele webu) — zkontrolujte ručně."
+fi
+
+# Při `opcache.validate_timestamps=0` se nový kód **vůbec** neprojeví, dokud se
+# PHP-FPM nenačte znovu: `route:list` ukazuje novou cestu, ale přes HTTP pořád
+# běží ta stará. Reload je bezpečný, požadavky doběhnou.
+if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
+    FPM_UNIT="$(systemctl list-units --type=service --no-legend 'php*-fpm.service' 2>/dev/null | awk 'NR==1{print $1}')"
+
+    if [ -n "$FPM_UNIT" ]; then
+        systemctl reload "$FPM_UNIT" && echo "PHP-FPM načten znovu: $FPM_UNIT"
+    else
+        echo "PHP-FPM jednotku jsem nenašel — načtěte ji ručně, jinak poběží starý kód."
+    fi
+else
+    echo "PHP-FPM nenačítám (nejsem root nebo tu není systemd) — načtěte ho ručně."
+fi
 
 # ——— build assetů ———
 #

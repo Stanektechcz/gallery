@@ -4,6 +4,18 @@ use App\Models\SystemSetting;
 use App\Services\Provoz\PlanovaneUlohy;
 use Illuminate\Support\Facades\Schedule;
 
+/*
+ * Pásmo dvojice pro úlohy s pevnou hodinou.
+ *
+ * `config('app.timezone')` je UTC, takže „v devět ráno" znamenalo jedenáct
+ * pražského času. U úklidu nad ránem to nevadí, u výročí a denního přehledu
+ * ano — ty se posílají lidem a hodina je na nich to podstatné. Úlohy bez pevné
+ * hodiny (každou minutu, hodinově) pásmo nepotřebují.
+ *
+ * Hlídá `tests/Feature/CasovaPasmaPrikazuTest.php`.
+ */
+$pasmo = config('app.display_timezone', 'Europe/Prague');
+
 Schedule::command('gallery:deliver-reminders --no-interaction')
     ->everyMinute()
     ->withoutOverlapping()
@@ -33,6 +45,7 @@ Schedule::command('gallery:notification-digest --no-interaction')
 // Automatické štítky z data a místa. V noci, protože prochází celý archiv.
 Schedule::command('gallery:auto-tag --apply --no-interaction')
     ->dailyAt('03:20')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('auto-tag');
 
@@ -54,6 +67,7 @@ Schedule::command('gallery:auto-tag --apply --no-interaction')
 // Old plans should never remain in current views simply because nobody opened the calendar.
 Schedule::command('gallery:close-elapsed-events --no-interaction')
     ->dailyAt('00:05')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('close-elapsed-calendar-events');
 Schedule::command('gallery:planning-followups --no-interaction')
@@ -63,6 +77,7 @@ Schedule::command('gallery:planning-followups --no-interaction')
 
 Schedule::command('gallery:relationship-milestones --no-interaction')
     ->dailyAt('09:00')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('relationship-milestones');
 
@@ -77,6 +92,7 @@ Schedule::command('gallery:memories --no-interaction')
 
 Schedule::command('gallery:sync-cinema --days=10 --no-interaction')
     ->dailyAt('06:15')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('cinema-city-program');
 
@@ -137,6 +153,7 @@ Schedule::command('gallery:rebuild-albums')
 
 Schedule::command('gallery:status')
     ->dailyAt('02:00')
+    ->timezone($pasmo)
     ->name('daily-status');
 
 // Kopie originálů do cloudu, které tam ještě nejsou.
@@ -149,6 +166,7 @@ Schedule::command('gallery:status')
 // V noci, protože kopíruje originály: u pěti set fotek jsou to gigabajty přes síť.
 Schedule::command('gallery:mirror-backlog --no-interaction')
     ->dailyAt('02:40')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('mirror-backlog');
 
@@ -167,6 +185,7 @@ Schedule::command('gallery:scan-duplicates')
 // které podle obrazovky ubylo. V noci, protože maže z disku.
 Schedule::command('gallery:purge-trash --no-interaction')
     ->dailyAt('04:20')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('trash-purge');
 
@@ -174,6 +193,7 @@ Schedule::command('gallery:purge-trash --no-interaction')
 // neprovedl — žádost se jen zapsala. V noci, protože maže soubory.
 Schedule::command('gallery:zrus-ucty --no-interaction')
     ->dailyAt('04:40')
+    ->timezone($pasmo)
     ->withoutOverlapping()
     ->name('account-deletion');
 
@@ -184,12 +204,14 @@ Schedule::command('gallery:zrus-ucty --no-interaction')
 // otevře. Schválně bez upozornění — domluva zmizí a nikdo ji neporušil.
 Schedule::command('galerie:expire --no-interaction')
     ->dailyAt('03:10')
+    ->timezone($pasmo)
     ->name('galerie-expire');
 
 // Jediné upozornění, které prototyp posílá: rozhodnutí čeká na revizi.
 // Podvečer, ne ráno — revize je věc na doma, ne do práce.
 Schedule::command('galerie:notify --no-interaction')
     ->dailyAt('18:00')
+    ->timezone($pasmo)
     ->name('galerie-notify');
 
 /*
