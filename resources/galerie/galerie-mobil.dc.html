@@ -7370,7 +7370,17 @@ class Component extends DCLogic {
       home: 'home',
       albums: 'albums', map: 'places', calendar: 'kalendar',
       shared: 'shares', trash: 'trash', storage: 'sync', settings: 'settings',
-      activity: 'chg'
+      activity: 'chg',
+      /*
+       * Knihovna, oblíbené a časová osa jsou na telefonu jedna obrazovka —
+       * ta, na kterou vede „Vše" z úvodu (`goMemories`).
+       *
+       * Bez těchhle tří spadlo `openRoute` na obecnou obrazovku katalogu,
+       * která se u nich vykreslí prázdná. Dokud trasy zvenčí nikdo neotvíral,
+       * nebylo to vidět; s vlastní adresou u každé obrazovky je prázdná
+       * knihovna to první, co člověk uvidí po otevření odkazu od partnera.
+       */
+      all: 'memories', favorites: 'memories', timeline: 'memories'
     };
   }
   allScreenMap() {
