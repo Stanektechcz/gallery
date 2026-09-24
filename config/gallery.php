@@ -36,6 +36,10 @@ return [
     // s odkazem, bez přihlášení — bez stropu to bylo bez konce.
     'guest_upload_pending_mb' => env('GALLERY_GUEST_UPLOAD_PENDING_MB', 2048),
 
+    // Kolik nočních záloh databáze (`gallery:zaloha`) držet. Leží ve
+    // `storage/app/private/zalohy`; starší se mažou.
+    'backup_keep' => (int) env('GALLERY_BACKUP_KEEP', 14),
+
     // Upload limits
     'max_chunk_size_mb' => env('GALLERY_MAX_CHUNK_MB', 64),
     'max_upload_size_gb' => env('GALLERY_MAX_UPLOAD_GB', 32),

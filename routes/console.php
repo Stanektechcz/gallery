@@ -206,6 +206,17 @@ Schedule::command('gallery:clean-temp')
     ->daily()
     ->name('temp-cleanup');
 
+// Záloha databáze.
+//
+// `BACKUP_AND_RESTORE.md` popisoval noční zálohu, která neexistovala: deník,
+// finance, alba, lidé i poznámky byly jen v databázi a nezálohovalo je nic.
+// V noci, před úklidem variant; drží se posledních GALLERY_BACKUP_KEEP (14).
+Schedule::command('gallery:zaloha --no-interaction')
+    ->dailyAt('03:30')
+    ->timezone($pasmo)
+    ->withoutOverlapping($zamekMinut)
+    ->name('db-backup');
+
 // Mezipaměť odvozených variant pod limitem z konfigurace.
 //
 // `GALLERY_VARIANT_CACHE_GB` a `GALLERY_VARIANT_CACHE_DAYS` byly v konfiguraci

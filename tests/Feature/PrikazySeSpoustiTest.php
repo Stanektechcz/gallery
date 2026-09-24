@@ -30,6 +30,7 @@ class PrikazySeSpoustiTest extends TestCase
         'gallery:exif' => 'jednorázová oprava metadat; s --clean-orphans maže, takže ho plánovač pouštět nemá',
         'gallery:exif-diagnostics' => 'diagnostika při hledání příčiny',
         'gallery:import' => 'hromadný import ze složky, spouští člověk',
+        'gallery:obnova' => 'obnova ze zálohy přepisuje data — vždycky rozhodnutí člověka, nikdy plánovač',
         'gallery:publish-android-app' => 'vydání aplikace je rozhodnutí, ne úloha',
         'gallery:push-keys' => 'vygeneruje klíče pro upozornění, jednou při nasazení',
         'gallery:push-selftest' => 'zkouška doručení, když upozornění nechodí',

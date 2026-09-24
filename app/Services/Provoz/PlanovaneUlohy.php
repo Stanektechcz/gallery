@@ -175,6 +175,7 @@ class PlanovaneUlohy
         'billing-reminders' => 'Upozornění na konec předplatného',
         'variant-cache' => 'Úklid zmenšenin nad limit',
         'protokol-uloh' => 'Úklid protokolu úloh',
+        'db-backup' => 'Záloha databáze',
     ];
 
     /** Výraz cronu česky. Pokrývá tvary, které aplikace používá. */
