@@ -862,6 +862,42 @@ nikdy neběželo a každý z pěti pokusů nechal na Googlu osiřelou relaci.
 adresy liší až na konci — jednoznačnost drží `endpoint_hash` (SHA-256).
 `DelkaIndexuTest` čte migrace, ne schéma testovací databáze.
 
+### Zbytek auditu — body 11–12 a oddíl Vysoké
+
+**Klíče.** `jenSpravce` pouští i roli `editor` a `klic()` hledá mezi tokeny
+všech členů, takže partner mohl zrušit vlastníkův klíč a vydat si náhradní na
+sebe — a v tom seznamu nejsou jen API klíče, ale i přihlašovací tokeny
+zařízení. Druhá vada: náhrada se razila na toho, kdo klikl, takže obnovený
+partnerův klíč najednou patřil vlastníkovi galerie.
+
+**Zámek.** `nastav()` nemělo tři pokusy, blokaci ani zápis do protokolu, které
+má `over()`. Hádalo se tudy heslo do galerie donekonečna a nezbyla po tom stopa.
+
+**Slučování lidí.** Přecházely jen poznámky, jejichž `scope_key` cíl ještě
+neměl; zbytek zmizel s kaskádou po smazání zdrojové osoby — typicky partnerova
+soukromá poznámka. Dvě poznámky téhož druhu se teď spojí pod sebe; vybírat za
+dvojici, která verze je ta pravá, tu nikomu nepřísluší.
+
+**Slučování duplicit.** Prohlížeč posílal pořadí kopie v seznamu. Když mezi
+vykreslením a kliknutím kterákoli kopie zmizela, pořadí se posunulo a do koše
+šla jiná fotka, než která svítila. Teď identifikátor; čtení i zápis navíc
+dostaly pevné druhé kritérium řazení.
+
+**Připomínky.** `event_reminders.user_id` byl vždy `created_by`, takže když
+jeden zapsal druhému zubaře, přišla připomínka jemu. Teď účastníkům z
+`event_participants`.
+
+**Nasazení.** `deploy.sh` dostalo bránu `galerie:pred-nasazenim`, `chown` na
+`storage` a znovunačtení PHP-FPM. Bez `chown` PHP-FPM nezapíše šablony a
+aplikace odpoví 500; při `opcache.validate_timestamps=0` se bez reloadu nový
+kód vůbec neprojeví. Oba kroky se přeskočí s hláškou, když skript neběží pod
+rootem.
+
+**Časová pásma.** `Cas` se v `app/Console/Commands` nepoužíval ani jednou, takže
+okna spuštění ležela o dvě hodiny jinde, než co slibuje jejich popis: cyklus
+„dopoledne" v 10–12 h, večerní souhrn ve 21–23 h. Deset naplánovaných úloh
+s pevnou hodinou dostalo `->timezone()`. Hlídá `CasovaPasmaPrikazuTest`.
+
 ---
 
 ## 2z. Dvacáté šesté kolo — opravy z auditu a vlastní adresy (24. 9.)
