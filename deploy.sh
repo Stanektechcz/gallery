@@ -155,6 +155,17 @@ echo "== Migrace =="
 "$PHP" artisan migrate --force
 
 echo
+echo "== Úpravy fotek ze stavu =="
+# Popisky, místa, data a štítky upravené v prototypu dřív zůstaly jen ve
+# společném stavu — průběžný zápis propisuje jen to, co se od minulého zápisu
+# změnilo, takže starší úpravy by v databázi neskončily nikdy. Příkaz je dožene.
+#
+# Jeho docblock říká „jednou po nasazení", a přesně sem tedy patří. Opakování
+# nevadí: zapisuje tytéž hodnoty a od kola 27 se srovnává proti databázi,
+# takže druhý běh nemá co dělat.
+"$PHP" artisan gallery:upravy-ze-stavu || true
+
+echo
 echo "== Veřejný disk =="
 # `public/storage` (odkaz z `artisan storage:link`) vydává originály fotek webovým
 # serverem bez přihlášení — mimo kontrolu aplikace. Soubory chodí přes `/files`,

@@ -111,6 +111,23 @@ Schedule::command('gallery:sync-cinema --days=10 --no-interaction')
     ->withoutOverlapping($zamekMinut)
     ->name('cinema-city-program');
 
+/*
+ * Konec zkušebního období a předplatného.
+ *
+ * Příkaz existoval od začátku a nespouštělo ho nic — upozornění „zkušební
+ * období končí za tři dny" tedy nikdy nedošlo a dvojice se o konci dozvěděla
+ * až tím, že jí galerie spadla na základní tarif.
+ *
+ * Denně stačí: každé ze tří upozornění (konec zkoušky, obnova, prošlo) se
+ * posílá jednou za období — příkaz si to hlídá sám přes protokol, takže se
+ * z denního běhu nestane každodenní připomínání téhož.
+ */
+Schedule::command('gallery:billing-reminders --no-interaction')
+    ->dailyAt('09:30')
+    ->timezone($pasmo)
+    ->withoutOverlapping($zamekMinut)
+    ->name('billing-reminders');
+
 // PSD2 providers commonly limit unattended account access to four reads per day.
 Schedule::command('gallery:sync-banking --no-interaction')
     ->everySixHours()

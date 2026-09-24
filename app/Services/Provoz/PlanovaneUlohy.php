@@ -172,6 +172,7 @@ class PlanovaneUlohy
         'galerie-expire' => 'Vypršení domluv',
         'galerie-notify' => 'Upozornění na revize',
         'scheduler-heartbeat' => 'Tep plánovače',
+        'billing-reminders' => 'Upozornění na konec předplatného',
     ];
 
     /** Výraz cronu česky. Pokrývá tvary, které aplikace používá. */
