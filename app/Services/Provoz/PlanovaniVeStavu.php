@@ -336,15 +336,42 @@ class PlanovaniVeStavu
             return;
         }
 
-        DB::table('event_reminders')->insert([
-            'event_id' => $u->id,
-            'user_id' => $u->created_by,
-            'channel' => 'database',
-            'remind_at' => $kdy,
-            'status' => 'pending',
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+        /*
+         * Připomínka patří tomu, koho se akce týká.
+         *
+         * Zakládala se vždy na `created_by`, takže když jeden zapsal druhému
+         * zubaře a nastavil „den předem", přišla připomínka **jemu** — a tomu
+         * druhému nic. Kdo akci zapsal, se přitom nikde neslibuje; obrazovka
+         * se ptá „koho se to týká" a odpověď leží v `event_participants`.
+         * U společné akce jsou to oba.
+         */
+        foreach ($this->komuPripomenout($u) as $komu) {
+            DB::table('event_reminders')->insert([
+                'event_id' => $u->id,
+                'user_id' => $komu,
+                'channel' => 'database',
+                'remind_at' => $kdy,
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        }
+    }
+
+    /**
+     * Účastníci akce; bez nich ten, kdo ji zapsal.
+     *
+     * @return list<int>
+     */
+    private function komuPripomenout(CalendarEvent $u): array
+    {
+        $ucastnici = Tabulky::je('event_participants')
+            ? DB::table('event_participants')->where('event_id', $u->id)->pluck('user_id')->all()
+            : [];
+
+        $ucastnici = array_values(array_unique(array_map('intval', array_filter($ucastnici))));
+
+        return $ucastnici !== [] ? $ucastnici : array_values(array_filter([(int) $u->created_by]));
     }
 
     /**

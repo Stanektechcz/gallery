@@ -126,6 +126,48 @@ class PlanovaniVeStavuTest extends TestCase
         $this->assertStringStartsWith('2026-09-18 11:00', (string) $kdy);
     }
 
+    /**
+     * Připomínka patří tomu, koho se akce týká.
+     *
+     * Zakládala se vždy na `created_by`, takže když Adrian zapsal Makince
+     * zubaře a nastavil „den předem", přišla připomínka **jemu** — a jí nic.
+     * Kdo akci zapsal, se přitom nikde neslibuje; obrazovka se ptá „koho se
+     * to týká".
+     */
+    public function test_pripominka_chodi_tomu_koho_se_akce_tyka(): void
+    {
+        $this->travelTo('2026-09-10 09:00:00');
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [[
+            'id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 'time' => '11:00',
+            't' => 'Zubař', 'kind' => 'zdravi', 'who' => 'Makinka', 'remind' => 'den předem',
+        ]]]])->assertOk();
+
+        $komu = array_map('intval', DB::table('event_reminders')->pluck('user_id')->all());
+
+        $this->assertSame([$this->maki->id], $komu,
+            'Připomínku má dostat ta, které se akce týká, ne ten, kdo ji zapsal.');
+    }
+
+    /** Společná akce připomene oběma. */
+    public function test_spolecna_akce_pripomene_obema(): void
+    {
+        $this->travelTo('2026-09-10 09:00:00');
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [[
+            'id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 'time' => '11:00',
+            't' => 'Výročí', 'kind' => 'oslava', 'who' => 'spolu', 'remind' => 'den předem',
+        ]]]])->assertOk();
+
+        $komu = array_map('intval', DB::table('event_reminders')->pluck('user_id')->all());
+        sort($komu);
+
+        $ocekavane = [$this->adri->id, $this->maki->id];
+        sort($ocekavane);
+
+        $this->assertSame($ocekavane, $komu);
+    }
+
     /** Zrušené připomenutí přestane chodit. */
     public function test_zrusene_pripomenuti_se_smaze(): void
     {
@@ -224,7 +266,8 @@ class PlanovaniVeStavuTest extends TestCase
         $radek = $this->radekUdalosti($u, ['remind' => 'den předem']);
 
         $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
-        $this->assertSame(1, DB::table('event_reminders')->where('event_id', $u->id)->count());
+        // Akce je společná (`who: spolu`), takže připomínku dostanou oba.
+        $this->assertSame(2, DB::table('event_reminders')->where('event_id', $u->id)->count());
 
         DB::table('event_reminders')->where('event_id', $u->id)->update(['status' => 'delivered']);
 
