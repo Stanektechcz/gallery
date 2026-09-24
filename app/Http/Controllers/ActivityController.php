@@ -12,15 +12,23 @@ class ActivityController extends Controller
     public function index(Request $request): Response
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        // Výchozí galerie, jinak nejstarší — `first()` bez řazení bral kteroukoli.
+        $space = $user->gallerySpaces()->orderByDesc('is_default')->orderBy('gallery_spaces.id')->first();
 
-        // AuditLog stores user_id — filter logs by this gallery's users
-        $spaceUserIds = $space
-            ? $space->members()->pluck('users.id')->toArray()
-            : [$user->id];
-
+        /*
+         * Jen tahle galerie, ne jen její lidé.
+         *
+         * Filtr na členy nestačil: kdo je ve dvou galeriích, tomu partner v té
+         * první viděl, co nahrál do druhé — i se jménem souboru. Stejně jako
+         * přehled „Dnes" (Obsah\Dnes). Bez galerie jen vlastní záznamy.
+         */
         $logs = AuditLog::with('user:id,name')
-            ->whereIn('user_id', $spaceUserIds)
+            ->when(
+                $space,
+                fn ($q) => $q->where('gallery_space_id', $space->id)
+                    ->whereIn('user_id', $space->members()->pluck('users.id')),
+                fn ($q) => $q->where('user_id', $user->id),
+            )
             ->orderByDesc('created_at')
             ->paginate(40);
 
