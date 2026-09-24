@@ -218,6 +218,78 @@ class ObsahKucharkaTest extends TestCase
 
     // ——— pomůcky ———
 
+    /**
+     * Uvařené jídlo obrazovka ukazuje — takže ho zápis musí umět najít.
+     *
+     * Čtení bralo všechno kromě `cancelled`, zápis jen `planned` a `confirmed`.
+     * Jídlo ve stavu `cooked` se tedy na obrazovce objevilo, ale při uložení
+     * se nenašlo: výběr jiného receptu na ten den založil **druhý** řádek
+     * a vyčištění dne neudělalo nic. Den pak měl v databázi dvě večeře.
+     */
+    public function test_uvarene_jidlo_jde_prepsat(): void
+    {
+        $puvodni = $this->recept(['title' => 'Guláš']);
+        $novy = $this->recept(['title' => 'Svíčková']);
+
+        $this->jidlo($puvodni, 'cooked');
+
+        $recepty = $this->getJson('/api/data/kucharka')->assertOk()->json('data.RECIPES');
+        $klic = collect($recepty)->search(fn ($r) => ($r['title'] ?? null) === 'Svíčková');
+
+        $this->patchJson('/api/state', ['data' => ['ckMenu' => [$this->denDnes() => $klic]]])->assertOk();
+
+        $radky = DB::table('planned_meals')->where('meal_type', 'dinner')->get();
+
+        $this->assertCount(1, $radky, 'Den má mít jednu večeři, ne dvě.');
+        $this->assertSame($novy, (int) $radky->first()->recipe_id);
+    }
+
+    /**
+     * Uvolnění dne ale uvařené jídlo nesmaže.
+     *
+     * Je to záznam o tom, co dvojice opravdu jedla; plán na příští týden ho
+     * přepsat smí, zahodit ne. Naplánované jídlo se uvolní normálně.
+     */
+    public function test_uvolneni_dne_uvarene_jidlo_nesmaze(): void
+    {
+        $this->jidlo($this->recept(['title' => 'Guláš']), 'cooked');
+
+        $this->patchJson('/api/state', ['data' => ['ckMenu' => [$this->denDnes() => '']]])->assertOk();
+
+        $this->assertSame(1, DB::table('planned_meals')->where('status', 'cooked')->count());
+    }
+
+    /** Naplánované jídlo se uvolnit dá. */
+    public function test_uvolneni_dne_naplanovane_jidlo_smaze(): void
+    {
+        $this->jidlo($this->recept(['title' => 'Guláš']), 'planned');
+
+        $this->patchJson('/api/state', ['data' => ['ckMenu' => [$this->denDnes() => '']]])->assertOk();
+
+        $this->assertSame(0, DB::table('planned_meals')->where('meal_type', 'dinner')->count());
+    }
+
+    /** Název dnešního dne tak, jak jím kuchařka klíčuje menu. */
+    private function denDnes(): string
+    {
+        return ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'][now()->dayOfWeek];
+    }
+
+    private function jidlo(int $recept, string $stav): void
+    {
+        DB::table('planned_meals')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'recipe_id' => $recept,
+            'meal_type' => 'dinner',
+            'status' => $stav,
+            'planned_for' => now()->setTime(18, 0),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+
     private function recept(array $navic = []): int
     {
         return DB::table('recipes')->insertGetId(array_merge([

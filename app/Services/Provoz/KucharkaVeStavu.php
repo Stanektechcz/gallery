@@ -65,14 +65,34 @@ class KucharkaVeStavu
                 $stavajici = PlannedMeal::where('gallery_space_id', $prostor->id)
                     ->whereNull('trip_id')
                     ->where('meal_type', 'dinner')
-                    ->whereIn('status', ['planned', 'confirmed'])
+                    /*
+                     * Týž filtr jako při čtení (`Kucharka::menu()`).
+                     *
+                     * Zápis bral jen `planned` a `confirmed`, čtení všechno
+                     * kromě `cancelled`. Uvařené jídlo (`cooked`) se tedy na
+                     * obrazovce ukázalo, ale tady se nenašlo: výběr jiného
+                     * receptu na ten den založil **druhý** řádek a vyčištění
+                     * dne neudělalo nic. Den měl v databázi dvě večeře a plán
+                     * z nich četl tu starší.
+                     */
+                    ->where('status', '!=', 'cancelled')
                     ->where('planned_for', '>=', $datum->startOfDay())
                     ->where('planned_for', '<', $datum->addDay()->startOfDay())
                     ->orderBy('planned_for')
                     ->first();
 
                 if ($recept === null) {
-                    $stavajici?->delete();
+                    /*
+                     * Uvařené jídlo se nemaže.
+                     *
+                     * Je to záznam o tom, co dvojice opravdu jedla — plán na
+                     * příští týden ho smazat nemá. Přepsat ho jiným receptem
+                     * se smí (obrazovka ten den jako večeři ukazuje), ale
+                     * „uvolnit den" znamená zahodit plán, ne historii.
+                     */
+                    if ($stavajici?->status !== 'cooked') {
+                        $stavajici?->delete();
+                    }
 
                     continue;
                 }
