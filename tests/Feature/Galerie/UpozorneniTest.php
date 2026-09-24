@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\CoupleDecision;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Notifications\WebPushService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
@@ -87,15 +89,25 @@ class UpozorneniTest extends TestCase
 
     // ——— revize rozhodnutí ———
 
+    /**
+     * Rozhodnutí se zapisují přes `PATCH /api/state` do `couple_decisions`.
+     *
+     * Testy dřív psaly `decs` rovnou do stavu páru. Jenže `decs` je serverový
+     * klíč (`VztahVeStavu::SERVEROVE`): skutečný zápis ho ze stavu vyhodí a
+     * uloží do databáze. Příkaz četl stav, a tak nikdy nic neposlal — a testy
+     * to zakrývaly, protože do stavu zapsaly, co by tam skutečná aplikace nikdy
+     * nenechala.
+     */
     public function test_upozorneni_jde_obema_partnerum(): void
     {
-        $this->stav(['decs' => [
+        $this->rozhodnuti([
             ['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi'],
             ['id' => 'r2', 'title' => 'Zůstat v nájmu', 'status' => 'platí'],
-        ]]);
+        ]);
 
         $push = $this->falesnyPush();
-        $push->shouldReceive('sendToUser')->twice()->andReturn(1);
+        $push->shouldReceive('sendToUser')->once()->with(Mockery::on(fn (User $u) => $u->is($this->adri)), Mockery::any())->andReturn(1);
+        $push->shouldReceive('sendToUser')->once()->with(Mockery::on(fn (User $u) => $u->is($this->makinka)), Mockery::any())->andReturn(1);
 
         $this->artisan('galerie:notify')->expectsOutputToContain('Odesláno 2')->assertSuccessful();
     }
@@ -103,10 +115,10 @@ class UpozorneniTest extends TestCase
     /** Zpráva o jednom rozhodnutí zní jinak než o pěti — v telefonu je vidět jen ona. */
     public function test_zprava_mluvi_o_poctu_rozhodnuti(): void
     {
-        $this->stav(['decs' => [
-            ['id' => 'r1', 'status' => 'k revizi'],
-            ['id' => 'r2', 'status' => 'k revizi'],
-        ]]);
+        $this->rozhodnuti([
+            ['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi'],
+            ['id' => 'r2', 'title' => 'Zůstat v nájmu', 'status' => 'k revizi'],
+        ]);
 
         $push = $this->falesnyPush();
         $push->shouldReceive('sendToUser')
@@ -130,9 +142,86 @@ class UpozorneniTest extends TestCase
         $this->artisan('galerie:notify')->expectsOutputToContain('Nic k odeslání')->assertSuccessful();
     }
 
+    /**
+     * Starý řádek `decs` ve stavu páru upozornění nespustí.
+     *
+     * Stav není zdroj rozhodnutí — to, co v něm zůstalo z dob před databází,
+     * je stará kopie, kterou obrazovka už nečte.
+     */
+    public function test_rozhodnuti_ve_stavu_se_nepocitaji(): void
+    {
+        $this->stav(['decs' => [['id' => 'r1', 'title' => 'Stará kopie', 'status' => 'k revizi']]]);
+
+        $push = $this->falesnyPush();
+        $push->shouldReceive('sendToUser')->never();
+
+        $this->artisan('galerie:notify')->expectsOutputToContain('Nic k odeslání')->assertSuccessful();
+    }
+
+    /**
+     * Upozornění jde jen těm, kdo do galerie smějí.
+     *
+     * Příkaz obcházel všechny členy prostoru — i hosta, který má vidět jen
+     * sdílené odkazy, i člověka, kterému vlastník přístup odebral.
+     */
+    public function test_upozorneni_nejde_hostovi_ani_uctu_bez_pristupu(): void
+    {
+        $host = User::factory()->create();
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+        $this->rozhodnuti([['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi']]);
+        $this->makinka->forceFill(['is_active' => false])->save();
+
+        $push = $this->falesnyPush();
+        $push->shouldReceive('sendToUser')->once()->with(Mockery::on(fn (User $u) => $u->is($this->adri)), Mockery::any())->andReturn(1);
+
+        $this->artisan('galerie:notify')->expectsOutputToContain('Odesláno 1')->assertSuccessful();
+    }
+
+    /**
+     * Host s vlastní galerií jinde je tady pořád host.
+     *
+     * Přístup do aplikace se posuzuje podle prvního prostoru účtu — a tam je
+     * takový host vlastníkem. O rozhodnutích téhle dvojice se ale nic dozvědět
+     * nemá.
+     */
+    public function test_host_s_vlastni_galerii_upozorneni_nedostane(): void
+    {
+        $host = User::factory()->create();
+        $vlastni = GallerySpace::create(['name' => 'Hostova galerie', 'owner_id' => $host->id]);
+        // Výchozí prostor účtu — ten `PristupDoGalerie` posuzuje jako první.
+        $vlastni->forceFill(['is_default' => true])->save();
+        $vlastni->members()->syncWithoutDetaching([$host->id => ['role' => 'owner']]);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+        $this->assertNull(app(PristupDoGalerie::class)->proc($host), 'Host má mít vlastní galerii jako první prostor.');
+        $this->rozhodnuti([['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi']]);
+
+        $push = $this->falesnyPush();
+        $push->shouldReceive('sendToUser')->twice()
+            ->with(Mockery::on(fn (User $u) => ! $u->is($host)), Mockery::any())
+            ->andReturn(1);
+
+        $this->artisan('galerie:notify')->expectsOutputToContain('Odesláno 2')->assertSuccessful();
+    }
+
+    /** Rozhodnutí jedné dvojice nezvoní v telefonu druhé. */
+    public function test_upozorneni_jde_jen_dvojici_ktere_rozhodnuti_patri(): void
+    {
+        $cizi = User::factory()->create();
+        GallerySpace::create(['name' => 'Cizí galerie', 'owner_id' => $cizi->id])
+            ->members()->syncWithoutDetaching([$cizi->id => ['role' => 'owner']]);
+        $this->rozhodnuti([['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi']]);
+
+        $push = $this->falesnyPush();
+        $push->shouldReceive('sendToUser')->twice()
+            ->with(Mockery::on(fn (User $u) => ! $u->is($cizi)), Mockery::any())
+            ->andReturn(1);
+
+        $this->artisan('galerie:notify')->expectsOutputToContain('Odesláno 2')->assertSuccessful();
+    }
+
     public function test_bez_klicu_vapid_se_nic_neposila(): void
     {
-        $this->stav(['decs' => [['id' => 'r1', 'status' => 'k revizi']]]);
+        $this->rozhodnuti([['id' => 'r1', 'title' => 'Jedno auto místo dvou', 'status' => 'k revizi']]);
 
         $push = Mockery::mock(WebPushService::class);
         $push->shouldReceive('configured')->andReturn(false);
@@ -236,6 +325,17 @@ class UpozorneniTest extends TestCase
     }
 
     // ——— pomocné ———
+
+    /** Rozhodnutí skutečnou cestou — tak, jak je zapíše obrazovka. */
+    private function rozhodnuti(array $radky): void
+    {
+        Sanctum::actingAs($this->adri);
+
+        $this->patchJson('/api/state', ['data' => ['decs' => $radky]])->assertOk();
+
+        $this->assertSame(count($radky), CoupleDecision::where('gallery_space_id', $this->prostor->id)->count(),
+            'Rozhodnutí se měla zapsat do databáze.');
+    }
 
     private function stav(array $data): CoupleState
     {
