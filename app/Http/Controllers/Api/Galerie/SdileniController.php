@@ -91,6 +91,26 @@ class SdileniController extends Controller
         ];
 
         /*
+         * Co odkaz ukazuje, se taky mění.
+         *
+         * Dialog `album` i `polozky` posílal a validace je přijímala — jenže
+         * sem se nikdy nedostaly. Odpověď hlásila „Nastavení sdílení uloženo"
+         * a odkaz dál servíroval původní sadu fotek; kdo z něj chtěl fotku
+         * odebrat, měl za to, že ji odebral.
+         *
+         * Bez obou klíčů se cíl nechává být: úprava názvu nebo expirace o obsah
+         * odkazu nic neříká a přepsat ho na prázdno by byla horší chyba.
+         */
+        if ($request->filled('album') || $request->filled('polozky')) {
+            [$druh, $albumId, $polozky] = $this->cil($request, $prostor);
+
+            $zmeny['target_type'] = $druh;
+            $zmeny['target_id'] = $albumId;
+
+            $radek->mediaItems()->sync($polozky);
+        }
+
+        /*
          * Heslo se přepisuje, jen když nějaké přišlo.
          *
          * Dialog při úpravě heslo nezná — server ho neposílá a poslat nemůže.

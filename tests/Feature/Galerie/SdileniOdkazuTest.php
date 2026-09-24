@@ -137,6 +137,50 @@ class SdileniOdkazuTest extends TestCase
      * Kdyby se přebíralo prázdné pole, otevřelo by uložení jiné změny odkaz
      * všem, kdo znají adresu.
      */
+    /**
+     * Změna výběru fotek se musí opravdu uložit.
+     *
+     * Dialog `polozky` i `album` posílá a validace je přijímala — jenže
+     * `update()` je nikam nezapsal. Odpověď řekla „Nastavení sdílení
+     * uloženo" a odkaz dál servíroval původní sadu fotek. Kdo z něj chtěl
+     * fotku odebrat, měl za to, že ji odebral.
+     */
+    public function test_zmena_vyberu_fotek_se_ulozi(): void
+    {
+        $prvni = $this->fotka('IMG_1.jpg');
+        $druha = $this->fotka('IMG_2.jpg');
+
+        $this->postJson('/api/sdileni', [
+            'name' => 'Výběr', 'expirace' => 'nikdy', 'polozky' => [$prvni->uuid, $druha->uuid],
+        ])->assertOk();
+
+        $odkaz = SharedLink::sole();
+
+        // Druhá fotka z odkazu ven.
+        $this->patchJson('/api/sdileni/'.$odkaz->id, [
+            'name' => 'Výběr', 'expirace' => 'nikdy', 'polozky' => [$prvni->uuid],
+        ])->assertOk();
+
+        $this->assertSame([$prvni->id], $odkaz->refresh()->mediaItems()->pluck('media_items.id')->all(),
+            'Odebraná fotka se pořád servíruje — „uloženo" nebyla pravda.');
+    }
+
+    /** Beze změny výběru zůstane sada, jaká byla. */
+    public function test_uprava_bez_vyberu_sadu_zachova(): void
+    {
+        $fotka = $this->fotka('IMG_1.jpg');
+
+        $this->postJson('/api/sdileni', [
+            'name' => 'Výběr', 'expirace' => 'nikdy', 'polozky' => [$fotka->uuid],
+        ])->assertOk();
+
+        $odkaz = SharedLink::sole();
+
+        $this->patchJson('/api/sdileni/'.$odkaz->id, ['name' => 'Jiný název', 'expirace' => '7'])->assertOk();
+
+        $this->assertSame([$fotka->id], $odkaz->refresh()->mediaItems()->pluck('media_items.id')->all());
+    }
+
     public function test_uprava_bez_hesla_heslo_zachova(): void
     {
         $odkaz = $this->odkaz(['password_hash' => Hash::make('letnizadar')]);
