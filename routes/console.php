@@ -206,6 +206,21 @@ Schedule::command('gallery:clean-temp')
     ->daily()
     ->name('temp-cleanup');
 
+// Mezipaměť odvozených variant pod limitem z konfigurace.
+//
+// `GALLERY_VARIANT_CACHE_GB` a `GALLERY_VARIANT_CACHE_DAYS` byly v konfiguraci
+// od začátku a nečetl je nikdo. Denní běh je levný: dokud se mezipaměť do
+// limitu vejde, je to jeden součet a konec. Teprve nad limitem se zahazuje —
+// od nejstarší a jen zmenšeniny a převody videa, nikdy originál, náhled
+// ani výsledek úpravy.
+//
+// V noci, protože maže z disku.
+Schedule::command('gallery:uklid-variant --no-interaction')
+    ->dailyAt('03:50')
+    ->timezone($pasmo)
+    ->withoutOverlapping($zamekMinut)
+    ->name('variant-cache');
+
 Schedule::command('gallery:scan-duplicates')
     ->weekly()
     ->name('weekly-duplicate-scan');
