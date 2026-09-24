@@ -14888,10 +14888,15 @@ class Component extends DCLogic {
       });
       Component.prototype.__mechInstalled = true;
     }
+
+    // Adresní řádek drží obrazovku (viz hlavička, GalerieAdresa). Napojuje se
+    // odsud, protože trasa je ve stavu komponenty a jinam se nedostane.
+    if (window.GalerieAdresa) window.GalerieAdresa.pripoj(this);
   }
 
   state = {
-    route: 'home', theme: 'light', sbOpen: true, grid: 'med', sort: 'desc',
+    route: 'home',
+    theme: 'light', sbOpen: true, grid: 'med', sort: 'desc',
     selectMode: false, sel: [], lb: null, info: true,
     searchOpen: false, query: '', srScope: 'vse', srWho: 'oba', srYear: 'kdykoli', srMonth: null, srPlace: '', srSaved: [],
     filtersOpen: false, filters: [],
@@ -32035,6 +32040,19 @@ class Component extends DCLogic {
     window.GalerieMuzeObnovit = () => this.muzeObnovitData();
     window.GalerieDataObnovena = () => this.zahodKopieServeru();
     this.persistLoad();
+
+    /*
+     * Obrazovka z adresy — až tady, ne v počátečním stavu.
+     *
+     * Autorské soubory (`galerie-data.js`) načítá runtime až po zpracování
+     * dokumentu, takže při **prvním** vykreslení ještě kolekce nemusí být.
+     * Obrazovka, která z nich kreslí, pak spadla na `renderVals()` a místo
+     * aplikace se ukázal červený pruh s chybou — zrovna kuchařka. Z úvodu se
+     * na ni překliklo bez potíží, protože to už bylo po načtení.
+     */
+    const zAdresy = window.GalerieAdresa && window.GalerieAdresa.trasa();
+    if (zAdresy && zAdresy !== this.state.route) this.setState({ route: zAdresy });
+
     /*
      * Zamčeno jen tam, kde je čím odemknout.
      *

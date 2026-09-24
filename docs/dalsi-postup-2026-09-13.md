@@ -804,6 +804,74 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2z. Dvacáté šesté kolo — opravy z auditu a vlastní adresy (24. 9.)
+
+Pět nálezů z auditu 2y opraveno, ke každému test, který bez opravy spadne.
+K tomu druhá věc ze zadání: každá obrazovka dostala vlastní adresu.
+
+### Opravy z auditu
+
+- **Pozvánka na cizí účet.** `invite` odmítal e-mail jen tehdy, když už byl
+  členem téhle galerie; u účtu někoho jiného se přepsal `invitation_token`,
+  `invitation_accepted_at` se vrátilo na `null` a odkaz dostal volající. Kdo
+  ho otevřel, nastavil si na cizí účet heslo a přihlásil se. Podmínka je
+  v `AdministraceZasahy::pozvi`, ne jen v kontroleru — zvát umí i stavová
+  cesta (`AdminVeStavu:133`), která kontrolerem neprochází.
+- **Vývoz fotek** filtruje podle `gallery_space_id` (ve frontě není přihlášený
+  uživatel, takže `SpaceContext` ustupuje) a kontroler cizí identifikátor
+  odmítne už při zadání. Výběr je ve statické `GenerateExportJob::vybraneFotky()`,
+  aby šel testovat bez fronty.
+- **Ztracený zápis ze stavu.** Dva `catch (\Throwable)` zahazovaly úpravu
+  natrvalo: rozdíl se počítá proti stavu *před* uložením a stav se uložil tak
+  jako tak. Převodníky teď selhání hlásí zpátky, `StateController` si ho uloží
+  do stavu pod interní `__dluh` a při dalším požadavku ho zaplatí — hodnotu
+  vezme ze stavu a předchozí předá prázdnou, takže se zapíše celá. `__dluh`
+  ke klientovi nejde a od klienta se nebere.
+- **`couple_truths`** doplněno do `MechanismyVeStavu::KLICE` a `truths` do
+  seznamů `KLICE`/`ZMENY` v prohlížeči — bez toho se obě pojistky proti staré
+  kopii chovaly, jako by je klient neposlal. K tomu **pojistka proti hromadnému
+  smazání** v devíti převodnících: prázdný seznam bez `__odebrane` se nedá
+  odlišit od „nic jsem neodebral", takže se v tom případě nemaže nic.
+- **Fronta.** `retry_after` je 3900 s (nejdelší úloha běží 3600 s) a čte se
+  z `DB_QUEUE_RETRY_AFTER`; `.env.example` dřív nastavoval `QUEUE_RETRY_AFTER`,
+  což nečte nic. `queue:retry all` z plánovače pryč — vynuloval pokusy a mazal
+  `failed_jobs`, takže doktor neměl co hlásit. `queue:work` dostal
+  `--queue=high,default,media,drive`; bez toho bral jen `default`, zatímco
+  35 míst posílá úlohy jinam.
+
+### Vlastní adresa pro každou obrazovku
+
+Prototyp měl všech 56 obrazovek na `/`: nedalo se nikam odkázat, nic přidat do
+oblíbených, obnovení stránky vrátilo dvojici na úvod a tlačítko Zpět zavřelo
+celou aplikaci. Teď `/galerie`, `/galerie/alba`, `/galerie/cyklus`…
+
+Seznam je v `App\Support\TrasyPrototypu` a platí pro obě strany. Neznámý kousek
+adresy je 404, ne tichý návrat na úvod.
+
+Tři věci, které to málem rozbily:
+
+1. **Relativní skripty.** Dokument si je načítá relativně (`./support.js`),
+   takže na `/galerie/alba` by mířily do `/galerie/`. Řeší to `<base href="/">`,
+   vkládaný hned za `<head>` — hlavička jde až před `</head>`, což je pozdě.
+   Je to táž past, kvůli které má vynucené rozvržení pomlčku místo lomítka.
+2. **Parametry cest.** Laravel je předává kontroleru podle pořadí, ne podle
+   jména, takže `/galerie/alba` skončilo v `$rozvrzeni`. Pěkné adresy mají
+   vlastní metodu `obrazovka()`.
+3. **Trasa v počátečním stavu.** Autorské soubory načítá runtime až po
+   zpracování dokumentu, takže obrazovka kreslená z `galerie-data.js` při
+   prvním vykreslení spadla na `renderVals()` — červený pruh místo aplikace,
+   zrovna u kuchařky. Trasa se proto nastavuje až v `componentDidMount`.
+
+Telefon má vlastní navigaci (záložky a zásobník), ale `openRoute()`
+i `currentRoute()` už v dokumentu byly, takže se z ní nic nekopíruje.
+
+**Nález bez opravy:** telefonní rozvržení se ve vývojovém náhledu vykreslí
+prázdné — a je to tak i bez změn tohohle kola (ověřeno odložením souborů).
+Chyba `Cannot read properties of undefined (reading 'map')` je v konzoli
+i na původním kódu. Ověřit na skutečném zařízení, ne v emulaci.
+
+---
+
 ## 2y. Dvacáté páté kolo — kompletní audit (24. 9.)
 
 Kolo bez oprav: tři průzkumy (bezpečnost a přístup, zapisovací cesty,

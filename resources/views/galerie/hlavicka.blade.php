@@ -29,6 +29,119 @@
   // že by chtěl vědět, čí je to sezení.
   window.GALERIE_USER = @json($ucet ?? null);
 
+  /*
+   * Adresa obrazovky.
+   *
+   * Prototyp má padesát šest obrazovek a všechny běžely na `/`. Nedalo se
+   * nikam odkázat, nic přidat do oblíbených, obnovení stránky vrátilo dvojici
+   * na úvod a tlačítko Zpět zavřelo celou aplikaci — jediné `replaceState`
+   * v dokumentu adresu jen uklízelo, nikdy ji neměnilo podle obrazovky.
+   *
+   * Mapa je serverová (`App\Support\TrasyPrototypu`), aby si obě strany
+   * nemohly rozejít: kdyby prohlížeč znal jiné kousky adres než server, odkaz
+   * poslaný partnerovi by otevřel jinou obrazovku, než jakou měl odesílatel.
+   */
+  window.GALERIE_TRASA = @json($trasa ?? null);
+  window.GALERIE_TRASY = @json(\App\Support\TrasyPrototypu::proKlienta());
+
+  window.GalerieAdresa = (function () {
+    var ZAKLAD = '/' + @json(\App\Support\TrasyPrototypu::ZAKLAD);
+    var mapa = window.GALERIE_TRASY || {};
+    var puvodniSetState = null;
+
+    function cesta(trasa) {
+      var kousek = mapa[trasa];
+
+      // Trasa bez vlastní adresy (detail fotky, alba, člověka) adresu nemění:
+      // zapsat ji jako `/galerie/undefined` by bylo horší než nechat tu starou.
+      if (kousek === undefined) return null;
+
+      return ZAKLAD + (kousek === '' ? '' : '/' + kousek);
+    }
+
+    function zAdresy() {
+      var cely = (location.pathname || '/').replace(/\/+$/, '');
+
+      if (cely === ZAKLAD || cely === '') return 'home';
+      if (cely.indexOf(ZAKLAD + '/') !== 0) return null;
+
+      var kousek = cely.slice(ZAKLAD.length + 1);
+
+      for (var trasa in mapa) {
+        if (mapa[trasa] === kousek) return trasa;
+      }
+
+      return null;
+    }
+
+    function zapis(trasa, nahradit) {
+      var novy = cesta(trasa);
+
+      if (novy === null || novy === location.pathname) return false;
+
+      try {
+        history[nahradit ? 'replaceState' : 'pushState']({ trasa: trasa }, '', novy + location.search);
+      } catch (e) {
+        return false;
+      }
+
+      return true;
+    }
+
+    return {
+      trasa: function () { return window.GALERIE_TRASA || zAdresy(); },
+      cesta: cesta,
+      zapis: zapis,
+
+      /*
+       * Napojení na běžící aplikaci.
+       *
+       * Trasa je ve stavu komponenty, ke kterému se hlavička jinak nedostane —
+       * `GalerieApi` ji nevidí, protože navigace se do sdíleného stavu schválně
+       * neukládá. Komponenta se proto ohlásí sama z konstruktoru.
+       */
+      pripoj: function (komponenta) {
+        if (! komponenta || komponenta.__adresaNapojena) return;
+        komponenta.__adresaNapojena = true;
+
+        puvodniSetState = komponenta.setState.bind(komponenta);
+
+        /*
+         * Obě rozvržení, každé svým způsobem.
+         *
+         * Počítač drží obrazovku v `state.route`. Telefon má záložky a zásobník
+         * a odpověď na „kde jsem" umí sám — `currentRoute()`. Otevřít obrazovku
+         * zvenčí taky (`openRoute`), takže se tu nic z jeho navigace nekopíruje.
+         */
+        var kde = typeof komponenta.currentRoute === 'function'
+          ? function () { return komponenta.currentRoute(); }
+          : function () { return komponenta.state && komponenta.state.route; };
+
+        komponenta.setState = function (zmena, hotovo) {
+          var vysledek = puvodniSetState(zmena, hotovo);
+
+          // Po překreslení: telefon mění obrazovku i zásobníkem, ne jen klíčem.
+          try { zapis(kde()); } catch (e) {}
+
+          return vysledek;
+        };
+
+        // Adresa `/` se srovná na `/galerie`, ať je odkud odkazovat.
+        zapis(kde() || 'home', true);
+
+        window.addEventListener('popstate', function () {
+          var trasa = zAdresy();
+
+          // Zpět z aplikace ven (nebo na adresu, kterou neznáme) se nechá být.
+          if (! trasa) return;
+
+          if (typeof komponenta.openRoute === 'function') komponenta.openRoute(trasa);
+          else puvodniSetState({ route: trasa });
+        });
+      }
+    };
+  })();
+
   // Jen ano/ne: jestli už je do čeho se přihlásit. Podle toho zmizí „První
   // spuštění" i před přihlášením — data o dvojici chodí až po něm.
   window.GALERIE_UCTY_EXISTUJI = @json((bool) ($uctyExistuji ?? false));

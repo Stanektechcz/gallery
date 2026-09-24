@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Galerie;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File;
@@ -46,12 +47,34 @@ class PrototypController extends Controller
 
     public function __invoke(Request $request, ?string $rozvrzeni = null): Response
     {
+        return $this->podej($request, $rozvrzeni, null);
+    }
+
+    /**
+     * Obrazovka s vlastní adresou — `/galerie/alba`.
+     *
+     * Vlastní metoda, ne další parametr `__invoke`: Laravel předává parametry
+     * cesty podle **pořadí**, ne podle jména, takže `/galerie/alba` skončilo
+     * v `$rozvrzeni` a `$trasa` zůstala prázdná. Vynucené rozvržení má vlastní
+     * cestu, takže se ty dva parametry nikdy nepotkají.
+     */
+    public function obrazovka(Request $request, ?string $trasa = null): Response
+    {
+        // Neznámý kousek adresy je překlep v odkazu, ne úvodní obrazovka.
+        $obrazovka = TrasyPrototypu::trasa($trasa);
+        abort_if($trasa !== null && $obrazovka === null, 404, 'Taková obrazovka v galerii není.');
+
+        return $this->podej($request, null, $obrazovka);
+    }
+
+    private function podej(Request $request, ?string $rozvrzeni, ?string $obrazovka): Response
+    {
         $soubor = $this->cesta($this->rozvrzeni($request, $rozvrzeni));
 
         abort_unless(File::exists($soubor), 503,
             'Prototyp není nasazený — chybí dokumenty v resources/galerie.');
 
-        $telo = $this->sHlavickou(File::get($soubor), $request);
+        $telo = $this->sHlavickou(File::get($soubor), $request, $obrazovka);
 
         $odpoved = response('')
             ->header('Content-Type', 'text/html; charset=utf-8')
@@ -438,7 +461,7 @@ JS,
      * dokumentu) našel `GALERIE_API_BASE` už nastavené — ten si podle něj hned
      * při načtení volí mezi režimem „http" a „local".
      */
-    private function sHlavickou(string $dokument, Request $request): string
+    private function sHlavickou(string $dokument, Request $request, ?string $trasa = null): string
     {
         /*
          * Kdo se dívá.
@@ -457,12 +480,40 @@ JS,
                 'email' => $uzivatel->email,
             ],
             'uctyExistuji' => $this->uctyExistuji(),
+            'trasa' => $trasa,
         ])->render();
 
+        $dokument = $this->sZakladem($dokument);
         $misto = stripos($dokument, '</head>');
 
         return $misto === false
             ? $hlavicka.$dokument
             : substr($dokument, 0, $misto).$hlavicka.substr($dokument, $misto);
+    }
+
+    /**
+     * `<base href="/">` hned za `<head>`.
+     *
+     * Dokument si skripty i styly načítá relativně (`./support.js`,
+     * `galerie-api.js`, `_ds/…`). Na adrese `/galerie/alba` by se z nich staly
+     * `/galerie/support.js` a aplikace by se nespustila vůbec — přesně to,
+     * kvůli čemu má vynucené rozvržení pomlčku místo lomítka.
+     *
+     * Musí stát **před** prvním relativním odkazem, tedy hned za `<head>`;
+     * hlavička se vkládá až před `</head>`, což je pozdě. A musí to být
+     * absolutní kořen, ne adresa stránky: jinak by se při přechodu na jinou
+     * obrazovku změnil i základ pro obrázkové sloty.
+     */
+    private function sZakladem(string $dokument): string
+    {
+        if (stripos($dokument, '<base ') !== false) {
+            return $dokument;
+        }
+
+        $misto = stripos($dokument, '<head>');
+
+        return $misto === false
+            ? $dokument
+            : substr_replace($dokument, '<head>'."\n".'<base href="/">', $misto, strlen('<head>'));
     }
 }

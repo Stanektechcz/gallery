@@ -6315,6 +6315,20 @@ class Component extends DCLogic {
   componentDidMount() {
     window.GalerieMuzeObnovit = () => this.muzeObnovitData();
     window.GalerieDataObnovena = () => this.zahodKopieServeru();
+
+    /*
+     * Adresní řádek drží obrazovku (viz hlavička, GalerieAdresa).
+     *
+     * Až tady, ne v konstruktoru: otevření obrazovky jde přes `push()`, a ten
+     * mění stav — před připojením komponenty by se ztratilo. Telefon má
+     * `currentRoute()` i `openRoute()`, takže se z jeho navigace nic nekopíruje.
+     */
+    if (window.GalerieAdresa) {
+      window.GalerieAdresa.pripoj(this);
+
+      const zAdresy = window.GalerieAdresa.trasa();
+      if (zAdresy && zAdresy !== this.currentRoute()) this.openRoute(zAdresy);
+    }
     // Automatické zamčení po nečinnosti — stejné intervaly jako v nastavení.
     this._act = Date.now();
     this._actH = () => { this._act = Date.now(); };

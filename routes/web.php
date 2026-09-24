@@ -42,6 +42,7 @@ use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\ProtectVaultMedia;
 use App\Models\FinanceSettings;
 use App\Services\Integrations\ProviderRegistry;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
@@ -160,6 +161,23 @@ Route::delete('/share-target', [MediaController::class, 'clearShareTarget'])->na
  */
 Route::middleware([])->withoutMiddleware([HandleInertiaRequests::class])->group(function () {
     Route::get('/', PrototypController::class)->name('galerie.prototyp');
+
+    /*
+     * Každá obrazovka má vlastní adresu.
+     *
+     * Prototyp jich má padesát šest a všechny běžely na `/`: nedalo se nikam
+     * odkázat, obnovení stránky vrátilo dvojici na úvod a tlačítko Zpět
+     * zavřelo celou aplikaci. Seznam je v `App\Support\TrasyPrototypu` a platí
+     * pro obě strany — server podle něj adresu přijme, prohlížeč podle téhož
+     * seznamu adresu při přepnutí obrazovky přepíše.
+     *
+     * Dokument je pořád jeden a tentýž; `trasa` jen říká, na které obrazovce
+     * se má otevřít. Neznámý kousek adresy je 404, ne tichý návrat na úvod:
+     * překlep v odkazu se pak pozná.
+     */
+    Route::get('/'.TrasyPrototypu::ZAKLAD.'/{trasa?}', [PrototypController::class, 'obrazovka'])
+        ->where('trasa', '[a-z0-9-]+')
+        ->name('galerie.trasa');
 
     /*
      * Vynucené rozvržení — vlastní cesta, ne parametr v dotazu.
