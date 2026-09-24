@@ -44,10 +44,21 @@ class AuditLog extends Model
     }
 
     /**
-     * Do které galerie předmět akce patří.
+     * Do které galerie záznam patří.
      *
-     * Bez prostoru se záznam uloží dál (`null`) — deník akcí je i o věcech,
-     * které k žádné galerii nepatří, třeba pozvánka do administrace.
+     * Nejdřív podle předmětu akce — ten galerii nese a `GallerySpace` sám je
+     * svým vlastním prostorem. Když ji předmět nemá, vezme se galerie toho,
+     * kdo akci vyvolal.
+     *
+     * Ta druhá cesta tu dřív nebyla a stálo to polovinu protokolu: záznamy
+     * bez předmětu (`app_lock.*`, `vault.*`, `auth.login*`) i ty, jejichž
+     * předmětem je `User` — který sloupec `gallery_space_id` nemá — se
+     * ukládaly s `null`. Panel Aktivita čte `where('gallery_space_id', …)`,
+     * takže se odemykání zámku, otevření trezoru ani přihlášení dvojici
+     * nikdy neukázalo, přestože jim to obrazovka zámku i trezoru slibuje.
+     *
+     * Bez přihlášeného člověka zůstává `null` — třeba u úloh z fronty,
+     * kde se galerie odvodit nedá a hádat se nemá.
      */
     private static function prostorPredmetu(mixed $subject): ?int
     {
@@ -57,6 +68,23 @@ class AuditLog extends Model
 
         $id = is_object($subject) ? ($subject->gallery_space_id ?? null) : null;
 
-        return $id === null ? null : (int) $id;
+        return $id === null ? static::prostorPrihlaseneho() : (int) $id;
+    }
+
+    /**
+     * Galerie toho, kdo akci vyvolal.
+     *
+     * Stejné pořadí jako `UrcujePar::parId()`: výchozí prostor, jinak
+     * nejstarší. Bez pevného řazení by účet ve dvou galeriích zapisoval
+     * pokaždé jinam.
+     */
+    private static function prostorPrihlaseneho(): ?int
+    {
+        $prostor = auth()->user()?->gallerySpaces()
+            ->orderByDesc('gallery_spaces.is_default')
+            ->orderBy('gallery_spaces.id')
+            ->first();
+
+        return $prostor === null ? null : (int) $prostor->id;
     }
 }
