@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -235,10 +236,17 @@ class MediaController extends Controller
             'taken_at' => 'nullable|date',
             'latitude' => 'nullable|numeric|between:-90,90',
             'longitude' => 'nullable|numeric|between:-180,180',
+            /*
+             * Štítky a osoby jen z galerie téhle fotky.
+             *
+             * `exists:people,id` se ptalo celé tabulky: s číslem cizí osoby
+             * (čísla jdou po sobě) si ji kdokoli připojil k vlastní fotce
+             * a odpověď mu ji vrátila celou — jméno, přezdívku, narozeniny.
+             */
             'tag_ids' => 'nullable|array',
-            'tag_ids.*' => 'integer|exists:tags,id',
+            'tag_ids.*' => ['integer', Rule::exists('tags', 'id')->where('gallery_space_id', $media->gallery_space_id)],
             'person_ids' => 'nullable|array',
-            'person_ids.*' => 'integer|exists:people,id',
+            'person_ids.*' => ['integer', Rule::exists('people', 'id')->where('gallery_space_id', $media->gallery_space_id)],
         ]);
 
         $media->update(array_filter($data, fn ($v, $k) => ! in_array($k, ['tag_ids', 'person_ids']), ARRAY_FILTER_USE_BOTH));
@@ -641,6 +649,10 @@ class MediaController extends Controller
 
     public function bulkAction(Request $request): JsonResponse
     {
+        // Štítek, osoba a místo jen z vlastních galerií — viz `update()`.
+        $mojeGalerie = $request->user()->gallerySpaces()->pluck('gallery_spaces.id')->all();
+        $zMychGalerii = fn (string $tabulka) => Rule::exists($tabulka, 'id')->whereIn('gallery_space_id', $mojeGalerie);
+
         $data = $request->validate([
             'action' => 'required|in:trash,restore,archive,unarchive,favorite,unfavorite,tag,untag,add_to_album,move,add_person,add_place,rate,shift_date,set_location',
             // Accept UUIDs (frontend) or integer IDs (legacy)
@@ -649,11 +661,11 @@ class MediaController extends Controller
             'media_ids' => 'nullable|array|max:500',
             'media_ids.*' => 'integer',
             // Action-specific fields
-            'tag_id' => 'nullable|integer|exists:tags,id',
+            'tag_id' => ['nullable', 'integer', $zMychGalerii('tags')],
             'album_id' => 'nullable|integer|exists:albums,id',
             'album_uuid' => 'nullable|string|exists:albums,uuid',
-            'person_id' => 'nullable|integer|exists:people,id',
-            'place_id' => 'nullable|integer|exists:places,id',
+            'person_id' => ['nullable', 'integer', $zMychGalerii('people')],
+            'place_id' => ['nullable', 'integer', $zMychGalerii('places')],
             'rating' => 'nullable|integer|min:0|max:5',
             'hours_offset' => 'nullable|numeric',
             // Poloha doplněná ručně u snímků, kterým ji fotoaparát nezapsal.
@@ -683,6 +695,18 @@ class MediaController extends Controller
             $album = Album::find($data['album_id']);
         }
 
+        /*
+         * A k fotce jen z **její** galerie.
+         *
+         * Kdo je členem dvou galerií, vybere fotky z obou naráz; štítek jedné
+         * by jinak skončil i na fotkách druhé.
+         */
+        $galerieZaznamu = fn (string $tabulka, mixed $id) => $id ? DB::table($tabulka)->where('id', (int) $id)->value('gallery_space_id') : null;
+        $galerieStitku = $galerieZaznamu('tags', $data['tag_id'] ?? null);
+        $galerieOsoby = $galerieZaznamu('people', $data['person_id'] ?? null);
+        $galerieMista = $galerieZaznamu('places', $data['place_id'] ?? null);
+        $tataGalerie = fn (mixed $galerie, MediaItem $item) => $galerie !== null && (int) $galerie === (int) $item->gallery_space_id;
+
         $action = $data['action'];
         $hoursOffset = (float) ($data['hours_offset'] ?? 0);
         $ratingVal = $data['rating'] ?? null;
@@ -702,16 +726,16 @@ class MediaController extends Controller
                     'favorite' => DB::table('user_favorites')->insertOrIgnore(['user_id' => $user->id, 'media_item_id' => $item->id, 'created_at' => now()]),
                     'unfavorite' => DB::table('user_favorites')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete(),
 
-                    'tag' => $item->tags()->syncWithoutDetaching([$data['tag_id']]),
+                    'tag' => $tataGalerie($galerieStitku, $item) ? $item->tags()->syncWithoutDetaching([$data['tag_id']]) : null,
                     'untag' => $item->tags()->detach($data['tag_id'] ?? []),
 
                     'add_to_album' => $album ? DB::table('album_media')->insertOrIgnore(['album_id' => $album->id, 'media_item_id' => $item->id, 'added_at' => now(), 'added_by' => $user->id]) : null,
 
                     'move' => $album ? $item->update(['primary_album_id' => $album->id]) : null,
 
-                    'add_person' => isset($data['person_id']) ? $item->people()->syncWithoutDetaching([$data['person_id']]) : null,
+                    'add_person' => $tataGalerie($galerieOsoby, $item) ? $item->people()->syncWithoutDetaching([$data['person_id']]) : null,
 
-                    'add_place' => isset($data['place_id']) ? DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $data['place_id'], 'is_primary' => false]) : null,
+                    'add_place' => $tataGalerie($galerieMista, $item) ? DB::table('media_place')->insertOrIgnore(['media_item_id' => $item->id, 'place_id' => $data['place_id'], 'is_primary' => false]) : null,
 
                     'rate' => $ratingVal === null || $ratingVal === 0
                         ? DB::table('user_ratings')->where('user_id', $user->id)->where('media_item_id', $item->id)->delete()

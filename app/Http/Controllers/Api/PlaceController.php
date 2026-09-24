@@ -558,11 +558,18 @@ class PlaceController extends Controller
     }
     // ─── Helpers ───────────────────────────────────────────────────────────
 
+    /**
+     * Místo jen z vlastní galerie — i to, které žádnou galerii nemá.
+     *
+     * Kontrola dřív platila jen tehdy, když galerie vyplněná **byla**. Místa
+     * z doby před sloupcem `gallery_space_id` a místa po smazané galerii ho
+     * mají prázdné, a ta šla číst, přepsat i smazat odkudkoli — stačilo zkusit
+     * číslo. Seznam míst je nikomu neukazuje, takže tahle přísnost legitimnímu
+     * uživateli nic nebere.
+     */
     private function authorizePlace(Place $place, int $spaceId): void
     {
-        if ($place->gallery_space_id && $place->gallery_space_id !== $spaceId) {
-            abort(403);
-        }
+        abort_unless((int) $place->gallery_space_id === $spaceId, 403);
     }
 
     private function placeSelectionPayload(CalendarEvent $event, $places, int $durationMinutes): array
