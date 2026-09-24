@@ -16,6 +16,7 @@ use App\Services\Automation\AutomationEngine;
 use App\Services\Billing\EntitlementService;
 use App\Services\Obsah\Poskytovatele;
 use App\Support\Tabulky;
+use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -128,6 +129,14 @@ class AppServiceProvider extends ServiceProvider
 
         Event::listen(ScheduledTaskStarting::class, [$listener, 'zacal']);
         Event::listen(ScheduledTaskFinished::class, [$listener, 'skoncil']);
+        /*
+         * Úloha na pozadí (`runInBackground`) hlásí skutečný konec až touhle
+         * událostí — `ScheduledTaskFinished` u ní přijde hned po odštěpení
+         * procesu, s nulovou dobou běhu a bez návratového kódu. Bez tohohle
+         * řádku se `gallery:doctor` a vyprazdňování fronty zapisovaly vždy
+         * jako úspěšné, i když vracely chybu.
+         */
+        Event::listen(ScheduledBackgroundTaskFinished::class, [$listener, 'skoncilNaPozadi']);
         Event::listen(ScheduledTaskFailed::class, [$listener, 'selhal']);
         Event::listen(ScheduledTaskSkipped::class, [$listener, 'preskocen']);
     }

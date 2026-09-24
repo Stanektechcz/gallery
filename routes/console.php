@@ -16,37 +16,52 @@ use Illuminate\Support\Facades\Schedule;
  */
 $pasmo = config('app.display_timezone', 'Europe/Prague');
 
+/*
+ * Jak dlouho drží zámek proti souběhu.
+ *
+ * Holé `withoutOverlapping()` ho drží **1440 minut**, tedy celý den.
+ * `releaseOnTerminationSignals` pokryje SIGTERM a SIGINT, ale ne SIGKILL,
+ * zabití kvůli paměti ani výpadek proudu — a po jednom takovém konci se
+ * minutová úloha den neprovede. Nikde to nevypadá jako porucha: připomínky
+ * prostě nechodí a nikdo neví proč.
+ *
+ * Deset minut je s rezervou víc, než kterákoli z těchhle úloh potřebuje, a
+ * zároveň tak krátce, že se výpadek srovná sám. Hlídá
+ * `tests/Feature/ZamkyPlanovaceTest.php`.
+ */
+$zamekMinut = 10;
+
 Schedule::command('gallery:deliver-reminders --no-interaction')
     ->everyMinute()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('calendar-reminders');
 
 // Every minute, because the moment's time is drawn per space per day — there is no hour
 // to hang this on, which is exactly what stops anyone from being ready for it.
 Schedule::command('gallery:daily-moment --no-interaction')
     ->everyMinute()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('daily-moment');
 
 // Připomínka blížící se menstruace. Příkaz si sám hlídá denní dobu i to, aby za jedno
 // dopoledne neposlal dvě zprávy — plánovač ho proto může volat klidně každou hodinu.
 Schedule::command('gallery:cycle-reminders --no-interaction')
     ->hourly()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('cycle-reminders');
 
 // Večerní souhrn pro ty, kdo si ho zapnuli. Příkaz si hlídá čas i to, aby za jeden
 // večer neposlal dva.
 Schedule::command('gallery:notification-digest --no-interaction')
     ->hourly()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('notification-digest');
 
 // Automatické štítky z data a místa. V noci, protože prochází celý archiv.
 Schedule::command('gallery:auto-tag --apply --no-interaction')
     ->dailyAt('03:20')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('auto-tag');
 
 /*
@@ -68,17 +83,17 @@ Schedule::command('gallery:auto-tag --apply --no-interaction')
 Schedule::command('gallery:close-elapsed-events --no-interaction')
     ->dailyAt('00:05')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('close-elapsed-calendar-events');
 Schedule::command('gallery:planning-followups --no-interaction')
     ->hourly()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('planning-followups');
 
 Schedule::command('gallery:relationship-milestones --no-interaction')
     ->dailyAt('09:00')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('relationship-milestones');
 
 // Vzpomínky na dnešek a zítřek + jedno oznámení o té nejsilnější. Příkaz existoval,
@@ -87,19 +102,19 @@ Schedule::command('gallery:relationship-milestones --no-interaction')
 Schedule::command('gallery:memories --no-interaction')
     ->dailyAt('08:30')
     ->timezone(config('app.display_timezone', 'Europe/Prague'))
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('memories');
 
 Schedule::command('gallery:sync-cinema --days=10 --no-interaction')
     ->dailyAt('06:15')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('cinema-city-program');
 
 // PSD2 providers commonly limit unattended account access to four reads per day.
 Schedule::command('gallery:sync-banking --no-interaction')
     ->everySixHours()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('read-only-bank-sync');
 
 // Scheduler tasks
@@ -167,7 +182,7 @@ Schedule::command('gallery:status')
 Schedule::command('gallery:mirror-backlog --no-interaction')
     ->dailyAt('02:40')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('mirror-backlog');
 
 Schedule::command('gallery:clean-temp')
@@ -186,7 +201,7 @@ Schedule::command('gallery:scan-duplicates')
 Schedule::command('gallery:purge-trash --no-interaction')
     ->dailyAt('04:20')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('trash-purge');
 
 // Zrušení účtu po čtrnáctidenní lhůtě. Nastavení to slibovalo a nikdo to
@@ -194,7 +209,7 @@ Schedule::command('gallery:purge-trash --no-interaction')
 Schedule::command('gallery:zrus-ucty --no-interaction')
     ->dailyAt('04:40')
     ->timezone($pasmo)
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('account-deletion');
 
 // ——— Prototyp Galerie ———
@@ -224,7 +239,7 @@ Schedule::command('galerie:notify --no-interaction')
  */
 Schedule::command('gallery:process-drive-changes --no-interaction')
     ->everyFiveMinutes()
-    ->withoutOverlapping()
+    ->withoutOverlapping($zamekMinut)
     ->name('drive-changes');
 
 // Scheduler heartbeat (for doctor check)

@@ -3,6 +3,7 @@
 namespace App\Listeners;
 
 use App\Models\ScheduledTaskRun;
+use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Console\Events\ScheduledTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskSkipped;
@@ -34,7 +35,32 @@ class ZaznamenejBehUlohy
 
     public function skoncil(ScheduledTaskFinished $udalost): void
     {
+        /*
+         * U úlohy na pozadí tohle ještě nic neříká.
+         *
+         * `runInBackground()` odštěpí proces a `ScheduleRunCommand` pošle
+         * `ScheduledTaskFinished` hned nato — doba běhu je nula a návratový
+         * kód ještě není. Skutečný konec ohlásí `skoncilNaPozadi()`.
+         */
+        if ($udalost->task->runInBackground) {
+            return;
+        }
+
         $this->dopis($udalost->task, $udalost->runtime, (int) ($udalost->task->exitCode ?? 0));
+    }
+
+    /**
+     * Konec úlohy, která běžela na pozadí.
+     *
+     * Na tuhle událost dosud nikdo neposlouchal, takže se `storage-health`
+     * (`gallery:doctor`) a `queue-drain` zapisovaly jako hotové v okamžiku
+     * odštěpení — s nulovou dobou běhu a vždy úspěšné. Doktor mohl vracet
+     * FAILURE donekonečna a v administraci se o tom neobjevilo nic; přitom
+     * je to jediné místo, kde by se dvojice dozvěděla, že něco spadlo.
+     */
+    public function skoncilNaPozadi(ScheduledBackgroundTaskFinished $udalost): void
+    {
+        $this->dopis($udalost->task, null, (int) ($udalost->task->exitCode ?? 0));
     }
 
     public function selhal(ScheduledTaskFailed $udalost): void
