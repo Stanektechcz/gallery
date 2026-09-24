@@ -204,7 +204,9 @@ class FinanceBudgetController extends Controller
             'Tenhle rozpočet patří někomu jinému a nemáte právo měnit, kdo do něj vidí.');
 
         $data = $request->validate([
-            'owner_user_id' => 'nullable|integer',
+            // Vlastník jen z galerie. Přístupy se na členy filtrovaly, vlastník
+            // ne — rozpočet předaný cizímu účtu už nikdo z dvojice neotevřel.
+            'owner_user_id' => ['nullable', 'integer', Rule::exists('gallery_space_user', 'user_id')->where('gallery_space_id', $space->id)],
             'access' => 'nullable|array|max:10',
             'access.*.user_id' => 'required|integer',
             'access.*.can_edit' => 'sometimes|boolean',

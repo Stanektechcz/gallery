@@ -449,7 +449,8 @@ class FinanceSetupController extends Controller
         $this->overitPravoUpravy('trip', $cesta->id, $cesta->owner_user_id, $request->user()->id);
 
         $data = $request->validate([
-            'owner_user_id' => 'nullable|integer',
+            // Vlastník jen z galerie — viz `FinanceBudgetController::share()`.
+            'owner_user_id' => ['nullable', 'integer', Rule::exists('gallery_space_user', 'user_id')->where('gallery_space_id', $space->id)],
             'access' => 'nullable|array|max:10',
             'access.*.user_id' => 'required|integer',
             'access.*.can_edit' => 'sometimes|boolean',
@@ -779,7 +780,7 @@ class FinanceSetupController extends Controller
             'is_favourite' => 'sometimes|boolean',
             'is_active' => 'sometimes|boolean',
             'sort_order' => 'sometimes|integer',
-            'default_wallet_id' => 'nullable|integer',
+            'default_wallet_id' => ['nullable', 'integer', Rule::exists('wallets', 'id')->where('gallery_space_id', $space->id)],
             'default_split' => 'nullable|string|max:20',
         ]));
 
@@ -1086,12 +1087,12 @@ class FinanceSetupController extends Controller
             'base_currency' => "{$pravidlo}|string|size:3",
             'budget_amount' => 'nullable|numeric|min:0',
             'reserve_amount' => 'nullable|numeric|min:0',
-            'default_wallet_id' => 'nullable|integer',
+            'default_wallet_id' => ['nullable', 'integer', Rule::exists('wallets', 'id')->where('gallery_space_id', $this->space($request)->id)],
             'state' => 'sometimes|in:draft,active,closed',
             'note' => 'nullable|string|max:2000',
             // Prázdné znamená společná cesta — dosavadní stav, ve kterém všechno vidí
             // oba. Vyplněné ji přiřadí jednomu a druhý ji uvidí, až mu ji nasdílí.
-            'owner_user_id' => 'nullable|integer',
+            'owner_user_id' => ['nullable', 'integer', Rule::exists('gallery_space_user', 'user_id')->where('gallery_space_id', $this->space($request)->id)],
         ]);
 
         if (array_key_exists('owner_user_id', $data)) {

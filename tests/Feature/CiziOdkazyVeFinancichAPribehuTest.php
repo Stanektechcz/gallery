@@ -145,6 +145,50 @@ class CiziOdkazyVeFinancichAPribehuTest extends TestCase
         $this->assertSame(0, DB::table('budgets')->count());
     }
 
+    /**
+     * Rozpočet ani cestu nejde předat někomu mimo galerii.
+     *
+     * Přístupy se filtrovaly na členy, vlastník ne. Rozpočet předaný cizímu
+     * účtu přestal být společný a nedostal se k němu už nikdo z dvojice.
+     */
+    public function test_vlastnika_rozpoctu_ani_cesty_nejde_dat_mimo_galerii(): void
+    {
+        $rozpocet = $this->postJson('/api/v1/rozpocet/rozpocty', [
+            'name' => 'Domácnost', 'budget_kind' => 'monthly', 'currency' => 'CZK', 'amount' => 20000,
+            'starts_on' => now()->toDateString(),
+        ])->assertCreated()->json('budget.uuid');
+        $cesta = DB::table('finance_projects')->where('id', $this->cesta($this->prostor))->value('uuid');
+
+        $this->postJson("/api/v1/rozpocet/rozpocty/{$rozpocet}/sdileni", ['owner_user_id' => $this->cizi->owner_id])
+            ->assertStatus(422)->assertJsonValidationErrors('owner_user_id');
+        $this->postJson("/api/v1/rozpocet/cesty/{$cesta}/sdileni", ['owner_user_id' => $this->cizi->owner_id])
+            ->assertStatus(422)->assertJsonValidationErrors('owner_user_id');
+
+        $this->assertNull(DB::table('budgets')->where('uuid', $rozpocet)->value('owner_user_id'));
+        $this->assertNull(DB::table('finance_projects')->where('uuid', $cesta)->value('owner_user_id'));
+
+        // Člen galerie vlastníkem být může.
+        $this->postJson("/api/v1/rozpocet/rozpocty/{$rozpocet}/sdileni", ['owner_user_id' => $this->adri->id])->assertOk();
+    }
+
+    /** Totéž u zakládání cesty — a výchozí účet cesty jen z vlastní galerie. */
+    public function test_nova_cesta_nevezme_ciziho_vlastnika_ani_cizi_ucet(): void
+    {
+        $ciziUcet = DB::table('wallets')->insertGetId([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->cizi->id, 'name' => 'Cizí účet',
+            'kind' => 'bank', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $cesta = ['name' => 'Vídeň', 'starts_on' => now()->toDateString(), 'base_currency' => 'EUR'];
+
+        $this->postJson('/api/v1/rozpocet/cesty', $cesta + ['owner_user_id' => $this->cizi->owner_id])
+            ->assertStatus(422)->assertJsonValidationErrors('owner_user_id');
+        $this->postJson('/api/v1/rozpocet/cesty', $cesta + ['default_wallet_id' => $ciziUcet])
+            ->assertStatus(422)->assertJsonValidationErrors('default_wallet_id');
+
+        $this->assertSame(0, DB::table('finance_projects')->count());
+    }
+
     /** `store()` cestu ověřoval, `update()` ji zapsal, ať byla čí chtěla. */
     public function test_uprava_ukolu_nevezme_cizi_cestu(): void
     {
