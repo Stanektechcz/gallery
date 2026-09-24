@@ -33,9 +33,10 @@ class FinanceVeStavu
     /**
      * @param  array<string, mixed>  $patch
      * @param  array<string, mixed>  $predtim  stav před zápisem
+     * @param  list<string>  $dluh  výstupní: klíče, jejichž zápis se nepovedl
      * @return array<string, mixed> patch doplněný o `txCatPuvodni`
      */
-    public function zpracuj(array $patch, array $predtim, GallerySpace $prostor): array
+    public function zpracuj(array $patch, array $predtim, GallerySpace $prostor, array &$dluh = []): array
     {
         if (! Tabulky::je('transactions') || ! Tabulky::je('finance_categories')) {
             return $patch;
@@ -100,7 +101,14 @@ class FinanceVeStavu
 
             $patch['txCatPuvodni'] = (object) $puvodni;
         } catch (\Throwable $e) {
-            // Zařazení transakce nesmí shodit zápis všeho ostatního ve stavu.
+            /*
+             * Zařazení transakce nesmí shodit zápis všeho ostatního ve stavu —
+             * ale ani se nesmí ztratit. Rozdíl se počítá proti stavu před
+             * uložením a stav se uloží tak jako tak, takže bez dluhu tu chybu
+             * nikdo nikdy nezopakuje: obrazovka Transakce by pořád ukazovala
+             * novou kategorii a rozpočet by transakci dál vedl jako nezařazenou.
+             */
+            $dluh[] = 'txCat';
             Log::warning('Zařazení transakcí ze stavu se nepodařilo propsat', ['chyba' => $e->getMessage()]);
         }
 

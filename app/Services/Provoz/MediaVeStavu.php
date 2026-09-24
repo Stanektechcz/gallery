@@ -36,21 +36,41 @@ class MediaVeStavu
     /**
      * @param  array<string, mixed>  $patch
      * @param  array<string, mixed>  $predtim  stav před zápisem (asociativně)
+     * @return list<string> klíče, jejichž zápis se nepovedl (dluh k zopakování)
      */
-    public function zpracuj(array $patch, array $predtim, GallerySpace $prostor, User $kdo): void
+    public function zpracuj(array $patch, array $predtim, GallerySpace $prostor, User $kdo): array
     {
-        try {
-            if (array_key_exists('favs', $patch)) {
-                $this->oblibene($this->mapa($patch['favs']), $this->mapa($predtim['favs'] ?? []), $prostor, $kdo);
-            }
+        $dluh = [];
 
-            if (is_array($patch['edits'] ?? null)) {
-                $this->upravy($patch['edits'], is_array($predtim['edits'] ?? null) ? $predtim['edits'] : [], $prostor, $kdo);
+        /*
+         * Každý klíč zvlášť a chyba se hlásí zpátky.
+         *
+         * Dřív to byl jeden `try` kolem obojího s `catch`, který jen zapsal do
+         * logu: chyba u srdíček vzala i úpravy a hlavně se obojí ztratilo
+         * natrvalo. Rozdíl se totiž počítá proti stavu **před** uložením a stav
+         * se uložil tak jako tak — při dalším požadavku už nebylo co zapsat,
+         * jenom obrazovka dál ukazovala popisek, který v knihovně nebyl.
+         * Klíč se proto vrátí jako dluh a `StateController` ho zopakuje.
+         */
+        if (array_key_exists('favs', $patch)) {
+            try {
+                $this->oblibene($this->mapa($patch['favs']), $this->mapa($predtim['favs'] ?? []), $prostor, $kdo);
+            } catch (\Throwable $e) {
+                $dluh[] = 'favs';
+                Log::warning('Oblíbené ze stavu se nepodařilo propsat', ['chyba' => $e->getMessage()]);
             }
-        } catch (\Throwable $e) {
-            // Stav se uloží tak jako tak; neprošlá úprava fotky nesmí shodit zápis všeho ostatního.
-            Log::warning('Úpravy fotek ze stavu se nepodařilo propsat', ['chyba' => $e->getMessage()]);
         }
+
+        if (is_array($patch['edits'] ?? null)) {
+            try {
+                $this->upravy($patch['edits'], is_array($predtim['edits'] ?? null) ? $predtim['edits'] : [], $prostor, $kdo);
+            } catch (\Throwable $e) {
+                $dluh[] = 'edits';
+                Log::warning('Úpravy fotek ze stavu se nepodařilo propsat', ['chyba' => $e->getMessage()]);
+            }
+        }
+
+        return $dluh;
     }
 
     /**

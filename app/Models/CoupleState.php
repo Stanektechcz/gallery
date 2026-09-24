@@ -61,6 +61,17 @@ class CoupleState extends Model
     ];
 
     /**
+     * Klíče, které v `data` leží, ale ke klientovi nejdou a od něj se neberou.
+     *
+     * `__dluh` je seznam klíčů, jejichž zápis do tabulek se nepovedl. Bez něj
+     * byla neúspěšná úprava pryč natrvalo: převodníky porovnávají patch se
+     * stavem **před** uložením, a protože se stav uložil tak jako tak, při
+     * dalším požadavku už žádný rozdíl nebyl — a zápis se nezopakoval nikdy.
+     * Obrazovka přitom dál ukazovala nový popisek, který v knihovně nebyl.
+     */
+    public const INTERNI = ['__dluh'];
+
+    /**
      * Kolik posledních událostí z proudu `events` stav drží.
      *
      * Klient proud jen přidával. Hláška, která se opakovala každé čtyři
@@ -225,6 +236,12 @@ class CoupleState extends Model
                 continue;
             }
 
+            // Dluh zápisu si vede server. Od klienta by šlo poslat prázdný
+            // seznam a tím zrušit opakování zápisu, který se nepovedl.
+            if (in_array($key, self::INTERNI, true)) {
+                continue;
+            }
+
             if ($key === 'events' && is_array($value) && array_is_list($value) && count($value) > self::UDALOSTI_STROP) {
                 $value = array_slice($value, 0, self::UDALOSTI_STROP);
             }
@@ -307,7 +324,7 @@ class CoupleState extends Model
         foreach ([$this->surovy('data'), $this->private ?? []] as $cast) {
             foreach ((array) $cast as $klic => $hodnota) {
                 // Heslo nebo kód uložený dřív, než se začal zahazovat, se už neposílá.
-                if (in_array($klic, self::NEUKLADAT, true)) {
+                if (in_array($klic, self::NEUKLADAT, true) || in_array($klic, self::INTERNI, true)) {
                     continue;
                 }
 
@@ -348,6 +365,49 @@ class CoupleState extends Model
     /** Totéž pro čtení v PHP, kde na rozdílu mezi polem a objektem nezáleží. */
     public function toClientArray(): array
     {
-        return array_merge($this->data ?? [], $this->private ?? []);
+        return array_diff_key(
+            array_merge($this->data ?? [], $this->private ?? []),
+            array_flip(self::INTERNI),
+        );
+    }
+
+    /**
+     * Klíče, jejichž zápis do tabulek se nepovedl a má se zopakovat.
+     *
+     * @return list<string>
+     */
+    public function dluh(): array
+    {
+        $dluh = ($this->data ?? [])['__dluh'] ?? [];
+
+        return array_values(array_filter((array) $dluh, 'is_string'));
+    }
+
+    /**
+     * Přepíše dluh zápisu.
+     *
+     * Revizí nehýbe schválně: `rev_keys` slouží k hledání střetů mezi dvěma
+     * zařízeními a dluh není nic, o co by se ti dva přetahovali — kdyby zvedal
+     * revizi, druhý klient by dostal 409 za chybu serveru.
+     *
+     * @param  list<string>  $klice
+     */
+    public function zapisDluh(array $klice): void
+    {
+        $data = $this->surovy('data');
+        $klice = array_values(array_unique(array_filter($klice, 'is_string')));
+
+        if ($klice === [] && ! array_key_exists('__dluh', $data)) {
+            return;
+        }
+
+        if ($klice === []) {
+            unset($data['__dluh']);
+        } else {
+            $data['__dluh'] = $klice;
+        }
+
+        $this->zapisData($data);
+        $this->save();
     }
 }

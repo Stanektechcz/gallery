@@ -2,12 +2,15 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\User;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -121,6 +124,71 @@ class MediaVeStavuTest extends TestCase
 
         $this->assertNull($foto->fresh()->caption);
         $this->assertFalse(DB::table('user_favorites')->where('media_item_id', $foto->id)->exists());
+    }
+
+    /**
+     * Zápis, který spadne, se zopakuje při dalším požadavku.
+     *
+     * Dřív byl pryč natrvalo: rozdíl se počítá proti stavu před uložením a stav
+     * se uložil tak jako tak, takže při dalším požadavku nebylo co zapsat.
+     * Obrazovka dál ukazovala srdíčko, které v databázi nikdy nebylo.
+     *
+     * Chyba databáze se napodobuje odstraněním tabulky — to je na přechodné
+     * chybě jediné, co jde v testu spolehlivě zopakovat.
+     */
+    public function test_neuspesny_zapis_se_zopakuje_pri_dalsim_pozadavku(): void
+    {
+        $foto = $this->fotka();
+
+        Schema::drop('user_favorites');
+
+        $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['favs' => [$foto->uuid => true], 'grid' => 'big']])
+            ->assertOk();
+
+        // Zbytek patche se uložil — chyba u srdíček nesmí vzít všechno ostatní.
+        $this->assertSame('big', $this->stav()->data['grid']);
+        $this->assertSame(['favs'], $this->stav()->dluh());
+
+        $this->obnovOblibene();
+
+        // Další požadavek už o srdíčku vůbec nemluví, a přece se zapíše.
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['sort' => 'asc']])->assertOk();
+
+        $this->assertTrue(
+            DB::table('user_favorites')->where('user_id', $this->adri->id)->where('media_item_id', $foto->id)->exists(),
+            'Dluh se má zaplatit i tehdy, když klient o tom klíči už nic neposílá.',
+        );
+        $this->assertSame([], $this->stav()->dluh());
+    }
+
+    /** Dluh je serverová věc — klient ho nedostane a nesmí ho zrušit. */
+    public function test_dluh_se_klientovi_neposila_a_neda_se_od_nej_nastavit(): void
+    {
+        CoupleState::forCouple($this->prostor->id)->zapisDluh(['favs']);
+
+        $odpoved = $this->actingAs($this->adri)
+            ->patchJson('/api/state', ['data' => ['__dluh' => [], 'grid' => 'med']])->assertOk();
+
+        $this->assertArrayNotHasKey('__dluh', (array) $odpoved->json('data'));
+        $this->assertSame([], $this->stav()->dluh(),
+            'Dluh se zaplatil hned v tomhle požadavku, ne proto, že ho klient smazal.');
+    }
+
+    private function stav(): CoupleState
+    {
+        return CoupleState::where('couple_id', $this->prostor->id)->sole();
+    }
+
+    private function obnovOblibene(): void
+    {
+        Schema::create('user_favorites', function (Blueprint $tabulka) {
+            $tabulka->id();
+            $tabulka->foreignId('user_id');
+            $tabulka->foreignId('media_item_id');
+            $tabulka->timestamp('created_at')->nullable();
+            $tabulka->unique(['user_id', 'media_item_id']);
+        });
     }
 
     private function fotka(array $navic = []): MediaItem

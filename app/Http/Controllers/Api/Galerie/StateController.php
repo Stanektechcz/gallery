@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\CoupleState;
 use App\Models\GallerySpace;
+use App\Models\User;
 use App\Services\Provoz\AdminVeStavu;
 use App\Services\Provoz\DarkyVeStavu;
 use App\Services\Provoz\DomacnostVeStavu;
@@ -231,8 +232,14 @@ class StateController extends Controller
              * Zůstávají ve stavu, ale propíšou se i do databáze — jinak by
              * opravené datum fotku přesunulo jen v jednom prohlížeči.
              */
+            // Nejdřív se zopakuje, co se nepovedlo minule — teprve pak se
+            // zapisuje to nové. Jinak by dluh přebil právě poslanou úpravu.
+            $dluh = $this->zaplatDluh($state, $coupleId, $uzivatel);
+
             if ($this->media->tykaSe($patch)) {
-                $this->media->zpracuj($patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel);
+                $dluh = array_merge($dluh, $this->media->zpracuj(
+                    $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel,
+                ));
             }
 
             /*
@@ -243,7 +250,11 @@ class StateController extends Controller
              * tlačítku Zpět; do knihy se změna propíše.
              */
             if ($this->finance->tykaSe($patch)) {
-                $patch = $this->finance->zpracuj($patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId));
+                $dluhFinance = [];
+                $patch = $this->finance->zpracuj(
+                    $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $dluhFinance,
+                );
+                $dluh = array_merge($dluh, $dluhFinance);
             }
 
             /*
@@ -491,6 +502,8 @@ class StateController extends Controller
             // Rozdíl pro převodníky (co prohlížeč odebral) do stavu nepatří.
             unset($patch[OdebraneVStavu::KLIC], $patch[OdebraneVStavu::ZMENENE]);
             $state->applyPatch($this->sPuvodnimTvarem($patch, $request));
+            // Až po uložení stavu: dluh se vede proti tomu, co v něm leží.
+            $state->zapisDluh($dluh);
 
             return response()->json([
                 // Skutečnost se vrací, ale **neukládá**: administrace má jediný
@@ -517,6 +530,52 @@ class StateController extends Controller
                 'rev' => $state->rev,
             ]);
         });
+    }
+
+    /**
+     * Zopakuje zápisy, které se minule nepovedly.
+     *
+     * Převodníky počítají, co zapsat, jako rozdíl patche proti stavu **před**
+     * uložením. Stav se ale uloží i tehdy, když zápis do tabulek spadne — při
+     * dalším požadavku tedy žádný rozdíl není a úprava je pryč natrvalo, jen
+     * obrazovka dál ukazuje popisek, který v knihovně nikdy nebyl.
+     *
+     * Dluh se proto zapisuje do stavu a tady se platí: hodnota se vezme
+     * z uloženého stavu a předchozí se předá **prázdná**, takže se všechno
+     * z toho klíče zapíše znovu. Oba zápisy jsou idempotentní (`insertOrIgnore`
+     * a `update` na tutéž hodnotu), takže zopakování nic nerozbije.
+     *
+     * @return list<string> co se nepovedlo ani teď
+     */
+    private function zaplatDluh(CoupleState $state, int $coupleId, ?User $uzivatel): array
+    {
+        $dluh = $state->dluh();
+
+        if ($dluh === [] || $uzivatel === null) {
+            return $dluh;
+        }
+
+        $stav = $state->toClientArray();
+        $prostor = GallerySpace::findOrFail($coupleId);
+        $zbyva = [];
+
+        $media = array_values(array_intersect($dluh, ['favs', 'edits']));
+
+        if ($media !== []) {
+            $zbyva = $this->media->zpracuj(
+                array_intersect_key($stav, array_flip($media)), [], $prostor, $uzivatel,
+            );
+        }
+
+        if (in_array('txCat', $dluh, true) && $this->finance->tykaSe($stav)) {
+            $dluhFinance = [];
+            $this->finance->zpracuj(
+                array_intersect_key($stav, array_flip(['txCat', 'txCatPuvodni'])), [], $prostor, $dluhFinance,
+            );
+            $zbyva = array_merge($zbyva, $dluhFinance);
+        }
+
+        return $zbyva;
     }
 
     /**
