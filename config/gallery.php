@@ -81,6 +81,12 @@ return [
     'owner_name' => env('GALLERY_OWNER_NAME', 'Adrian'),
     'owner_email' => env('GALLERY_OWNER_EMAIL', 'info@stanektech.cz'),
 
+    // Provozovatel celé instalace (čárkami oddělené e-maily): tržby, tarify,
+    // všechny účty, klíče integrací, plánované úlohy. Vlastník galerie to není —
+    // `users.role = owner` má každý, kdo si galerii založí. Bez nastavení je
+    // provozovatelem vlastník instalace (`owner_email`).
+    'operator_emails' => env('GALLERY_OPERATOR_EMAILS'),
+
     'partner_name' => env('GALLERY_PARTNER_NAME', 'Makinka Kubíčková'),
     'partner_email' => env('GALLERY_PARTNER_EMAIL', 'marketa@stanektech.cz'),
 

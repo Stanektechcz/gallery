@@ -234,6 +234,7 @@ class AdminController extends Controller
     {
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
+        $this->jenProvozovatel($request);
 
         abort_if($this->ulohy->najdi($uloha) === null, 404, 'Takovou úlohu plán nemá.');
 
@@ -250,6 +251,7 @@ class AdminController extends Controller
     {
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
+        $this->jenProvozovatel($request);
 
         abort_if($this->ulohy->najdi($uloha) === null, 404, 'Takovou úlohu plán nemá.');
         abort_if($uloha === 'scheduler-heartbeat', 422,
@@ -424,6 +426,18 @@ class AdminController extends Controller
             403,
             'Tenhle klíč patří někomu jinému.',
         );
+    }
+
+    /**
+     * Plánované úlohy běží pro celou instalaci, ne pro jednu galerii.
+     *
+     * Pozastavit načítání z banky nebo vysypání koše znamená zastavit to všem.
+     * Dosud to smel každý správce své galerie — i editor.
+     */
+    private function jenProvozovatel(Request $request): void
+    {
+        abort_unless($request->user()->isOperator(), 403,
+            'Plánované úlohy běží pro celou instalaci — spouštět a pozastavovat je může jen provozovatel.');
     }
 
     private function jenVlastnik(Request $request, GallerySpace $prostor): void

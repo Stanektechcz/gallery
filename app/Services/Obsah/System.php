@@ -1815,7 +1815,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $seznamy['jobs'] = [];
         $seznamy['api'] = [];
 
-        if (! auth()->user()?->isAdmin()) {
+        // Úlohy běží pro celou instalaci — vidí je provozovatel, ne každý
+        // vlastník galerie (viz User::isOperator()).
+        if (! auth()->user()?->isOperator()) {
             return $seznamy;
         }
 

@@ -19,6 +19,8 @@ class PageSmokeTest extends TestCase
     {
         parent::setUp();
         $this->user = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        // Průchod zahrnuje i stránky provozu (`/admin/*`) — ty vidí jen provozovatel.
+        config(['gallery.operator_emails' => $this->user->email]);
         $space = GallerySpace::create([
             'uuid' => (string) Str::uuid(), 'name' => 'Testovací galerie', 'slug' => 'testovaci-galerie',
             'owner_id' => $this->user->id, 'is_default' => true,

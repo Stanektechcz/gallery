@@ -16,7 +16,7 @@ class IntegrationSettingsTest extends TestCase
 
     public function test_admin_can_store_encrypted_provider_configuration_and_test_keyless_provider(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = $this->provozovatel();
         $this->actingAs($admin)->get('/admin/integrations')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Admin/Integrations')
             // Counted from the registry rather than written out, so adding a provider
@@ -52,7 +52,7 @@ class IntegrationSettingsTest extends TestCase
 
     public function test_admin_can_configure_gocardless_and_tmdb_and_diagnostics_never_return_secrets(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = $this->provozovatel();
         $this->actingAs($admin);
 
         $this->putJson('/admin/integrations/gocardless_bank_data', [
@@ -85,7 +85,7 @@ class IntegrationSettingsTest extends TestCase
 
     public function test_openrouteservice_uses_raw_key_and_accepts_geojson_response(): void
     {
-        $admin = User::factory()->create(['role' => 'admin']);
+        $admin = $this->provozovatel();
         $this->actingAs($admin)->putJson('/admin/integrations/openrouteservice', [
             'is_enabled' => true,
             'config' => ['api_key' => 'secret-route-key'],
@@ -105,5 +105,17 @@ class IntegrationSettingsTest extends TestCase
                 && str_contains(implode(',', $request->header('Accept')), 'application/geo+json')
                 && ($request->data()['language'] ?? null) === 'cs';
         });
+    }
+
+    /**
+     * Klíče integrací platí pro celou instalaci — nastavuje je provozovatel,
+     * ne kdokoli s `users.role = admin` (viz User::isOperator()).
+     */
+    private function provozovatel(): User
+    {
+        $admin = User::factory()->create(['role' => 'admin']);
+        config(['gallery.operator_emails' => $admin->email]);
+
+        return $admin;
     }
 }

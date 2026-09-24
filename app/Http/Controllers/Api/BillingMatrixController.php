@@ -194,6 +194,8 @@ class BillingMatrixController extends Controller
 
     private function authorizeOperator(Request $request): void
     {
-        abort_unless(in_array($request->user()->role, ['owner', 'admin'], true), 403, 'Nabídku může měnit jen správce.');
+        // Tarify a tržby celé instalace. `role = owner` má každý vlastník
+        // galerie, takže by nabídku a ceny pro všechny měnil kterýkoli zákazník.
+        abort_unless($request->user()->isOperator(), 403, 'Nabídku a tržby vidí jen provozovatel.');
     }
 }

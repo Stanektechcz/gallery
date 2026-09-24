@@ -456,13 +456,14 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
         Route::post('/security/sessions/revoke-others', [SecuritySessionController::class, 'destroyOthers'])->name('security.sessions.revoke-others');
     });
 
-    // Admin only
-    Route::middleware(['can:admin'])->prefix('admin')->name('admin.')->group(function () {
+    // Provoz celé instalace: všechny účty, zakládání správců, audit, klíče
+    // integrací, úlohy. `can:admin` sem pouštělo každého s `users.role = owner`
+    // — tedy každého, kdo si založil galerii. Viz User::isOperator().
+    Route::middleware(['can:operator'])->prefix('admin')->name('admin.')->group(function () {
         Route::get('/', [AdminController::class, 'dashboard'])->name('dashboard');
         Route::get('/storage-risk', [StorageRiskController::class, 'index'])->name('storage-risk');
         Route::get('/tarify', fn () => Inertia::render('Admin/PlanMatrix'))->name('plan-matrix');
         Route::get('/users', [AdminController::class, 'users'])->name('users');
-        Route::post('/users/invite', [AdminController::class, 'invite'])->name('users.invite');
         Route::get('/jobs', [AdminController::class, 'jobs'])->name('jobs');
         Route::get('/audit', [AdminController::class, 'audit'])->name('audit');
         Route::get('/health', [AdminController::class, 'health'])->name('health');
@@ -470,6 +471,10 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
         Route::put('/integrations/{provider}', [IntegrationController::class, 'update'])->name('integrations.update');
         Route::post('/integrations/{provider}/test', [IntegrationController::class, 'test'])->name('integrations.test');
     });
+
+    // Pozvánka do **vlastní** galerie — hlídá tarif (limit členů) a patří
+    // vlastníkovi galerie, ne provozovateli. Proto mimo skupinu výš.
+    Route::middleware(['can:admin'])->post('/admin/users/invite', [AdminController::class, 'invite'])->name('admin.users.invite');
 });
 
 // ── Google OAuth ────────────────────────────────────────

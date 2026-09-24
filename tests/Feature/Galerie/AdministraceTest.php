@@ -51,6 +51,10 @@ class AdministraceTest extends TestCase
             $this->makinka->id => ['role' => 'editor'],
         ]);
 
+        // Adrian je i provozovatel instalace (jako `GALLERY_OWNER_EMAIL` na
+        // serveru) — bez toho by plánované úlohy spouštět nesměl.
+        config(['gallery.operator_emails' => $this->adri->email]);
+
         Sanctum::actingAs($this->adri);
     }
 

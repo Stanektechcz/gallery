@@ -105,6 +105,23 @@ class User extends Authenticatable
         return in_array($this->role, ['owner', 'admin']);
     }
 
+    /**
+     * Provozovatel celé instalace — ne vlastník jedné galerie.
+     *
+     * `isAdmin()` říká „smí spravovat svou galerii" a `role = owner` dostane
+     * každý, kdo si galerii založí, i každý zákazník po otevření registrace.
+     * Tržby všech galerií, tarify, seznam všech účtů nebo plánované úlohy, které
+     * běží pro všechny, mu patřit nemají. Provozovatel se proto pozná podle
+     * e-mailu z `gallery.operator_emails`, bez nastavení podle vlastníka instalace.
+     */
+    public function isOperator(): bool
+    {
+        $seznam = (string) (config('gallery.operator_emails') ?: config('gallery.owner_email'));
+        $emaily = array_filter(array_map(fn (string $e) => mb_strtolower(trim($e)), explode(',', $seznam)));
+
+        return $emaily !== [] && in_array(mb_strtolower(trim((string) $this->email)), $emaily, true);
+    }
+
     public function isPartner(): bool
     {
         return $this->role === 'partner';

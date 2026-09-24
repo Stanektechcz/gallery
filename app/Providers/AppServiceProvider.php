@@ -156,6 +156,8 @@ class AppServiceProvider extends ServiceProvider
         // Admin gate
         Gate::define('admin', fn ($user) => $user->isAdmin());
         Gate::define('owner', fn ($user) => $user->isOwner());
+        // Provoz celé instalace — viz User::isOperator().
+        Gate::define('operator', fn ($user) => $user->isOperator());
 
         // Sanctum token abilities
         Sanctum::usePersonalAccessTokenModel(PersonalAccessToken::class);
