@@ -157,8 +157,12 @@ class PlanovaneUlohy
         'cinema-city-program' => 'Program kina',
         'read-only-bank-sync' => 'Načtení z banky',
         'storage-health' => 'Kontrola úložiště',
-        'retry-pending-drive' => 'Opakování nedoručených úloh',
         'quick-reconciliation' => 'Přepočet alb',
+        // Tyhle tři tu chyběly, takže administrace psala „Memories",
+        // „Queue drain" a „Drive changes" — jediné anglické řádky na obrazovce.
+        'memories' => 'Vzpomínky na dnešek',
+        'queue-drain' => 'Vyprázdnění fronty',
+        'drive-changes' => 'Změny z Disku',
         'daily-status' => 'Denní přehled',
         'mirror-backlog' => 'Kopie originálů do cloudu',
         'temp-cleanup' => 'Úklid dočasných souborů',

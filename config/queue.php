@@ -40,7 +40,19 @@ return [
             'connection' => env('DB_QUEUE_CONNECTION'),
             'table' => env('DB_QUEUE_TABLE', 'jobs'),
             'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
+            /*
+             * Delší než nejdelší `$timeout` mezi úlohami (vývoz: 3600 s).
+             *
+             * Tohle číslo neříká „po jaké době to zkusit znovu", ale „po jaké
+             * době je úloha opuštěná". Když je kratší než doba běhu, fronta
+             * pustí druhou kopii vedle první, která pořád pracuje — u vývozu
+             * si pak obě přepisovaly tentýž ZIP. Výchozích 90 s bylo kratší
+             * než timeout skoro každé úlohy v `app/Jobs`.
+             *
+             * `.env.example` dřív nastavoval `QUEUE_RETRY_AFTER`, což nečte
+             * nic. Hlídá to `tests/Feature/FrontaTest.php`.
+             */
+            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 3900),
             'after_commit' => false,
         ],
 

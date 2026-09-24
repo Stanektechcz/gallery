@@ -92,9 +92,19 @@ Schedule::command('gallery:doctor --no-interaction')
     ->runInBackground()
     ->name('storage-health');
 
-Schedule::command('queue:retry all')
-    ->everyTenMinutes()
-    ->name('retry-pending-drive');
+/*
+ * `queue:retry all` tu stávalo každých deset minut a bylo horší než nic.
+ *
+ * `RetryCommand` vynuluje počet pokusů a smaže řádek z `failed_jobs`. Úloha,
+ * která padá trvale, se tím točila donekonečna — `--tries=3` ji nikdy
+ * neukončilo, protože pokusy se každých deset minut vrátily na nulu. A hlavně:
+ * `gallery:doctor` hlásí poruchu od deseti záznamů ve `failed_jobs` výš, jenže
+ * ta tabulka byla do deseti minut zase prázdná. Jediné místo, kde by se dvojice
+ * dozvěděla, že něco spadlo, tak mlčelo.
+ *
+ * Opakovat se má to, o čem někdo rozhodl — `queue:retry <id>` ručně, podle
+ * toho, co ve `failed_jobs` opravdu leží. Hlídá `tests/Feature/FrontaTest.php`.
+ */
 
 /*
  * Fronta se vyprázdní, i když démona nikdo nespustil.
@@ -109,8 +119,13 @@ Schedule::command('queue:retry all')
  * není co dělat, `--max-time` běh ukončí i tehdy, když práce přibývá rychleji,
  * a `withoutOverlapping` hlídá, aby vedle sebe neběželo víc kopií. Zámek drží
  * deset minut: kdyby proces spadl, nesmí frontu zablokovat napořád.
+ *
+ * `--queue=` tu chybělo, a tím padal celý smysl téhle pojistky: bez něj bere
+ * `queue:work` jen `default`, zatímco náhledy, převody a zrcadlení na Disk
+ * chodí na `media`, `drive` a `high`. Ten incident s 2 371 úlohami byl přesně
+ * tenhle nedobraný zbytek. Pořadí je pořadí přednosti.
  */
-Schedule::command('queue:work --stop-when-empty --max-time=280 --tries=3 --no-interaction')
+Schedule::command('queue:work --queue=high,default,media,drive --stop-when-empty --max-time=280 --tries=3 --no-interaction')
     ->everyFiveMinutes()
     ->withoutOverlapping(10)
     ->runInBackground()
