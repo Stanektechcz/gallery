@@ -70,8 +70,10 @@ Route::post('/login', [AuthenticatedSessionController::class, 'store'])
 Route::get('/login/overeni', [TwoFactorController::class, 'challenge'])->name('two-factor.challenge');
 // Druhý faktor má vlastní limit v kontroleru (pět pokusů na účet);
 // tenhle je proti tomu, aby se zkoušelo z jedné adresy na víc účtů.
+// Vlastní předpona: bez ní četl týž klíč jako podepsané náhledy (600 za
+// minutu) a mřížka s dvaceti dlaždicemi zamkla ověření kódu z téže sítě.
 Route::post('/login/overeni', [TwoFactorController::class, 'verify'])
-    ->middleware('throttle:15,1')->name('two-factor.verify');
+    ->middleware('throttle:15,1,druhy-faktor')->name('two-factor.verify');
 Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
 // Invitation-only registration
@@ -447,7 +449,10 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
 
     // Private vault (15-minute re-authenticated session)
     Route::get('/vault', [VaultController::class, 'index'])->name('vault.index');
-    Route::post('/vault/unlock', [VaultController::class, 'unlock'])->middleware('throttle:5,1')->name('vault.unlock');
+    // Vlastní předpona počítadla: bez ní se pět pokusů dělilo s každou
+    // cestou bez předpony — pár požadavků aplikace a trezor nešel odemknout.
+    // Ne `trezor-odemknout`: to je jiný limit (10 za minutu) v `routes/galerie.php`.
+    Route::post('/vault/unlock', [VaultController::class, 'unlock'])->middleware('throttle:5,1,trezor-web')->name('vault.unlock');
     Route::post('/vault/lock', [VaultController::class, 'lock'])->name('vault.lock');
     Route::post('/vault/media/{uuid}/toggle', [VaultController::class, 'toggle'])->name('vault.toggle');
 

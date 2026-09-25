@@ -79,8 +79,12 @@ Route::middleware(['throttle:20,1,otisk'])->prefix('api/webauthn')->group(functi
  * `dvojice`: host a účet s odebraným přístupem sem nesmí a klíč „jen čtení"
  * nic nezapíše — viz `JenDvojice`. Kontroluje se u každého požadavku, protože
  * token nebo sezení mohly vzniknout dřív, než přístup skončil.
+ *
+ * Předpona počítadla `api-galerie` ze stejného důvodu jako u přihlášení výš:
+ * bez ní se sto dvacet požadavků dělilo o klíč s každým limitem bez předpony
+ * (odemčení trezoru s pěti pokusy) a běžná práce v aplikaci ho vyčerpala.
  */
-Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')->group(function () {
+Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1,api-galerie'])->prefix('api')->group(function () {
     Route::get('state', [StateController::class, 'show'])->name('galerie.state.show');
     Route::patch('state', [StateController::class, 'update'])->name('galerie.state.update');
     Route::delete('state', [StateController::class, 'destroy'])->name('galerie.state.destroy');
@@ -445,8 +449,13 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('
  * podpisem: obrázek v CSS si prohlížeč stahuje sám a hlavičku `Authorization`
  * k němu nepřidá. Podpis platí pro jediný soubor a den; token v adrese by
  * zůstal v historii prohlížeče i v přístupovém logu.
+ *
+ * Předpona `podepsana-media` je společná pro náhled, obrázek z chatu i video
+ * (tři cesty níž): dohromady tak mají dál jeden rozpočet 600 za minutu, jako
+ * dosud. Bez předpony ale četly týž klíč (adresu) jako druhý faktor s patnácti
+ * pokusy, a mřížka s dvaceti dlaždicemi ho z téže sítě zamkla.
  */
-Route::middleware(['signed', 'throttle:600,1'])
+Route::middleware(['signed', 'throttle:600,1,podepsana-media'])
     ->get('api/media/{uuid}/thumb', [MediaController::class, 'thumb'])
     ->name('galerie.media.thumb');
 
@@ -457,7 +466,7 @@ Route::middleware(['signed', 'throttle:600,1'])
  * a prohlížeč k němu hlavičku `Authorization` nepřidá. Bez toho ukazovala
  * barvu spočítanou z pořadí repliky — s poslanou fotkou bez souvislosti.
  */
-Route::middleware(['signed', 'throttle:600,1'])
+Route::middleware(['signed', 'throttle:600,1,podepsana-media'])
     ->get('api/chat/{uuid}/nahled', [ChatController::class, 'signedMedia'])
     ->name('galerie.chat.nahled');
 
@@ -469,6 +478,6 @@ Route::middleware(['signed', 'throttle:600,1'])
  * obrázek s namalovaným pruhem přehrávání — tlačítka pod ním neměla obsluhu,
  * protože nebylo co ovládat.
  */
-Route::middleware(['signed', 'throttle:600,1'])
+Route::middleware(['signed', 'throttle:600,1,podepsana-media'])
     ->get('api/media/{uuid}/video', [MediaController::class, 'video'])
     ->name('galerie.media.video');

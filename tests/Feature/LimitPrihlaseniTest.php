@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -35,5 +37,24 @@ class LimitPrihlaseniTest extends TestCase
         ])->status(), 'Nastavení nového hesla sdílí počítadlo s přihlášením.');
         $this->assertNotSame(429, $this->post('/invite/neplatny-token', [])->status(),
             'Přijetí pozvánky sdílí počítadlo s přihlášením.');
+    }
+
+    /**
+     * Náhledy v mřížce nevyčerpají druhý faktor.
+     *
+     * Podepsané náhledy mají limit 600 za minutu, druhý faktor 15 — a bez
+     * předpony počítadla oba četly týž klíč (adresu). Stránka s dvaceti
+     * dlaždicemi pak z téže sítě zamkla ověření kódu dřív, než ho kdo zadal.
+     */
+    public function test_nahledy_nevycerpaji_druhy_faktor(): void
+    {
+        $nahled = URL::temporarySignedRoute('galerie.media.thumb', now()->addHour(), ['uuid' => (string) Str::uuid()]);
+
+        for ($i = 1; $i <= 20; $i++) {
+            $this->get($nahled);
+        }
+
+        $this->assertNotSame(429, $this->post('/login/overeni', ['code' => '000000'])->status(),
+            'Druhý faktor sdílí počítadlo s podepsanými náhledy.');
     }
 }
