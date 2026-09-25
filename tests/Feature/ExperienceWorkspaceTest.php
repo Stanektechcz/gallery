@@ -347,6 +347,47 @@ class ExperienceWorkspaceTest extends TestCase
         $this->assertSame(2, DB::table('trip_activities')->where('trip_day_id', $dayId)->count());
     }
 
+    /**
+     * Připomínka výletu z míst je okamžik v UTC.
+     *
+     * `starts_at` se parsoval v pražském pásmu, ale sloupec pásmo nenese —
+     * uložily se pražské hodiny a plánovač (`now()` v UTC) ji poslal později.
+     */
+    public function test_place_selection_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $place = $this->actingAs($this->owner)->postJson('/api/v1/places', [
+            'name' => 'Vyhlídka Holedná', 'type' => 'custom', 'city' => 'Brno',
+            'latitude' => 49.2177, 'longitude' => 16.5312, 'estimated_visit_minutes' => 75,
+        ])->assertCreated()->json();
+
+        $event = $this->postJson('/api/v1/places/plan-selection', [
+            'place_ids' => [$place['id']], 'starts_at' => '2026-08-01 10:00:00', 'title' => 'Vyhlídka', 'reminder_minutes' => 1440,
+        ])->assertCreated()->json();
+
+        $this->assertSame('2026-07-31 08:00:00', substr((string) DB::table('event_reminders')
+            ->where('event_id', $event['id'])->where('user_id', $this->owner->id)->value('remind_at'), 0, 19));
+    }
+
+    /** Připomínka oslavy milníku i návratu k fotce je okamžik v UTC. */
+    public function test_milestone_and_media_revisit_reminders_are_stored_as_utc_moments(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $mediaId = $this->media(['latitude' => 49.1951, 'longitude' => 16.6068, 'display_title' => 'Přehrada']);
+        $mediaUuid = DB::table('media_items')->where('id', $mediaId)->value('uuid');
+        $milestone = $this->actingAs($this->owner)->postJson('/api/v1/relationship-milestones', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Výročí', 'occurred_on' => '2024-07-01', 'media_item_id' => $mediaId, 'visibility' => 'shared',
+        ])->assertCreated()->json();
+
+        $oslava = $this->postJson("/api/v1/relationship-milestones/{$milestone['uuid']}/celebration", ['starts_at' => '2026-08-01T19:00', 'reminder_minutes' => 1440])->assertCreated()->json();
+        $navrat = $this->postJson("/api/v1/media/{$mediaUuid}/revisit-suggestions", ['title' => 'Znovu u přehrady', 'starts_at' => '2026-08-02T18:30', 'reminder_minutes' => 1440])->assertCreated()->json();
+
+        $kdy = fn (int $eventId) => substr((string) DB::table('event_reminders')->where('event_id', $eventId)->where('user_id', $this->owner->id)->value('remind_at'), 0, 19);
+        // Den předem, v pražských hodinách letního času (UTC+2).
+        $this->assertSame('2026-07-31 17:00:00', $kdy($oslava['id']));
+        $this->assertSame('2026-08-01 16:30:00', $kdy($navrat['id']));
+    }
+
     public function test_completed_trip_builds_one_shared_story_album_memory_and_calendar_context(): void
     {
         $start = now()->subDays(4)->startOfDay();

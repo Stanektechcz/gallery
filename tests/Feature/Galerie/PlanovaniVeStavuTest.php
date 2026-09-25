@@ -123,7 +123,116 @@ class PlanovaniVeStavuTest extends TestCase
 
         $this->assertSame('2026-09-18 11:00', CalendarEvent::firstOrFail()
             ->starts_at->subDay()->format('Y-m-d H:i'));
-        $this->assertStringStartsWith('2026-09-18 11:00', (string) $kdy);
+        // 11:00 v Praze (letní čas) je 09:00 UTC — plánovač porovnává s `now()` v UTC.
+        $this->assertStringStartsWith('2026-09-18 09:00', (string) $kdy);
+    }
+
+    /**
+     * Připomínka se ukládá jako okamžik v UTC, ne v pražských hodinách.
+     *
+     * `starts_at` je podle hodin, plánovač ale porovnává `remind_at` s `now()`
+     * v UTC: „den předem" chodil v létě o dvě hodiny později a „ráno" v devět.
+     */
+    public function test_pripominka_je_okamzik_v_utc(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [
+            ['id' => 'ev-n1', 'y' => 2026, 'm' => 6, 'd' => 20, 'time' => '18:00', 't' => 'Den předem', 'kind' => 'jine', 'who' => 'Adrian', 'remind' => 'den předem'],
+            ['id' => 'ev-n2', 'y' => 2026, 'm' => 6, 'd' => 21, 'time' => '20:00', 't' => 'Ráno', 'kind' => 'jine', 'who' => 'Adrian', 'remind' => 'ráno'],
+            // Přes změnu času: týden před 30. 10. v 18:00 SEČ je 23. 10. v 18:00 SELČ = 16:00 UTC.
+            ['id' => 'ev-n3', 'y' => 2026, 'm' => 9, 'd' => 30, 'time' => '18:00', 't' => 'Týden předem', 'kind' => 'jine', 'who' => 'Adrian', 'remind' => 'týden předem'],
+        ]]])->assertOk();
+
+        $kdy = fn (string $nazev) => substr((string) DB::table('event_reminders')
+            ->where('event_id', CalendarEvent::where('title', $nazev)->value('id'))->value('remind_at'), 0, 16);
+
+        $this->assertSame('2026-07-19 16:00', $kdy('Den předem'));
+        $this->assertSame('2026-07-21 05:00', $kdy('Ráno'));
+        $this->assertSame('2026-10-23 16:00', $kdy('Týden předem'));
+
+        // A obrazovka dostane zpátky tutéž volbu — „ráno" u večerní akce není „den předem".
+        $volby = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.CALEV'))->pluck('remind', 't');
+        $this->assertSame('den předem', $volby['Den předem']);
+        $this->assertSame('ráno', $volby['Ráno']);
+        $this->assertSame('týden předem', $volby['Týden předem']);
+    }
+
+    /**
+     * Na akci, která už začala, se nepřipomíná. Volba, jejíž čas uplynul,
+     * u budoucí akce odejde hned — a v dialogu zůstane, jak ji člověk vybral.
+     *
+     * Zahodit ji by znamenalo, že „týden předem" nastavené tři dny před akcí
+     * tiše zmizí: nepřijde nic a dialog ukáže „bez připomenutí".
+     */
+    public function test_pripominka_do_minulosti_se_nezalozi(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $radek = ['id' => 'ev-n2', 'y' => 2026, 'm' => 6, 'd' => 4, 'time' => '18:00', 't' => 'Za tři dny', 'kind' => 'jine', 'who' => 'Adrian', 'remind' => 'týden předem'];
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [
+            // Akce včera v 18:00 — nic.
+            ['id' => 'ev-n1', 'y' => 2026, 'm' => 5, 'd' => 30, 'time' => '18:00', 't' => 'Včera', 'kind' => 'jine', 'who' => 'Adrian', 'remind' => 'den předem'],
+            $radek,
+        ]]])->assertOk();
+
+        $vcera = CalendarEvent::where('title', 'Včera')->value('id');
+        $zaTri = CalendarEvent::where('title', 'Za tři dny')->firstOrFail();
+        $this->assertSame(0, DB::table('event_reminders')->where('event_id', $vcera)->count());
+
+        $pripominky = DB::table('event_reminders')->where('event_id', $zaTri->id)->get();
+        $this->assertCount(1, $pripominky);
+        $this->assertSame('2026-07-01 08:00', substr((string) $pripominky[0]->remind_at, 0, 16), 'Odejde při příštím běhu plánovače.');
+        $this->assertSame('pending', $pripominky[0]->status);
+
+        $volby = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.CALEV'))->pluck('remind', 't');
+        $this->assertSame('týden předem', $volby['Za tři dny']);
+
+        // Další uložení ji nezdvojí — ani čekající, ani po doručení.
+        $radek['id'] = 'ev-'.$zaTri->uuid;
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
+        $this->assertSame(1, DB::table('event_reminders')->where('event_id', $zaTri->id)->count());
+
+        DB::table('event_reminders')->where('event_id', $zaTri->id)->update(['status' => 'delivered']);
+        $this->travelTo('2026-07-01 09:00:00');
+        $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();
+        $this->assertSame(0, DB::table('event_reminders')->where('event_id', $zaTri->id)->where('status', 'pending')->count());
+    }
+
+    /**
+     * Připomínka uložená před opravou (v pražských hodinách) se nezdvojí.
+     *
+     * Čekající se nahradí správnou — a když její okamžik už uplynul, odejde
+     * hned (ne o dvě hodiny později). Doručená se neposílá znovu.
+     */
+    public function test_pripominka_postaru_se_nezdvoji(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $budouci = $this->udalost(['title' => 'Budoucí', 'starts_at' => '2026-07-10 18:00:00']);
+        $blizka = $this->udalost(['title' => 'Blízká', 'starts_at' => '2026-07-02 09:30:00']);
+        $dorucena = $this->udalost(['title' => 'Doručená', 'starts_at' => '2026-07-02 07:30:00']);
+
+        $postaru = fn (CalendarEvent $u, string $kdy, string $stav) => DB::table('event_reminders')->insert([
+            'event_id' => $u->id, 'user_id' => $this->adri->id, 'channel' => 'database',
+            'remind_at' => $kdy, 'status' => $stav, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $postaru($budouci, '2026-07-09 18:00:00', 'pending');
+        // Správně 07:30 UTC (už uplynulo), postaru 09:30 — ještě čeká.
+        $postaru($blizka, '2026-07-01 09:30:00', 'pending');
+        $postaru($dorucena, '2026-07-01 07:30:00', 'delivered');
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [
+            $this->radekUdalosti($budouci, ['who' => 'Adrian', 'remind' => 'den předem']),
+            $this->radekUdalosti($blizka, ['who' => 'Adrian', 'remind' => 'den předem']),
+            $this->radekUdalosti($dorucena, ['who' => 'Adrian', 'remind' => 'den předem']),
+        ]]])->assertOk();
+
+        $radky = fn (CalendarEvent $u) => DB::table('event_reminders')->where('event_id', $u->id)
+            ->orderBy('id')->get()->map(fn ($r) => substr((string) $r->remind_at, 0, 16).' '.$r->status)->all();
+
+        $this->assertSame(['2026-07-09 16:00 pending'], $radky($budouci));
+        $this->assertSame(['2026-07-01 08:00 pending'], $radky($blizka));
+        $this->assertSame(['2026-07-01 07:30 delivered'], $radky($dorucena));
     }
 
     /**
@@ -262,7 +371,8 @@ class PlanovaniVeStavuTest extends TestCase
     /** Doručená připomínka se dalším uložením kalendáře nezaloží znovu. */
     public function test_dorucena_pripominka_se_neposle_znovu(): void
     {
-        $u = $this->udalost(['title' => 'S připomínkou', 'starts_at' => now()->addHours(10)]);
+        // Tři dny dopředu: „den předem" u akce za pár hodin už uplynul a nezakládá se.
+        $u = $this->udalost(['title' => 'S připomínkou', 'starts_at' => now()->addDays(3)->setTime(11, 0)]);
         $radek = $this->radekUdalosti($u, ['remind' => 'den předem']);
 
         $this->patchJson('/api/state', ['data' => ['evList' => [$radek]]])->assertOk();

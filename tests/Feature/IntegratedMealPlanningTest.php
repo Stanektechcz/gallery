@@ -107,6 +107,41 @@ class IntegratedMealPlanningTest extends TestCase
         $this->assertDatabaseHas('calendar_events', ['id' => $generatedEvent->id, 'status' => 'completed']);
     }
 
+    /**
+     * Připomínky jídla na cestě i vaření jsou okamžik v UTC.
+     *
+     * Čas jídla jsou pražské hodiny a tak se ukládá i začátek akce; plánovač
+     * ale porovnává `remind_at` s `now()` v UTC — v létě chodily o dvě hodiny později.
+     */
+    public function test_meal_and_cooking_reminders_are_stored_as_utc_moments(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        [$owner, , $space] = $this->couple();
+        $recipe = $this->actingAs($owner)->postJson('/api/v1/recipes', $this->recipePayload($space->id))->assertCreated()->json();
+        $tripId = DB::table('trips')->insertGetId([
+            'gallery_space_id' => $space->id, 'created_by' => $owner->id, 'name' => 'Chata',
+            'start_date' => '2026-07-08', 'end_date' => '2026-07-08', 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $dayId = DB::table('trip_days')->insertGetId(['trip_id' => $tripId, 'date' => '2026-07-08', 'sort_order' => 0, 'created_at' => now(), 'updated_at' => now()]);
+
+        $this->postJson("/api/v1/trips/{$tripId}/meal-plan", [
+            'recipe_uuid' => $recipe['uuid'], 'meal_type' => 'dinner', 'servings' => 2, 'trip_day_id' => $dayId, 'planned_for' => '2026-07-08T18:30',
+        ])->assertCreated();
+        $session = $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/cooking-sessions/schedule', [
+            'planned_for' => '2026-07-02T18:00', 'servings' => 2, 'add_to_calendar' => true,
+        ])->assertCreated()->json();
+
+        $kdy = fn (string $typ) => substr((string) DB::table('event_reminders')
+            ->join('calendar_events', 'calendar_events.id', '=', 'event_reminders.event_id')
+            ->where('calendar_events.metadata->kind', $typ)->where('event_reminders.user_id', $owner->id)
+            ->value('event_reminders.remind_at'), 0, 19);
+
+        // Dvě hodiny před 18:30 a 18:00 v Praze (SELČ).
+        $this->assertSame('2026-07-08 14:30:00', $kdy('trip_recipe_meal'));
+        $this->assertSame('2026-07-02 14:00:00', $kdy('recipe_cooking'));
+        $this->assertNotNull($session['calendar_event']['uuid'] ?? null);
+    }
+
     private function couple(): array
     {
         Queue::fake();

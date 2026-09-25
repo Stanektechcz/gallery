@@ -6,6 +6,7 @@ use App\Console\Commands\DeliverPlanningRemindersCommand;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
@@ -736,7 +737,8 @@ class CalendarPlanningTest extends TestCase
         $task = $this->postJson("/api/v1/calendar/events/{$event['uuid']}/tasks", [
             'title' => 'Zabalit plavky',
             'assigned_to' => $this->partner->id,
-            'due_at' => now()->addHour()->toDateTimeString(),
+            // Termín se zadává v pražských hodinách (jako z formuláře), ne v UTC.
+            'due_at' => Cas::ted()->addHour()->toDateTimeString(),
         ])->assertCreated()->json();
 
         Artisan::call('gallery:planning-followups');
@@ -907,5 +909,70 @@ class CalendarPlanningTest extends TestCase
             ->assertOk()
             ->assertJsonPath('album.id', $capture['album']['id'])
             ->assertJsonPath('experience.attached_media_count', 1);
+    }
+
+    /**
+     * Připomínky z kalendáře jsou okamžik v UTC, ne pražské hodiny.
+     *
+     * Začátek akce se ukládá podle pražských hodin, plánovač ale porovnává
+     * `remind_at` s `now()` v UTC — v létě tak chodily o dvě hodiny později.
+     */
+    public function test_holiday_plan_reminder_is_stored_as_utc_moment(): void
+    {
+        $event = $this->postJson('/api/v1/calendar/holiday-plan', [
+            'gallery_space_id' => $this->space->id, 'start_date' => '2026-05-01', 'end_date' => '2026-05-03',
+        ])->assertCreated()->json();
+
+        // Týden před půlnocí 1. 5. v Praze (SELČ) je 23. 4. ve 22:00 UTC.
+        $this->assertSame('2026-04-23 22:00:00', $this->pripominka($event['id'], $this->owner->id));
+    }
+
+    public function test_revisit_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $event = $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Kavárna', 'starts_at' => '2026-06-20 10:00:00'])->assertCreated()->json();
+
+        $revisit = $this->postJson("/api/v1/calendar/events/{$event['uuid']}/revisit", ['starts_at' => '2026-08-01T18:00', 'reminder_minutes' => 1440])->assertCreated()->json();
+
+        $this->assertSame('2026-07-31 16:00:00', $this->pripominka($revisit['id'], $this->owner->id));
+    }
+
+    public function test_memory_evening_without_media_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $moment = $this->postJson('/api/v1/shared-memory-moments', ['gallery_space_id' => $this->space->id, 'title' => 'Jeseníky', 'happened_on' => '2026-05-01'])->assertCreated()->json();
+
+        $event = $this->postJson('/api/v1/calendar/memory-evening', ['gallery_space_id' => $this->space->id, 'scheduled_at' => '2026-07-08T19:00', 'moment_uuids' => [$moment['uuid']]])->assertCreated()->json();
+
+        $this->assertSame('2026-07-07 17:00:00', $this->pripominka($event['id'], $this->owner->id));
+    }
+
+    public function test_poll_plan_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $poll = $this->postJson('/api/v1/calendar/polls', ['gallery_space_id' => $this->space->id, 'question' => 'Kam?', 'options' => [['title' => 'Brno'], ['title' => 'Olomouc']]])->assertCreated()->json();
+        $optionId = DB::table('decision_poll_options')->where('poll_id', $poll['id'])->value('id');
+
+        $event = $this->postJson("/api/v1/calendar/polls/{$poll['uuid']}/options/{$optionId}/plan", ['starts_at' => '2026-07-11T10:00'])->assertCreated()->json();
+
+        // Týden před sobotou v 10:00 v Praze = 4. 7. v 8:00 UTC.
+        $this->assertSame('2026-07-04 08:00:00', $this->pripominka($event['id'], $this->owner->id));
+    }
+
+    public function test_ics_import_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:utc-vecere@example.test\r\nSUMMARY:Večeře\r\nDTSTART;TZID=Europe/Prague:20260815T190000\r\nDTEND;TZID=Europe/Prague:20260815T210000\r\nEND:VEVENT\r\nEND:VCALENDAR";
+
+        $this->postJson('/api/v1/calendar/ics-import', ['gallery_space_id' => $this->space->id, 'ics' => $ics, 'reminder_minutes' => 60])->assertOk();
+
+        // 19:00 v Praze (SELČ) = 17:00 UTC; hodinu předem 16:00 UTC.
+        $eventId = (int) DB::table('calendar_events')->where('title', 'Večeře')->value('id');
+        $this->assertSame('2026-08-15 16:00:00', $this->pripominka($eventId, $this->owner->id));
+    }
+
+    private function pripominka(int $eventId, int $userId): string
+    {
+        return substr((string) DB::table('event_reminders')->where('event_id', $eventId)->where('user_id', $userId)->value('remind_at'), 0, 19);
     }
 }

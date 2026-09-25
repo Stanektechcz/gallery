@@ -81,6 +81,33 @@ class MemoryEveningLifecycleTest extends TestCase
         $this->actingAs($partner)->postJson('/api/v1/memory-evenings/'.$first['uuid'].'/start')->assertForbidden();
     }
 
+    /**
+     * Připomínky večera jsou okamžik v UTC.
+     *
+     * Termín jsou pražské hodiny a tak se ukládá i začátek akce; plánovač ale
+     * porovnává `remind_at` s `now()` v UTC — v létě chodily o dvě hodiny později.
+     */
+    public function test_memory_evening_reminders_are_stored_as_utc_moments(): void
+    {
+        Queue::fake();
+        $this->travelTo('2026-07-01 08:00:00');
+        [$owner, , $space] = $this->couple();
+        $media = $this->media($space, $owner, 'vylet.jpg', now()->subYear());
+
+        $evening = $this->actingAs($owner)->postJson('/api/v1/memory-evenings', [
+            'gallery_space_id' => $space->id, 'fingerprint' => hash('sha256', 'utc'), 'source_type' => 'trip_anniversary',
+            'title' => 'Rok od výletu', 'source_happened_on' => now()->subYear()->toDateString(),
+            'scheduled_for' => '2026-07-08T19:30', 'media_uuids' => [$media->uuid],
+        ])->assertCreated()->json();
+
+        $eventId = DB::table('calendar_events')->where('uuid', $evening['event']['uuid'])->value('id');
+        $kdy = DB::table('event_reminders')->where('event_id', $eventId)->where('user_id', $owner->id)
+            ->orderBy('remind_at')->pluck('remind_at')->map(fn ($v) => substr((string) $v, 0, 19))->all();
+
+        // 19:30 v Praze (SELČ) je 17:30 UTC: den předem a půl hodiny předem.
+        $this->assertSame(['2026-07-07 17:30:00', '2026-07-08 17:00:00'], $kdy);
+    }
+
     private function media(GallerySpace $space, User $owner, string $filename, $takenAt, string $type = 'photo'): MediaItem
     {
         $extension = pathinfo($filename, PATHINFO_EXTENSION);

@@ -55,4 +55,34 @@ class CasCestyTest extends CestyTestCase
         $dayId = DB::table('trip_days')->where('trip_id', $tripId)->where('date', '2026-07-12')->value('id');
         $this->assertSame($dayId, (int) DB::table('travel_journal_entries')->where('trip_id', $tripId)->value('trip_day_id'));
     }
+
+    public function test_pripominka_navratu_z_cesty_je_ulozena_v_utc(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $tripId = $this->cesta('2026-06-10', '2026-06-12');
+
+        $revisit = $this->postJson("/api/v1/trips/{$tripId}/revisit", ['starts_at' => '2026-09-01T10:00', 'reminder_minutes' => 10080])->assertCreated()->json();
+
+        // Týden před 1. 9. v 10:00 v Praze (SELČ) = 25. 8. v 8:00 UTC.
+        $remindAt = DB::table('event_reminders')->where('event_id', $revisit['id'])->where('user_id', $this->owner->id)->value('remind_at');
+        $this->assertSame('2026-08-25 08:00:00', substr((string) $remindAt, 0, 19));
+    }
+
+    /**
+     * Výdaj zapsaný z deníku po půlnoci patří k dnešku cesty.
+     *
+     * `occurred_at` je DATETIME bez pásma, který se čte jako místní čas cesty.
+     * Deník psal `now()` v UTC — výdaj ve 00:30 v Praze dostal včerejší den
+     * a 22:30, zatímco zápis v deníku o řádek níž patřil k dnešku.
+     */
+    public function test_vydaj_z_deniku_ma_mistni_cas_cesty(): void
+    {
+        // 22:30 UTC 11. 7. je v Praze už 00:30 12. 7.
+        $this->travelTo('2026-07-11 22:30:00');
+        $tripId = $this->cesta('2026-07-11', '2026-07-12');
+
+        $this->postJson("/api/v1/trips/{$tripId}/journal", ['type' => 'expense', 'content' => 'Taxi', 'amount' => 300])->assertCreated();
+
+        $this->assertSame('2026-07-12 00:30:00', substr((string) DB::table('trip_expenses')->where('trip_id', $tripId)->value('occurred_at'), 0, 19));
+    }
 }

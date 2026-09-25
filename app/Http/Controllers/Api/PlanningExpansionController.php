@@ -350,8 +350,12 @@ class PlanningExpansionController extends Controller
      */
     private function remindParticipants(CalendarEvent $event, Carbon $startsAt): void
     {
+        // Začátek jsou pražské hodiny (sobota v 10:00, `datetime-local`); plánovač
+        // porovnává `remind_at` s `now()` v UTC — bez převodu chodila o 1–2 h později.
+        $remindAt = Cas::zHodin($startsAt)->subDays(7)->utc();
+
         foreach ($event->participants()->pluck('users.id') as $memberId) {
-            $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subDays(7), 'status' => 'pending']);
+            $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
         }
     }
 

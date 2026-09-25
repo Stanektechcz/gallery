@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\Place;
 use App\Models\User;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -74,8 +75,11 @@ class PlaceVisitPlanningService
                 'response' => $id === (int) $user->id ? 'accepted' : 'pending',
             ]])->all());
 
+            // Začátek jsou pražské hodiny (tak se ukládá i `starts_at`); plánovač
+            // porovnává `remind_at` s `now()` v UTC, proto okamžik v UTC.
+            $okamzik = Cas::zHodin($startsAt);
             foreach ($memberIds as $memberId) {
-                $remindAt = $startsAt->copy()->subMinutes($reminderMinutes);
+                $remindAt = $okamzik->subMinutes($reminderMinutes)->utc();
                 if ($remindAt->isFuture()) {
                     $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
                 }

@@ -107,7 +107,11 @@ class TripPlanController extends Controller
                     'trip_id' => $id, 'created_by' => $request->user()->id, 'title' => $data['content'],
                     'category' => $data['category'] ?? 'other', 'amount' => $amount,
                     'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'),
-                    'paid_by_user_id' => $request->user()->id, 'state' => 'actual', 'occurred_at' => now(),
+                    'paid_by_user_id' => $request->user()->id, 'state' => 'actual',
+                    // `occurred_at` je DATETIME bez pásma a čte se jako místní čas cesty
+                    // (den výdaje i „G:i"). `now()` v UTC dal výdaji po půlnoci včerejší den
+                    // — a deník o řádek níž ho přitom přiřadil ke dni podle pásma cesty.
+                    'occurred_at' => Cas::naCeste($trip->timezone ?? null)->format('Y-m-d H:i:s'),
                     'split' => json_encode($parts), 'created_at' => now(), 'updated_at' => now(),
                 ]);
                 $metadata = ['trip_expense_id' => $expenseId, 'expense_share' => $share, 'category' => $data['category'] ?? 'other'];

@@ -297,7 +297,10 @@ class CalendarPlanningController extends Controller
                 $event->reminders()->create([
                     'user_id' => $memberId,
                     'channel' => 'database',
-                    'remind_at' => $start->copy()->subWeek(),
+                    // `$start` je v pražském pásmu, ale sloupec pásmo nenese — uložily
+                    // se pražské hodiny a plánovač (`now()` v UTC) poslal připomínku
+                    // o hodinu či dvě později. Proto okamžik v UTC.
+                    'remind_at' => $start->copy()->subWeek()->utc(),
                     'status' => 'pending',
                 ]);
             }
@@ -697,9 +700,12 @@ class CalendarPlanningController extends Controller
             'is_private' => false,
             'metadata' => $metadata,
         ], $members);
+        // `starts_at` přichází z `datetime-local` bez pásma a ukládá se podle pražských
+        // hodin; plánovač ale porovnává `remind_at` s `now()` v UTC.
+        $remindAt = Cas::zHodin($startsAt)->subMinutes((int) ($data['reminder_minutes'] ?? 10080))->utc();
         foreach ($members as $memberId) {
             $event->participants()->syncWithoutDetaching([(int) $memberId => ['role' => (int) $memberId === $request->user()->id ? 'owner' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending']]);
-            $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 10080)), 'status' => 'pending']);
+            $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
         }
 
         return response()->json($this->eventPayload($event->fresh(), $request->user()), 201);
@@ -1086,8 +1092,10 @@ class CalendarPlanningController extends Controller
             ]);
             $memberIds = $space->members()->pluck('users.id')->push($user->id)->unique()->values();
             $event->participants()->sync($memberIds->mapWithKeys(fn (int $id) => [$id => ['role' => $id === $user->id ? 'owner' : 'guest', 'response' => $id === $user->id ? 'accepted' : 'pending']])->all());
+            // Pražské hodiny z `datetime-local` → okamžik v UTC, jak ho čte plánovač.
+            $remindAt = Cas::zHodin($startsAt)->subMinutes((int) ($data['reminder_minutes'] ?? 1440))->utc();
             foreach ($memberIds as $memberId) {
-                $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 1440)), 'status' => 'pending']);
+                $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
             }
 
             return response()->json($this->eventPayload($event->fresh(), $user), 201);

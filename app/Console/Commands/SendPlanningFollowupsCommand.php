@@ -30,7 +30,19 @@ class SendPlanningFollowupsCommand extends Command
         }
         $spaces->whereIn('id', $spaceIds)->each(fn (GallerySpace $space) => $automations->markRan($space, AutomationRegistryService::PLANNING_FOLLOWUPS));
 
-        $tasks = DB::table('event_tasks as t')->join('calendar_events as e', 'e.id', '=', 't.event_id')->whereIn('e.gallery_space_id', $spaceIds)->whereNull('t.completed_at')->whereNotNull('t.due_at')->where('t.due_at', '<', now())->where(fn ($q) => $q->whereNull('t.last_escalated_at')->orWhere('t.last_escalated_at', '<', now()->subDay()))->orderBy('t.due_at')->limit($limit)->select('t.*', 'e.uuid as event_uuid', 'e.title as event_title', 'e.created_by')->get();
+        /*
+         * „Teď" v pražských hodinách, ne v UTC.
+         *
+         * `due_at` se ukládá tak, jak ho člověk zadal nebo jak se odvodil ze
+         * začátku akce (kalendář, jídelníček, cesta) — v pražských hodinách bez
+         * pásma. Porovnání s `now()` v UTC hlásilo úkol „po termínu" až o hodinu
+         * či dvě později a „brzy" naopak o tolik dřív. `last_*_at` jsou skutečné
+         * okamžiky (`now()`), ty se dál porovnávají v UTC.
+         */
+        $tedNaHodinach = Cas::ted()->format('Y-m-d H:i:s');
+        $zitraNaHodinach = Cas::ted()->addDay()->format('Y-m-d H:i:s');
+
+        $tasks = DB::table('event_tasks as t')->join('calendar_events as e', 'e.id', '=', 't.event_id')->whereIn('e.gallery_space_id', $spaceIds)->whereNull('t.completed_at')->whereNotNull('t.due_at')->where('t.due_at', '<', $tedNaHodinach)->where(fn ($q) => $q->whereNull('t.last_escalated_at')->orWhere('t.last_escalated_at', '<', now()->subDay()))->orderBy('t.due_at')->limit($limit)->select('t.*', 'e.uuid as event_uuid', 'e.title as event_title', 'e.created_by')->get();
         foreach ($tasks as $task) {
             $recipient = User::find($task->assigned_to ?: $task->created_by);
             if (! $recipient) {
@@ -41,7 +53,7 @@ class SendPlanningFollowupsCommand extends Command
             $sent++;
         }
         $upcomingTasks = DB::table('event_tasks as t')->join('calendar_events as e', 'e.id', '=', 't.event_id')
-            ->whereIn('e.gallery_space_id', $spaceIds)->whereNull('t.completed_at')->whereNotNull('t.due_at')->whereBetween('t.due_at', [now(), now()->copy()->addDay()])
+            ->whereIn('e.gallery_space_id', $spaceIds)->whereNull('t.completed_at')->whereNotNull('t.due_at')->whereBetween('t.due_at', [$tedNaHodinach, $zitraNaHodinach])
             ->whereNull('t.last_reminded_at')->orderBy('t.due_at')->limit(max(0, $limit - $sent))
             ->select('t.*', 'e.uuid as event_uuid', 'e.title as event_title', 'e.created_by')->get();
         foreach ($upcomingTasks as $task) {

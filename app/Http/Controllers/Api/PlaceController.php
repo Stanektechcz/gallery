@@ -346,7 +346,9 @@ class PlaceController extends Controller
                 'response' => 'accepted',
             ]])->all();
             $event->participants()->syncWithoutDetaching($participants);
-            $remindAt = $startsAt->copy()->subMinutes((int) ($request->input('reminder_minutes', 1440)));
+            // `$startsAt` je v pražském pásmu, sloupec ale pásmo nenese: bez převodu
+            // se uložily pražské hodiny a plánovač (`now()` v UTC) poslal připomínku později.
+            $remindAt = $startsAt->copy()->subMinutes((int) ($request->input('reminder_minutes', 1440)))->utc();
             if ($remindAt->isPast()) {
                 $remindAt = now();
             }

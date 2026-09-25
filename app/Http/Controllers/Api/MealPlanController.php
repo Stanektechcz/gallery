@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Recipes\MealPlanService;
 use App\Services\Recipes\RecipeService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -99,9 +100,12 @@ class MealPlanController extends Controller
             ]);
             $meal->update(['calendar_event_id' => $event->id, 'cooking_session_id' => $session->id, 'trip_activity_id' => $activityId]);
             $members = $event->participants()->pluck('users.id');
+            // Čas jídla jsou hodiny (18:00, `datetime-local`) a akce je vedená v pražském
+            // pásmu; plánovač porovnává `remind_at` s `now()` v UTC — proto okamžik v UTC.
+            $okamzik = Cas::zHodin($plannedFor);
             foreach ($members as $memberId) {
-                if ($plannedFor->isAfter(now()->addHours(2))) {
-                    DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $plannedFor->copy()->subHours(2), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+                if ($okamzik->isAfter(now()->addHours(2))) {
+                    DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $okamzik->subHours(2)->utc(), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
                 }
             }
 

@@ -15,6 +15,7 @@ use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\TripDayShiftService;
 use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Travel\TransportSearchService;
+use App\Support\Cas;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -599,11 +600,14 @@ class TripController extends Controller
             'metadata' => ['kind' => 'trip_revisit'],
         ]);
         $memberIds = $event->participants()->pluck('users.id');
+        // Termín z `datetime-local` jsou pražské hodiny (tak se ukládá i `starts_at`);
+        // plánovač porovnává `remind_at` s `now()` v UTC, proto okamžik v UTC.
+        $remindAt = Cas::zHodin($startsAt)->subMinutes((int) ($data['reminder_minutes'] ?? 10080))->utc();
         foreach ($memberIds as $memberId) {
             $event->reminders()->create([
                 'user_id' => $memberId,
                 'channel' => 'database',
-                'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 10080)),
+                'remind_at' => $remindAt,
                 'status' => 'pending',
             ]);
         }

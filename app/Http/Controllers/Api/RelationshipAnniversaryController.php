@@ -164,10 +164,13 @@ class RelationshipAnniversaryController extends Controller
             // half-year events use ordinary mobile/browser event reminders.
             if ($key !== 'annual') {
                 $event->reminders()->delete();
-                if ($startsAt->isFuture()) {
+                // 18:00 jsou pražské hodiny (tak se ukládá i `starts_at`); plánovač
+                // porovnává `remind_at` s `now()` v UTC, proto okamžik v UTC.
+                $okamzik = Cas::zHodin($startsAt);
+                if ($okamzik->isFuture()) {
                     foreach ($members as $memberId) {
                         foreach ($reminderDays as $days) {
-                            $remindAt = $startsAt->copy()->subDays($days);
+                            $remindAt = $okamzik->subDays($days)->utc();
                             if ($remindAt->gte(now())) {
                                 $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending']);
                             }

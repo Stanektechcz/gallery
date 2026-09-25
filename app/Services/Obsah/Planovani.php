@@ -253,20 +253,39 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        /*
+         * Zamýšlený okamžik (`original_remind_at`) má přednost před tím, kdy
+         * připomínka opravdu odejde. „Týden předem" nastavené tři dny před
+         * akcí se posílá hned a odložená připomínka má `remind_at` posunuté —
+         * podle `remind_at` by se volba v dialogu přečetla jako jiná.
+         */
+        $puvodni = Tabulky::sloupec('event_reminders', 'original_remind_at');
+
         return DB::table('event_reminders as p')
             ->join('calendar_events as e', 'e.id', '=', 'p.event_id')
             ->where('e.gallery_space_id', $prostor->id)
             ->orderBy('p.remind_at')
-            ->get(['p.event_id', 'p.remind_at', 'e.starts_at'])
+            ->get(array_merge(['p.event_id', 'p.remind_at', 'e.starts_at'], $puvodni ? ['p.original_remind_at'] : []))
             ->groupBy('event_id')
             ->map(function (Collection $r) {
                 $prvni = $r->first();
-                $hodin = CarbonImmutable::parse($prvni->remind_at)
-                    ->diffInHours(CarbonImmutable::parse($prvni->starts_at), false);
+                $okamzik = ($prvni->original_remind_at ?? null) ?: $prvni->remind_at;
+                /*
+                 * `remind_at` je okamžik v UTC, `starts_at` pražské hodiny —
+                 * rozdíl se počítá mezi skutečnými okamžiky. „Ráno" (sedmá
+                 * v den akce) je od začátku nejvýš 17 hodin, „den předem"
+                 * nejméně 23; hranice 20 hodin je tak rozliší i u večerní
+                 * akce a i u připomínek uložených dřív v pražských hodinách
+                 * (ty jsou o hodinu či dvě blíž začátku). S hranicí 12 hodin
+                 * se „ráno" u akce po sedmnácté četlo jako „den předem" a
+                 * další uložení dialogu připomínku přesunulo na předchozí den.
+                 */
+                $hodin = CarbonImmutable::parse($okamzik, 'UTC')
+                    ->diffInHours(Cas::zHodin($prvni->starts_at), false);
 
                 return match (true) {
                     $hodin >= 120 => 'týden předem',
-                    $hodin >= 12 => 'den předem',
+                    $hodin >= 20 => 'den předem',
                     default => 'ráno',
                 };
             })

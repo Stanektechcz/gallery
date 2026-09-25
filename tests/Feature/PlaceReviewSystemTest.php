@@ -37,6 +37,17 @@ class PlaceReviewSystemTest extends TestCase
         $this->actingAs($this->owner);
     }
 
+    /** Připomínka plánované návštěvy místa je okamžik v UTC, ne pražské hodiny. */
+    public function test_place_plan_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+
+        $this->postJson("/api/v1/places/{$this->place->id}/plans", ['planned_for' => '2026-07-10', 'reminder_minutes' => 1440])->assertCreated();
+
+        // 10. 7. v 10:00 v Praze (SELČ) = 08:00 UTC; den předem.
+        $this->assertSame('2026-07-09 08:00:00', substr((string) DB::table('event_reminders')->where('user_id', $this->owner->id)->value('remind_at'), 0, 19));
+    }
+
     public function test_partners_can_rate_one_visit_independently_with_menu_items_and_photos(): void
     {
         $plan = $this->postJson("/api/v1/places/{$this->place->id}/plans", ['planned_for' => now()->subDay()->toDateString()])->assertCreated()->json();

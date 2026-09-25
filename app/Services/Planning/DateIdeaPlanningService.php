@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\CoupleDateIdea;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -85,7 +86,9 @@ class DateIdeaPlanningService
                 $event->reminders()->create([
                     'user_id' => $memberId,
                     'channel' => 'database',
-                    'remind_at' => $start->copy()->subMinutes($reminderMinutes)->max(now()->addMinute()),
+                    // Začátek jsou pražské hodiny (tak se ukládá i `starts_at`); plánovač
+                    // porovnává `remind_at` s `now()` v UTC, proto okamžik v UTC.
+                    'remind_at' => Cas::zHodin($start)->subMinutes($reminderMinutes)->utc()->max(now()->addMinute()),
                     'status' => 'pending',
                 ]);
             }

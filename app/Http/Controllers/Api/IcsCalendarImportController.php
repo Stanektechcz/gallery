@@ -77,7 +77,10 @@ class IcsCalendarImportController extends Controller
                         $event->reminders()->create([
                             'user_id' => $memberId,
                             'channel' => 'database',
-                            'remind_at' => $event->starts_at->copy()->subMinutes((int) $data['reminder_minutes']),
+                            // `starts_at` se uložil v hodinách pásma kalendáře (TZID) a čte se
+                            // zpátky jako UTC; plánovač ale porovnává `remind_at` s `now()`
+                            // v UTC. Z rozebraného data (i s pásmem) je to skutečný okamžik.
+                            'remind_at' => $row['starts_at']->copy()->subMinutes((int) $data['reminder_minutes'])->utc(),
                             'status' => 'pending',
                         ]);
                         $remindersCreated++;

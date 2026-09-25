@@ -317,25 +317,62 @@ class PlanovaniVeStavu
             return;
         }
 
-        $zacatek = CarbonImmutable::parse($u->starts_at);
+        /*
+         * `starts_at` je zapsaný podle pražských hodin, `remind_at` ale
+         * plánovač porovnává s `now()` v UTC. Počítalo se v hodinách a
+         * ukládalo bez převodu, takže „den předem" chodil o hodinu či dvě
+         * později a „ráno" v létě v devět místo v sedm. Počítá se proto
+         * v pražském čase (sedmá ráno je sedmá podle hodin i přes změnu
+         * času) a ukládá se okamžik v UTC — jako v `ReminderActionController`.
+         */
+        $zacatek = Cas::zHodin($u->starts_at);
 
-        $kdy = match ($volba) {
+        $podleHodin = match ($volba) {
             'týden předem' => $zacatek->subWeek(),
             'den předem' => $zacatek->subDay(),
             // „Ráno v den události“ — v sedm, ne v okamžik začátku.
             default => $zacatek->startOfDay()->addHours(7),
         };
+        $kdy = $podleHodin->utc();
+
+        // Totéž, jak se to ukládalo před opravou: pražské hodiny v UTC sloupci.
+        $postaru = CarbonImmutable::parse($podleHodin->format('Y-m-d H:i:s'), 'UTC');
 
         /*
-         * Připomínka na tentýž okamžik už je — i doručená.
+         * Zamýšlený okamžik volby se drží v `original_remind_at` — stejně jako
+         * u odložené připomínky. `remind_at` totiž může být jiný: „hned"
+         * u volby, jejíž čas už uplynul (níž), nebo odložení z oznámení.
+         * Podle něj se volba pozná při dalším uložení i při čtení do dialogu.
+         */
+        $maPuvodni = Tabulky::sloupec('event_reminders', 'original_remind_at');
+        $tataVolba = fn ($q) => $q->where(fn ($v) => $v->where('remind_at', $kdy)
+            ->when($maPuvodni, fn ($p) => $p->orWhere('original_remind_at', $kdy)));
+
+        /*
+         * Připomínka na tutéž volbu už je — i doručená.
          *
          * Každé uložení kalendáře mazalo čekající a zakládalo novou. U doručené
          * tak vznikla další čekající s okamžikem v minulosti a plánovač ji
          * poslal znovu: úprava jedné události rozeslala oběma připomínky všech
          * událostí za poslední čtvrtrok.
          */
-        if ($vlastni()->where('remind_at', $kdy)->exists()) {
-            $vlastni()->where('status', 'pending')->where('remind_at', '!=', $kdy)->delete();
+        $stejne = $vlastni()->where($tataVolba)->pluck('id')->all();
+
+        if ($stejne !== []) {
+            // Podle čísel, ne `whereNot`: prázdné `original_remind_at` by
+            // v negaci dalo NULL a jinou čekající volbu by nesmazalo.
+            $vlastni()->where('status', 'pending')->whereNotIn('id', $stejne)->delete();
+
+            return;
+        }
+
+        /*
+         * Připomínka založená před opravou nese v `remind_at` pražské hodiny
+         * (o hodinu či dvě později, než měla). Doručená se znovu neposílá;
+         * čekající se níž nahradí správnou.
+         */
+        if ($vlastni()->where('status', '!=', 'pending')->where('remind_at', $postaru)->exists()) {
+            $vlastni()->where('status', 'pending')->delete();
 
             return;
         }
@@ -346,6 +383,13 @@ class PlanovaniVeStavu
         if ($zacatek->isPast()) {
             return;
         }
+
+        /*
+         * Čas volby už uplynul, akce ale ještě ne („týden předem" nastavené
+         * tři dny před akcí): připomínka se pošle hned. Zahodit ji by znamenalo,
+         * že dialog volbu tiše zapomene a člověk nedostane nic.
+         */
+        $odeslat = $kdy->isPast() ? CarbonImmutable::now('UTC') : $kdy;
 
         /*
          * Připomínka patří tomu, koho se akce týká.
@@ -361,11 +405,11 @@ class PlanovaniVeStavu
                 'event_id' => $u->id,
                 'user_id' => $komu,
                 'channel' => 'database',
-                'remind_at' => $kdy,
+                'remind_at' => $odeslat,
                 'status' => 'pending',
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ] + ($maPuvodni ? ['original_remind_at' => $kdy] : []));
         }
     }
 

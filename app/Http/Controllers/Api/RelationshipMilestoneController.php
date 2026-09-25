@@ -116,12 +116,15 @@ class RelationshipMilestoneController extends Controller
         ], $shared ? null : [$user->id]);
 
         $members = $event->participants()->get(['users.id']);
+        // Termín z `datetime-local` jsou pražské hodiny (tak se ukládá i `starts_at`);
+        // plánovač porovnává `remind_at` s `now()` v UTC, proto okamžik v UTC.
+        $remindAt = Cas::zHodin($startsAt)->subMinutes((int) ($data['reminder_minutes'] ?? 10080))->utc();
         foreach ($members as $member) {
             EventReminder::create([
                 'event_id' => $event->id,
                 'user_id' => $member->id,
                 'channel' => 'database',
-                'remind_at' => $startsAt->copy()->subMinutes((int) ($data['reminder_minutes'] ?? 10080)),
+                'remind_at' => $remindAt,
                 'status' => 'pending',
             ]);
         }

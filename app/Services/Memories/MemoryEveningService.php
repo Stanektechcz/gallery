@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -62,9 +63,16 @@ class MemoryEveningService
                 'metadata' => array_filter(['kind' => 'memory_evening', 'memory_evening' => true, 'memory_evening_uuid' => $eveningUuid, 'fingerprint' => $data['fingerprint'], 'board_uuid' => $boardUuid, 'memory_moment_uuids' => $data['source_moment_uuids'] ?? null, 'href' => '/memories#memory-evenings'], fn ($value) => $value !== null),
             ]);
             $members = $event->participants()->pluck('users.id');
+            /*
+             * Termín večera jsou pražské hodiny (z `datetime-local` bez pásma nebo
+             * z pražského `nextFreeEvening()`) a tak se ukládá i `starts_at`.
+             * `remind_at` ale plánovač porovnává s `now()` v UTC — bez převodu
+             * chodila připomínka o hodinu či dvě později.
+             */
+            $okamzik = Cas::zHodin($scheduled);
             foreach ($members as $memberId) {
                 foreach ([1440, 30] as $minutes) {
-                    $remindAt = $scheduled->copy()->subMinutes($minutes);
+                    $remindAt = $okamzik->subMinutes($minutes)->utc();
                     if ($remindAt->isFuture()) {
                         DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $remindAt, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
                     }

@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Models\CalendarEvent;
 use App\Models\EventReminder;
 use App\Models\User;
 use App\Notifications\EventReminderNotification;
@@ -94,12 +95,16 @@ class DeliverPlanningRemindersCommand extends Command
      * screen, so it deliberately carries no private detail beyond what is already in the
      * event's own title.
      */
-    private function pushBody(mixed $event): string
+    private function pushBody(CalendarEvent $event): string
     {
         $parts = [];
 
-        if ($event->starts_at) {
-            $parts[] = $event->starts_at->timezone('Europe/Prague')->format('j. n. H:i');
+        // Stejný začátek jako v e-mailu. Dřív tu byl `->timezone('Europe/Prague')`,
+        // jenže `starts_at` je (až na promítání z kina) už v pražských hodinách,
+        // a push tak ohlásil akci v 18:00 na 20:00 (v zimě na 19:00).
+        $zacatek = EventReminderNotification::zacatek($event);
+        if ($zacatek) {
+            $parts[] = $zacatek->format('j. n. H:i');
         }
         if (! empty($event->place_name)) {
             $parts[] = $event->place_name;

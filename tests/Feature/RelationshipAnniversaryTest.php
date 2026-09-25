@@ -13,6 +13,30 @@ class RelationshipAnniversaryTest extends TestCase
 {
     use RefreshDatabase;
 
+    /**
+     * Připomínky prvního měsíce a půl roku jsou okamžik v UTC.
+     *
+     * Oslava je v 18:00 podle pražských hodin (tak se ukládá i začátek akce);
+     * plánovač porovnává `remind_at` s `now()` v UTC — dřív chodily později.
+     */
+    public function test_anniversary_reminders_are_stored_as_utc_moments(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        $owner = User::factory()->create(['role' => 'owner']);
+        $space = GallerySpace::create(['uuid' => (string) Str::uuid(), 'name' => 'My dva', 'slug' => 'my-dva', 'owner_id' => $owner->id]);
+        $space->members()->attach($owner->id, ['role' => 'owner', 'can_delete' => true, 'can_share' => true]);
+
+        $this->actingAs($owner)->putJson('/api/v1/relationship-milestones/relationship-anniversary', [
+            'gallery_space_id' => $space->id, 'started_on' => '2026-06-15', 'reminder_days' => [7],
+        ])->assertOk();
+
+        $kdy = DB::table('event_reminders')->where('user_id', $owner->id)->orderBy('remind_at')
+            ->pluck('remind_at')->map(fn ($v) => substr((string) $v, 0, 19))->all();
+
+        // 15. 7. v 18:00 SELČ = 16:00 UTC; 15. 12. v 18:00 SEČ = 17:00 UTC — vždy týden předem.
+        $this->assertSame(['2026-07-08 16:00:00', '2026-12-08 17:00:00'], $kdy);
+    }
+
     public function test_relationship_start_creates_shared_monthly_half_year_and_recurring_annual_plan(): void
     {
         $owner = User::factory()->create(['role' => 'owner']);

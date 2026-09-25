@@ -53,6 +53,27 @@ class DateIdeaGeneratorTest extends TestCase
         $this->assertDatabaseHas('couple_date_idea_reactions', ['user_id' => $partner->id, 'reaction' => 'love']);
     }
 
+    /** Připomínka naplánovaného nápadu je okamžik v UTC, ne pražské hodiny. */
+    public function test_planned_idea_reminder_is_stored_as_utc_moment(): void
+    {
+        $this->travelTo('2026-07-01 08:00:00');
+        [$owner, , $space] = $this->couple();
+        $idea = $this->actingAs($owner)->postJson('/api/v1/date-ideas/generate', [
+            'gallery_space_id' => $space->id, 'count' => 1, 'theme' => 'romantic', 'budget_max' => 1000,
+            'travel_scope' => 'city', 'transport_mode' => 'transit', 'duration' => 'evening', 'setting' => 'any',
+            'energy' => 'medium', 'food' => 'any', 'weather_aware' => false,
+            'destination' => ['location_name' => 'Brno', 'latitude' => 49.1951, 'longitude' => 16.6068],
+        ])->assertCreated()->json('ideas.0');
+
+        $response = $this->actingAs($owner)->postJson("/api/v1/date-ideas/{$idea['uuid']}/plan", [
+            'starts_at' => '2026-07-08T18:00', 'create_trip' => false, 'reminder_minutes' => 180,
+        ])->assertSuccessful();
+
+        // 18:00 v Praze (SELČ) = 16:00 UTC; tři hodiny předem 13:00 UTC.
+        $event = CalendarEvent::where('uuid', $response->json('event_uuid'))->firstOrFail();
+        $this->assertSame('2026-07-08 13:00:00', substr((string) DB::table('event_reminders')->where('event_id', $event->id)->where('user_id', $owner->id)->value('remind_at'), 0, 19));
+    }
+
     public function test_an_idea_becomes_one_shared_calendar_plan_with_reminders_and_tasks(): void
     {
         [$owner, $partner, $space] = $this->couple();
