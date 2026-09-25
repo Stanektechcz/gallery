@@ -118,8 +118,27 @@ class WebauthnController extends Controller
             throw ValidationException::withMessages(['response' => 'Klíč se nepodařilo ověřit — zkuste to znovu.']);
         }
 
+        $idKlice = $this->doB64($zaznam->publicKeyCredentialId);
+
+        /*
+         * Klíč jiného účtu se nepřepíše.
+         *
+         * Identifikátory klíčů vydávají volby přihlášení každému, kdo zná
+         * e-mail, a softwarový autentikátor si identifikátor zvolí sám.
+         * `updateOrCreate` níž by pak cizí řádek předal tomuhle účtu i s novým
+         * veřejným klíčem a původní majitel by se otiskem už nepřihlásil.
+         * Hláška je obecná — neříká, komu klíč patří.
+         */
+        $cizi = WebauthnCredential::where('credential_id', $idKlice)
+            ->where('user_id', '!=', $user->id)
+            ->exists();
+
+        if ($cizi) {
+            throw ValidationException::withMessages(['response' => 'Klíč se nepodařilo ověřit — zkuste to znovu.']);
+        }
+
         WebauthnCredential::updateOrCreate(
-            ['credential_id' => $this->doB64($zaznam->publicKeyCredentialId)],
+            ['credential_id' => $idKlice],
             [
                 'user_id' => $user->id,
                 'public_key' => $this->doB64($zaznam->credentialPublicKey),

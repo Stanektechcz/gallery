@@ -301,6 +301,40 @@ class OtiskTest extends TestCase
             ->assertStatus(422);
     }
 
+    /**
+     * Cizí účet si nepřivlastní klíč, který už někomu patří.
+     *
+     * Identifikátor klíče vydají volby přihlášení každému, kdo zná e-mail,
+     * a softwarový autentikátor si identifikátor zvolí sám. Registrace
+     * (`updateOrCreate` podle identifikátoru) pak řádek předala druhému účtu
+     * i s jeho veřejným klíčem — původní majitel se otiskem už nepřihlásil.
+     */
+    public function test_ciziho_klice_se_registrace_nezmocni(): void
+    {
+        $autentikator = $this->zaregistruj();
+        $this->flushHeaders();
+        // Strážce si mezi požadavky testu pamatuje ověřeného uživatele — bez
+        // tohohle by další požadavek s cizím tokenem běžel dál jako Adri.
+        $this->app['auth']->forgetGuards();
+
+        $cizi = User::factory()->create(['email' => 'cizi@vzpominky.test', 'password' => Hash::make('jinde2026')]);
+        $jinde = GallerySpace::create(['name' => 'Jinde', 'owner_id' => $cizi->id]);
+        $cizi->gallerySpaces()->syncWithoutDetaching([$jinde->id => ['role' => 'owner']]);
+        $token = $this->postJson('/sanctum/token', [
+            'email' => $cizi->email, 'password' => 'jinde2026', 'device_name' => 'telefon',
+        ])->json('token');
+
+        $volby = $this->withHeader('Authorization', 'Bearer '.$token)
+            ->postJson('/api/webauthn/register/options')->assertOk();
+        $this->postJson('/api/webauthn/register', $autentikator->registrace($volby->json('challenge'), 'podvrh'))
+            ->assertStatus(422);
+
+        $this->assertSame($this->adri->id, WebauthnCredential::sole()->user_id, 'Klíč přešel na cizí účet.');
+        $this->flushHeaders();
+        $this->app['auth']->forgetGuards();
+        $this->prihlas($autentikator)->assertOk();
+    }
+
     // ——— pomocné ———
 
     /** Přihlásí Adriho heslem a vrátí testovacího klienta s jeho tokenem. */
