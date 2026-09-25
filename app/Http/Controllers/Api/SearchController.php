@@ -18,11 +18,15 @@ use App\Services\Search\EntityMatcher;
 use App\Services\Search\QueryInterpreter;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class SearchController extends Controller
 {
+    /** Nejvyšší počet id v jednom filtru (`tag_ids`, `person_ids`). */
+    private const MAX_ID_FILTER = 500;
+
     /**
      * GET /api/v1/search
      * Full-text + structured filter search — no AI.
@@ -50,6 +54,7 @@ class SearchController extends Controller
         ]);
         $user = $request->user();
         $space = $user->gallerySpaces()->first();
+        abort_if($space === null, 403, 'Nemáte přiřazený prostor galerie.');
 
         $dotaz = trim((string) ($validated['q'] ?? ''));
 
@@ -118,7 +123,13 @@ class SearchController extends Controller
             $query->where('taken_at', '>=', $dateFrom);
         }
         if ($dateTo = ($filters['date_to'] ?? null)) {
-            $query->where('taken_at', '<=', $dateTo);
+            // Datum bez času značí celý den — jinak by „do 1. 5." uříznulo fotky
+            // pořízené kdykoli po půlnoci téhož dne.
+            $konecDne = Carbon::parse($dateTo);
+            if (! str_contains((string) $dateTo, ':')) {
+                $konecDne = $konecDne->endOfDay();
+            }
+            $query->where('taken_at', '<=', $konecDne);
         }
         if ($filters['has_gps'] ?? false) {
             $query->whereNotNull('latitude')->whereNotNull('longitude');
@@ -153,12 +164,16 @@ class SearchController extends Controller
                 ->pluck('descendant_id');
             $query->whereHas('albums', fn ($q) => $q->whereIn('albums.id', $albumIds));
         }
+        // Omezení počtu položek: bez něj by dotaz s `whereIn()` mohl narazit na
+        // limit počtu vazebních značek databáze.
         if ($tagIds = $request->input('tag_ids')) {
             $tagIdArray = is_array($tagIds) ? $tagIds : explode(',', $tagIds);
+            abort_if(count($tagIdArray) > self::MAX_ID_FILTER, 422, 'Příliš mnoho štítků ve filtru.');
             $query->whereHas('tags', fn ($q) => $q->whereIn('tags.id', $tagIdArray));
         }
         if ($personIds = $request->input('person_ids')) {
             $personIdArray = is_array($personIds) ? $personIds : explode(',', $personIds);
+            abort_if(count($personIdArray) > self::MAX_ID_FILTER, 422, 'Příliš mnoho osob ve filtru.');
             $query->whereHas('people', fn ($q) => $q->whereIn('people.id', $personIdArray));
         }
         if ($minSize = $request->input('min_size')) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\GallerySpace;
 use App\Models\SavedSearch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -11,7 +12,7 @@ class SavedSearchController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->requireSpace($request);
         $searches = SavedSearch::where('gallery_space_id', $space->id)
             ->where(fn ($query) => $query
                 ->where('user_id', $request->user()->id)
@@ -27,7 +28,7 @@ class SavedSearchController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate($this->rules());
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->requireSpace($request);
         $search = SavedSearch::create(array_merge($data, ['user_id' => $request->user()->id, 'gallery_space_id' => $space->id]));
 
         return response()->json($search, 201);
@@ -65,9 +66,10 @@ class SavedSearchController extends Controller
 
         return [
             'name' => "{$required}|string|max:100",
-            'filters_json' => "{$required}|array",
+            // Bez omezení počtu položek by šlo uložit libovolně velký JSON.
+            'filters_json' => "{$required}|array|max:50",
             'view_type' => 'sometimes|in:grid,timeline,map,calendar,table',
-            'layout_config' => 'nullable|array',
+            'layout_config' => 'nullable|array|max:50',
             'sort_by' => 'sometimes|in:taken_at,uploaded_at,rating,size_bytes,original_filename',
             'sort_direction' => 'sometimes|in:asc,desc',
             'icon' => 'nullable|string|max:20',
@@ -90,5 +92,14 @@ class SavedSearchController extends Controller
     private function authorizeOwner(Request $request, SavedSearch $savedSearch): void
     {
         abort_unless($savedSearch->user_id === $request->user()->id, 404);
+    }
+
+    /** Prostor přihlášeného, nebo čistá 403 — účet bez prostoru nemá co ukládat. */
+    private function requireSpace(Request $request): GallerySpace
+    {
+        $space = $request->user()->gallerySpaces()->first();
+        abort_if($space === null, 403, 'Nemáte přiřazený prostor galerie.');
+
+        return $space;
     }
 }

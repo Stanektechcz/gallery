@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Album;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Services\Media\SmartAlbumService;
 use Illuminate\Http\JsonResponse;
@@ -41,9 +42,10 @@ class SmartAlbumController extends Controller
             'album_type' => 'required|in:physical,smart',
             'smart_rules' => 'nullable|array',
             'smart_rules.match' => 'nullable|in:all,any',
-            'smart_rules.conditions' => 'nullable|array',
-            'smart_rules.conditions.*.field' => 'required|string',
-            'smart_rules.conditions.*.op' => 'required|string',
+            // Bez omezení počtu podmínek by se dal uložit libovolně velký JSON.
+            'smart_rules.conditions' => 'nullable|array|max:50',
+            'smart_rules.conditions.*.field' => 'required|string|max:100',
+            'smart_rules.conditions.*.op' => 'required|string|max:30',
             'smart_rules.conditions.*.value' => 'nullable',
         ]);
 
@@ -63,7 +65,7 @@ class SmartAlbumController extends Controller
     public function preview(Request $request, string $uuid): JsonResponse
     {
         $album = $this->resolve($uuid, $request);
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->requireSpace($request);
 
         if (($album->album_type ?? 'physical') !== 'smart' || ! $album->smart_rules) {
             return response()->json(['count' => 0, 'samples' => []]);
@@ -81,10 +83,19 @@ class SmartAlbumController extends Controller
 
     private function resolve(string $uuid, Request $request): Album
     {
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->requireSpace($request);
 
         return Album::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->firstOrFail();
+    }
+
+    /** Prostor přihlášeného, nebo čistá 403 — účet bez prostoru nemá co spravovat. */
+    private function requireSpace(Request $request): GallerySpace
+    {
+        $space = $request->user()->gallerySpaces()->first();
+        abort_if($space === null, 403, 'Nemáte přiřazený prostor galerie.');
+
+        return $space;
     }
 }

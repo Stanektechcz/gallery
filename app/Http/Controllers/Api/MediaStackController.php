@@ -31,14 +31,23 @@ class MediaStackController extends Controller
 
     public function show(Request $request, string $uuid): JsonResponse
     {
-        return response()->json($this->stack($request, $uuid)->load(['items.variants', 'cover']));
+        // Fotky z trezoru a z koše se v detailu stacku nevydávají.
+        return response()->json($this->stack($request, $uuid)->load([
+            'items' => fn ($q) => $q->where('is_hidden', false)->whereNull('trashed_at'),
+            'items.variants',
+            'cover',
+        ]));
     }
 
     public function setCover(Request $request, string $uuid): JsonResponse
     {
         $data = $request->validate(['media_id' => ['required', 'integer']]);
         $stack = $this->stack($request, $uuid);
-        abort_unless($stack->items()->where('media_items.id', $data['media_id'])->exists(), 422, 'Fotografie není součástí stacku.');
+        abort_unless(
+            $stack->items()->where('media_items.id', $data['media_id'])->where('is_hidden', false)->whereNull('trashed_at')->exists(),
+            422,
+            'Fotografie není součástí stacku.'
+        );
 
         DB::transaction(function () use ($stack, $data) {
             DB::table('media_stack_items')->where('media_stack_id', $stack->id)->update(['is_cover' => false]);

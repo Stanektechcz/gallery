@@ -4,9 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Album;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
 class TimelineController extends Controller
@@ -18,7 +21,7 @@ class TimelineController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->requireSpace($user);
 
         $query = MediaItem::query()
             ->where('gallery_space_id', $space->id)
@@ -26,11 +29,21 @@ class TimelineController extends Controller
             ->where('is_archived', false)
             ->where('is_hidden', false)
             ->where('status', 'ready')
+            // Vyřadit smí jen položku stacku, jejíž titulní fotka je pořád vidět —
+            // titulka v trezoru nebo v koši by jinak schovala i zbytek stacku, který
+            // vidět je.
             ->whereNotExists(function ($query) {
                 $query->selectRaw('1')
-                    ->from('media_stack_items')
-                    ->whereColumn('media_stack_items.media_item_id', 'media_items.id')
-                    ->where('media_stack_items.is_cover', false);
+                    ->from('media_stack_items as msi')
+                    ->join('media_stack_items as titulni', function ($join) {
+                        $join->on('titulni.media_stack_id', '=', 'msi.media_stack_id')
+                            ->where('titulni.is_cover', true);
+                    })
+                    ->join('media_items as titulni_fotka', 'titulni_fotka.id', '=', 'titulni.media_item_id')
+                    ->whereColumn('msi.media_item_id', 'media_items.id')
+                    ->where('msi.is_cover', false)
+                    ->where('titulni_fotka.is_hidden', false)
+                    ->whereNull('titulni_fotka.trashed_at');
             })
             ->with([
                 'variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'video_poster', 'placeholder']),
@@ -60,7 +73,9 @@ class TimelineController extends Controller
             $query->where('taken_at', '>=', $dateFrom);
         }
         if ($dateTo = $request->input('date_to')) {
-            $query->where('taken_at', '<=', $dateTo);
+            // Datum bez času značí celý den — jinak by „do 1. 5." uříznul fotky
+            // pořízené kdykoli po půlnoci téhož dne.
+            $query->where('taken_at', '<=', $this->konecDne($dateTo));
         }
         if ($request->boolean('favorites_only')) {
             $query->where('is_favorite', true);
@@ -110,7 +125,7 @@ class TimelineController extends Controller
     public function buckets(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->requireSpace($user);
         $driver = DB::connection()->getDriverName();
         $yearSql = $driver === 'sqlite' ? "CAST(strftime('%Y', taken_at) AS INTEGER)" : 'YEAR(taken_at)';
         $monthSql = $driver === 'sqlite' ? "CAST(strftime('%m', taken_at) AS INTEGER)" : 'MONTH(taken_at)';
@@ -137,7 +152,7 @@ class TimelineController extends Controller
     public function mapPoints(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->requireSpace($user);
 
         $points = MediaItem::query()
             ->where('gallery_space_id', $space->id)
@@ -192,9 +207,11 @@ class TimelineController extends Controller
     public function memories(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->requireSpace($user);
 
-        $today = now();
+        // Pražský den, ne UTC — mezi půlnocí a druhou hodinou ranní je to jinde
+        // jiné datum a „tento den" by bral fotky ze včerejška.
+        $today = Cas::dnes();
         $month = $today->month;
         $day = $today->day;
 
@@ -228,10 +245,10 @@ class TimelineController extends Controller
     public function calendar(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->requireSpace($user);
 
-        $year = (int) $request->input('year', now()->year);
-        $month = (int) $request->input('month', now()->month);
+        $year = (int) $request->input('year', Cas::dnes()->year);
+        $month = (int) $request->input('month', Cas::dnes()->month);
         $daySql = DB::connection()->getDriverName() === 'sqlite' ? "CAST(strftime('%d', taken_at) AS INTEGER)" : 'DAY(taken_at)';
 
         $days = MediaItem::query()
@@ -272,5 +289,25 @@ class TimelineController extends Controller
             'month' => $month,
             'days' => $days->map(fn ($d) => array_merge($d->toArray(), ['thumb' => $thumbs[$d->day]])),
         ]);
+    }
+
+    /** Prostor přihlášeného, nebo čistá 403 — účet bez prostoru nemá co listovat. */
+    private function requireSpace($user): GallerySpace
+    {
+        $space = $user->gallerySpaces()->first();
+        abort_if($space === null, 403, 'Nemáte přiřazený prostor galerie.');
+
+        return $space;
+    }
+
+    /**
+     * `date_to` bez času znamená celý den — s holým datem by dotaz `<=`
+     * uřízl všechno pořízené po půlnoci téhož dne.
+     */
+    private function konecDne(string $datum): Carbon
+    {
+        $carbon = Carbon::parse($datum);
+
+        return str_contains($datum, ':') ? $carbon : $carbon->endOfDay();
     }
 }

@@ -14,7 +14,11 @@ class PersonController extends Controller
     public function index(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->firstOrFail();
-        $people = Person::where('gallery_space_id', $space->id)->withCount('media')->orderBy('name')->get()
+        // Počet i výpis se počítají jen z viditelných fotek — trezor a koš se do
+        // karty osoby nedostanou, dokud pro ně dvojice neotevře trezor zvlášť.
+        $people = Person::where('gallery_space_id', $space->id)
+            ->withCount(['media as media_count' => fn ($q) => $q->where('is_hidden', false)->whereNull('trashed_at')])
+            ->orderBy('name')->get()
             ->map(fn (Person $person) => $this->personPayload($person));
 
         return response()->json($people);
@@ -33,7 +37,7 @@ class PersonController extends Controller
     {
         $space = $request->user()->gallerySpaces()->firstOrFail();
         $this->authorizePerson($person, $space->id);
-        $media = $person->media()->where('gallery_space_id', $space->id)->whereNull('trashed_at')->with('variants')->latest('taken_at')->limit(36)->get()
+        $media = $person->media()->where('gallery_space_id', $space->id)->whereNull('trashed_at')->where('is_hidden', false)->with('variants')->latest('taken_at')->limit(36)->get()
             ->map(fn ($item) => ['id' => $item->id, 'uuid' => $item->uuid, 'thumbnail_url' => $item->thumbnail_url, 'taken_at' => optional($item->taken_at)->toIso8601String()]);
         $albums = DB::table('album_person as link')->join('albums as album', 'album.id', '=', 'link.album_id')->where('link.person_id', $person->id)->where('album.gallery_space_id', $space->id)->whereNull('album.deleted_at')->orderByDesc('album.created_at')->limit(12)->get(['album.id', 'album.uuid', 'album.title']);
         $giftQuery = DB::table('gift_ideas')->where('gallery_space_id', $space->id)->where('person_id', $person->id)->whereNotIn('status', ['archived']);
@@ -109,6 +113,13 @@ class PersonController extends Controller
     {
         $person->loadMissing('cover.variants');
 
-        return ['id' => $person->id, 'name' => $person->name, 'nickname' => $person->nickname, 'description' => $person->description, 'birth_date' => optional($person->birth_date)->toDateString(), 'is_favorite' => (bool) $person->is_favorite, 'is_hidden' => (bool) $person->is_hidden, 'media_count' => (int) ($person->media_count ?? $person->media()->count()), 'latest_thumb' => $person->cover?->thumbnail_url];
+        // Titulní fotka z trezoru nebo z koše se nevydává — karta osoby by jinak
+        // ukázala náhled něčeho, co dvojice schválně schovala.
+        $cover = $person->cover;
+        $coverVisible = $cover !== null && ! $cover->is_hidden && $cover->trashed_at === null;
+        $mediaCount = $person->media_count
+            ?? $person->media()->where('is_hidden', false)->whereNull('trashed_at')->count();
+
+        return ['id' => $person->id, 'name' => $person->name, 'nickname' => $person->nickname, 'description' => $person->description, 'birth_date' => optional($person->birth_date)->toDateString(), 'is_favorite' => (bool) $person->is_favorite, 'is_hidden' => (bool) $person->is_hidden, 'media_count' => (int) $mediaCount, 'latest_thumb' => $coverVisible ? $cover->thumbnail_url : null];
     }
 }

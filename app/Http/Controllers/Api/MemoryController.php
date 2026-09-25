@@ -22,7 +22,8 @@ class MemoryController extends Controller
             'fingerprint' => 'required|string|size:64',
             'memory_type' => 'required|in:'.implode(',', MemoryDiscoveryService::TYPES),
             'action' => 'required|in:saved,dismissed,snoozed',
-            'metadata' => 'nullable|array',
+            // Bez omezení počtu položek by šlo uložit libovolně velký JSON.
+            'metadata' => 'nullable|array|max:50',
         ]);
 
         $interaction = MemoryInteraction::updateOrCreate(
@@ -47,13 +48,15 @@ class MemoryController extends Controller
     {
         $data = $request->validate([
             'frequency' => 'sometimes|in:more,normal,less,off',
-            'enabled_types' => 'nullable|array',
+            // Meze podle skutečně možného počtu: typů je jen pár, osob a míst v
+            // prostoru přiměřeně stovky — bez omezení šlo uložit libovolně velký JSON.
+            'enabled_types' => 'nullable|array|max:'.count(MemoryDiscoveryService::TYPES),
             'enabled_types.*' => 'in:'.implode(',', MemoryDiscoveryService::TYPES),
-            'hidden_person_ids' => 'nullable|array',
+            'hidden_person_ids' => 'nullable|array|max:500',
             'hidden_person_ids.*' => 'integer',
-            'hidden_place_ids' => 'nullable|array',
+            'hidden_place_ids' => 'nullable|array|max:500',
             'hidden_place_ids.*' => 'integer',
-            'hidden_date_ranges' => 'nullable|array',
+            'hidden_date_ranges' => 'nullable|array|max:100',
             'include_archived' => 'sometimes|boolean',
         ]);
         $preferences = MemoryPreference::updateOrCreate(['user_id' => $request->user()->id], $data);

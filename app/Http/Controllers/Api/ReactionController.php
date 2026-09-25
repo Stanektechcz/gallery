@@ -57,22 +57,30 @@ class ReactionController extends Controller
             return response()->json(['error' => 'Invalid reaction'], 422);
         }
 
-        // Remove existing
-        DB::table('media_reactions')
-            ->where('media_item_id', $media->id)
-            ->where('user_id', $user->id)
-            ->delete();
-
-        // Add new if set
-        if ($reaction) {
-            DB::table('media_reactions')->insert([
-                'media_item_id' => $media->id,
-                'user_id' => $user->id,
-                'reaction' => $reaction,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
-        }
+        // Nahrazení jedním atomickým dotazem, ne smazáním a novým vložením:
+        // dva souběžné požadavky od stejného člověka by si mezi tím stihly
+        // smazat společný řádek a oba by pak narazily na jedinečný klíč
+        // (media_item_id, user_id) při vkládání.
+        DB::transaction(function () use ($media, $user, $reaction) {
+            if ($reaction) {
+                DB::table('media_reactions')->upsert(
+                    [[
+                        'media_item_id' => $media->id,
+                        'user_id' => $user->id,
+                        'reaction' => $reaction,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]],
+                    ['media_item_id', 'user_id'],
+                    ['reaction', 'updated_at']
+                );
+            } else {
+                DB::table('media_reactions')
+                    ->where('media_item_id', $media->id)
+                    ->where('user_id', $user->id)
+                    ->delete();
+            }
+        });
 
         $counts = DB::table('media_reactions')
             ->where('media_item_id', $media->id)

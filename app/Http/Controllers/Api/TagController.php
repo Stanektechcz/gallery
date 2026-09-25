@@ -23,7 +23,11 @@ class TagController extends Controller
         $genericCounts = Schema::hasTable('tag_assignments')
             ? DB::table('tag_assignments')->selectRaw('tag_id, count(*) as aggregate')->groupBy('tag_id')->pluck('aggregate', 'tag_id')
             : collect();
-        $tags = Tag::where('gallery_space_id', $space->id)->withCount(['media', 'albums'])->orderBy('name')->get();
+        // `media_count` je jen z viditelných fotek — trezor a koš do štítku
+        // nepatří, dokud pro ně dvojice trezor zvlášť neodemkne.
+        $tags = Tag::where('gallery_space_id', $space->id)
+            ->withCount(['media as media_count' => fn ($q) => $q->where('is_hidden', false)->whereNull('trashed_at'), 'albums'])
+            ->orderBy('name')->get();
         $tags->each(function (Tag $tag) use ($genericCounts): void {
             $tag->setAttribute('connections_count', (int) $tag->media_count + (int) $tag->albums_count + (int) ($genericCounts[$tag->id] ?? 0));
         });
