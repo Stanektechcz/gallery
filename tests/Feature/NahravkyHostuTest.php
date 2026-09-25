@@ -103,6 +103,12 @@ class NahravkyHostuTest extends TestCase
         Storage::disk('local')->put($cerstvy, 'x');
         touch(Storage::disk('local')->path($sirotek), now()->subDays(3)->getTimestamp());
         touch(Storage::disk('local')->path($cekajici->storage_path), now()->subDays(30)->getTimestamp());
+        // `put()` nechává souboru čas reálných hodin systému, ne posunutý `now()`
+        // z `TESTY_CAS` — s časem daleko od reality by tak vypadal starší, než
+        // opravdu je, a úklid by ho smazal jako sirotka. Otisknout mu posunuté
+        // „teď" ho dělá nezávislým na tom, odkud čas přišel, stejně jako u obou
+        // sousedních souborů výš.
+        touch(Storage::disk('local')->path($cerstvy), now()->getTimestamp());
 
         $this->artisan('gallery:clean-temp')->assertExitCode(0);
 

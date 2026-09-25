@@ -259,9 +259,19 @@ class FinanceRozdeleniTest extends TestCase
         $this->assertEqualsWithDelta(80, $r['release']['still_short'], 0.01);
     }
 
-    /** Přerozdělení přepíše plán a po něm už není co přesouvat. */
+    /**
+     * Přerozdělení přepíše plán a po něm už není co přesouvat.
+     *
+     * Pevně desátého, ne „kdy se testy spustí". Měsíční rozpočet začíná prvním
+     * dnem běžícího měsíce a `RozdeleniService::predpovez()` počítá tempo jen
+     * od tří uběhlých dní výš — první nebo druhý den v měsíci by na tutéž
+     * pojistku narazil sám, bez ohledu na tři zapsané výdaje, a `balanced`
+     * by zůstalo `false` nezávisle na kódu.
+     */
     public function test_prerozdeleni_zapise_novy_plan(): void
     {
+        $this->travelTo(Carbon::parse('2026-09-10 12:00:00', 'UTC'));
+
         $uuid = $this->rozpocet(1000, incomeAdds: false);
 
         // Jídlo má vyhrazeno 200 a utratilo se v něm 250 nadvakrát… tedy natřikrát:
