@@ -119,7 +119,7 @@ class DashboardController extends Controller
                 ->leftJoin('trip_reflections as r', 'r.trip_id', '=', 't.id')
                 ->where('t.gallery_space_id', $space->id)
                 ->whereNull('r.id')
-                ->where(fn ($query) => $query->where('t.status', 'completed')->orWhere('t.end_date', '<', now()->toDateString()))
+                ->where(fn ($query) => $query->where('t.status', 'completed')->orWhere('t.end_date', '<', $dnes->toDateString()))
                 ->orderByDesc('t.end_date')
                 ->first(['t.id', 't.name', 't.end_date']);
         }

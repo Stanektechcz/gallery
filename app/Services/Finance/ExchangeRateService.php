@@ -3,6 +3,7 @@
 namespace App\Services\Finance;
 
 use App\Services\Integrations\FreeTravelDataService;
+use App\Support\Cas;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
@@ -51,7 +52,7 @@ class ExchangeRateService
         $na = strtoupper($na);
 
         if ($z === $na) {
-            return ['rate' => 1.0, 'date' => now()->toDateString()];
+            return ['rate' => 1.0, 'date' => Cas::dnes()->toDateString()];
         }
 
         $klic = "fx:{$z}:{$na}";
@@ -77,7 +78,7 @@ class ExchangeRateService
                 throw new \RuntimeException('Odpověď neobsahuje použitelný kurz.');
             }
 
-            $vysledek = ['rate' => $kurz, 'date' => (string) ($odpoved['date'] ?? now()->toDateString())];
+            $vysledek = ['rate' => $kurz, 'date' => (string) ($odpoved['date'] ?? Cas::dnes()->toDateString())];
             Cache::put($klic, $vysledek, now()->addHours(self::DRZET_HODIN));
 
             return $vysledek;

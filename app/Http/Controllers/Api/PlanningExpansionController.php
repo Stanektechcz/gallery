@@ -8,6 +8,7 @@ use App\Models\MediaItem;
 use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -146,11 +147,15 @@ class PlanningExpansionController extends Controller
     {
         $this->requireTables(['travel_wishlists', 'travel_wishlist_items']);
         $list = DB::table('travel_wishlists')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request->user()))->firstOrFail();
-        $from = now()->startOfDay();
-        $to = now()->addDays(90)->endOfDay();
+        // Pražský dnešek: v neděli `startOfWeek()->next(SATURDAY)` přeskočí dnešní
+        // sobotu a vrátí tu z minulého týdne — o den dřív, než dvojice čeká.
+        $dnes = Carbon::parse(Cas::dnes()->toDateString());
+        $sobota = $dnes->isSaturday() ? $dnes->copy() : $dnes->copy()->next(Carbon::SATURDAY);
+        $from = $dnes->copy();
+        $to = $dnes->copy()->addDays(90)->endOfDay();
         $events = CalendarEvent::where('gallery_space_id', $list->gallery_space_id)->whereBetween('starts_at', [$from, $to])->get(['starts_at', 'ends_at']);
-        $freeWeekends = collect(range(0, 12))->map(function (int $week) use ($events) {
-            $date = now()->startOfWeek()->addWeeks($week)->next(Carbon::SATURDAY)->startOfDay();
+        $freeWeekends = collect(range(0, 12))->map(function (int $week) use ($events, $sobota) {
+            $date = $sobota->copy()->addWeeks($week)->startOfDay();
             $busy = $events->contains(fn ($event) => $event->starts_at->betweenIncluded($date, $date->copy()->endOfDay()));
 
             return ['date' => $date->toDateString(), 'available' => ! $busy];
@@ -450,15 +455,19 @@ class PlanningExpansionController extends Controller
 
     private function nextFreeSaturday(int $spaceId): Carbon
     {
-        $events = CalendarEvent::where('gallery_space_id', $spaceId)->where('starts_at', '>=', now()->startOfDay())->get(['starts_at', 'ends_at']);
+        // Pražský dnešek, ne UTC serveru — a dnešní sobota se počítá, jen dokud
+        // ještě neuběhla desátá hodina (`Cas::ted()`), po ní patří příštímu týdnu.
+        $dnes = Carbon::parse(Cas::dnes()->toDateString());
+        $sobota = $dnes->isSaturday() && Cas::ted()->hour < 10 ? $dnes->copy() : $dnes->copy()->next(Carbon::SATURDAY);
+        $events = CalendarEvent::where('gallery_space_id', $spaceId)->where('starts_at', '>=', $dnes)->get(['starts_at', 'ends_at']);
         for ($week = 0; $week < 13; $week++) {
-            $candidate = now()->startOfWeek()->addWeeks($week)->next(Carbon::SATURDAY)->setTime(10, 0);
+            $candidate = $sobota->copy()->addWeeks($week)->setTime(10, 0);
             if (! $events->contains(fn (CalendarEvent $event) => $event->starts_at->lte($candidate->copy()->endOfDay()) && ($event->ends_at ?? $event->starts_at)->gte($candidate->copy()->startOfDay()))) {
                 return $candidate;
             }
         }
 
-        return now()->addWeeks(13)->next(Carbon::SATURDAY)->setTime(10, 0);
+        return $sobota->copy()->addWeeks(13)->setTime(10, 0);
     }
 
     private function space(User $user, int $id)

@@ -9,6 +9,7 @@ use App\Models\MediaItem;
 use App\Models\Place;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\PlaceVisitPlanningService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -481,7 +482,8 @@ class PlaceController extends Controller
         $plan = DB::table('place_plans')->where('place_id', $place->id)->where('uuid', $uuid)->where('gallery_space_id', $space->id)->firstOrFail();
         $data = $request->validate(['state' => 'nullable|in:planned,visited,cancelled', 'visited_on' => 'nullable|date', 'notes' => 'nullable|string|max:5000']);
         if (($data['state'] ?? null) === 'visited' && empty($data['visited_on'])) {
-            $data['visited_on'] = now()->toDateString();
+            // Bez zadaného data patří návštěva k dnešnímu pražskému dni, ne k UTC dni serveru.
+            $data['visited_on'] = Cas::dnes()->toDateString();
         }
         DB::table('place_plans')->where('id', $plan->id)->update($data + ['updated_at' => now()]);
         if ($plan->calendar_event_id && isset($data['state'])) {
@@ -504,7 +506,7 @@ class PlaceController extends Controller
         if (! $existing && $plan->calendar_event_id) {
             $existing = DB::table('shared_memory_moments')->where('calendar_event_id', $plan->calendar_event_id)->first();
         }
-        $row = ['place_plan_id' => $plan->id, 'calendar_event_id' => $plan->calendar_event_id, 'gallery_space_id' => $space->id, 'created_by' => $existing?->created_by ?? $request->user()->id, 'title' => $place->name, 'note' => $plan->notes ?? $place->next_time_note ?? $place->description, 'happened_on' => $plan->visited_on ?? now()->toDateString(), 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => true, 'updated_at' => now()];
+        $row = ['place_plan_id' => $plan->id, 'calendar_event_id' => $plan->calendar_event_id, 'gallery_space_id' => $space->id, 'created_by' => $existing?->created_by ?? $request->user()->id, 'title' => $place->name, 'note' => $plan->notes ?? $place->next_time_note ?? $place->description, 'happened_on' => $plan->visited_on ?? Cas::dnes()->toDateString(), 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => true, 'updated_at' => now()];
         if ($existing) {
             DB::table('shared_memory_moments')->where('id', $existing->id)->update($row);
             $id = $existing->id;

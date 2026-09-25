@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\Place;
 use App\Models\User;
 use App\Services\Integrations\FreeTravelDataService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Collection;
@@ -328,7 +329,7 @@ class DateIdeaGeneratorService
             return null;
         }
         $day = Carbon::parse($date);
-        if ($day->isBefore(now()->startOfDay()) || $day->isAfter(now()->addDays(15)->endOfDay())) {
+        if ($day->isBefore(Cas::dnes()) || $day->isAfter(Cas::dnes()->addDays(15)->endOfDay())) {
             return null;
         }
 
@@ -354,9 +355,11 @@ class DateIdeaGeneratorService
 
     private function suggestStart(GallerySpace $space, array $parameters, int $minutes): Carbon
     {
-        $base = $parameters['preferred_date'] ? Carbon::parse($parameters['preferred_date'])->startOfDay() : now()->addDay()->startOfDay();
-        if ($base->isPast()) {
-            $base = now()->addDay()->startOfDay();
+        // `isPast()` je pravda skoro pořád po půlnoci — výslovně zadané „dnes" tak
+        // vždy skončilo jako „zítra". Srovnává se datum s dneškem, ne půlnoc s okamžikem.
+        $base = $parameters['preferred_date'] ? Carbon::parse($parameters['preferred_date'])->startOfDay() : Carbon::parse(Cas::dnes()->addDay()->toDateString());
+        if ($base->lt(Cas::dnes())) {
+            $base = Carbon::parse(Cas::dnes()->addDay()->toDateString());
         }
         $hour = match ($parameters['time_of_day']) {
             'morning' => 9, 'afternoon' => 14, 'evening' => 18, default => 16

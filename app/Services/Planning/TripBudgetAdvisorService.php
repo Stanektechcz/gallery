@@ -2,6 +2,7 @@
 
 namespace App\Services\Planning;
 
+use App\Support\Cas;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 use Illuminate\Support\Facades\DB;
@@ -382,7 +383,7 @@ class TripBudgetAdvisorService
         if (! Schema::hasTable('currency_rates')) {
             return null;
         }
-        $date = $effectiveAt ? Carbon::parse($effectiveAt)->toDateString() : now()->toDateString();
+        $date = $effectiveAt ? Carbon::parse($effectiveAt)->toDateString() : Cas::dnes()->toDateString();
         $key = "{$from}:{$to}:{$date}";
         if (! array_key_exists($key, $cache)) {
             $direct = DB::table('currency_rates')->where('base_currency', $from)->where('quote_currency', $to)->where('effective_on', '<=', $date)->orderByDesc('effective_on')->value('rate');

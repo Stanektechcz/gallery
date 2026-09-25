@@ -6,6 +6,7 @@ use App\Models\CalendarEvent;
 use App\Models\PlannedMeal;
 use App\Models\Recipe;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -134,7 +135,7 @@ class MealPlanService
         if ($from === $to) {
             return round($amount, 2);
         }
-        $query = DB::table('currency_rates')->where('effective_on', '<=', $date ?: now()->toDateString())->orderByDesc('effective_on');
+        $query = DB::table('currency_rates')->where('effective_on', '<=', $date ?: Cas::dnes()->toDateString())->orderByDesc('effective_on');
         $direct = (clone $query)->where('base_currency', $from)->where('quote_currency', $to)->value('rate');
         if ($direct) {
             return round($amount * (float) $direct, 2);

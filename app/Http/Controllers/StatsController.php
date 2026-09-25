@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Album;
 use App\Models\MediaItem;
+use App\Support\Cas;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
@@ -45,8 +46,9 @@ class StatsController extends Controller
             ->limit(10)
             ->get();
 
-        // Per month (current year)
-        $year = now()->year;
+        // Per month (current year) — pražský rok, ne UTC serveru, jinak na Nový rok
+        // v Praze ještě chvíli chyběl leden.
+        $year = Cas::dnes()->year;
         $perMonth = (clone $base)
             ->whereYear('taken_at', $year)
             ->selectRaw("{$monthSql} as month, COUNT(*) as total")

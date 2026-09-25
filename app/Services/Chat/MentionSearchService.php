@@ -8,6 +8,7 @@ use App\Models\JournalEntry;
 use App\Models\Place;
 use App\Models\Recipe;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -47,7 +48,8 @@ class MentionSearchService
         }
 
         if ($query === '') {
-            $today = now()->startOfDay();
+            // Pražský dnešek, ne UTC serveru.
+            $today = Carbon::parse(Cas::dnes()->toDateString());
 
             return ['kind' => 'date', 'label' => self::czechDate($today).' — dnes', 'items' => $this->onDate($space, $today)];
         }
@@ -87,7 +89,7 @@ class MentionSearchService
 
         foreach (['dnes' => 0, 'zitra' => 1, 'zítra' => 1, 'pozitri' => 2, 'pozítří' => 2] as $word => $offset) {
             if ($query === $word) {
-                return now()->startOfDay()->addDays($offset);
+                return Carbon::parse(Cas::dnes()->toDateString())->addDays($offset);
             }
         }
 
@@ -101,7 +103,7 @@ class MentionSearchService
             return null;
         }
 
-        $year = isset($parts[3]) ? (int) $parts[3] : now()->year;
+        $year = isset($parts[3]) ? (int) $parts[3] : Cas::dnes()->year;
         $date = Carbon::createFromDate($year, $month, 1)->startOfDay();
         if ($day > $date->daysInMonth) {
             return null;
@@ -109,7 +111,7 @@ class MentionSearchService
 
         $date = $date->setDay($day);
 
-        if (! isset($parts[3]) && $date->lt(now()->subMonth())) {
+        if (! isset($parts[3]) && $date->lt(Cas::dnes()->subMonth())) {
             $date->addYear();
         }
 

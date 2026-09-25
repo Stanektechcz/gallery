@@ -15,6 +15,7 @@ use App\Policies\MediaPolicy;
 use App\Services\Automation\AutomationEngine;
 use App\Services\Billing\EntitlementService;
 use App\Services\Obsah\Poskytovatele;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
@@ -76,7 +77,9 @@ class AppServiceProvider extends ServiceProvider
             $engine()->fire('event.created', $space, [
                 'title' => $event->title,
                 'location' => $event->location,
-                'days_ahead' => $event->starts_at ? (int) now()->startOfDay()->diffInDays($event->starts_at, false) : null,
+                // Pražský dnešek, ne UTC serveru — jinak akce založená dnes večer
+                // vypadala jako „zítra".
+                'days_ahead' => $event->starts_at ? (int) Cas::dnes()->diffInDays($event->starts_at, false) : null,
             ]);
         });
 

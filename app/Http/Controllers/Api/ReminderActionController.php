@@ -7,6 +7,7 @@ use App\Models\CalendarEvent;
 use App\Models\EventReminder;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\ReminderActionService;
+use App\Support\Cas;
 use App\Support\Cestina;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
@@ -35,11 +36,14 @@ class ReminderActionController extends Controller
             ->firstOrFail();
 
         $minutes = (int) $data['minutes_before'];
-        $remindAt = $event->starts_at->copy()->subMinutes($minutes);
+        // starts_at je zapsaný podle pražských hodin; Cas::zHodin ho vrátí jako
+        // skutečný okamžik a ->utc() ho dá do stejného tvaru jako `remind_at`.
+        $startsAt = Cas::zHodin($event->starts_at);
+        $remindAt = $startsAt->copy()->subMinutes($minutes)->utc();
         if ($remindAt->isPast()) {
             $remindAt = now()->addMinute();
         }
-        abort_if($event->starts_at->lte(now()), 422, 'K proběhlé akci už nelze přidat novou připomínku.');
+        abort_if($startsAt->lte(now()), 422, 'K proběhlé akci už nelze přidat novou připomínku.');
 
         $reminder = DB::transaction(function () use ($event, $user, $data, $minutes, $remindAt): EventReminder {
             $reminder = EventReminder::updateOrCreate([

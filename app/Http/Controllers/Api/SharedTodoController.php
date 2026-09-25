@@ -11,6 +11,7 @@ use App\Models\SharedTodoList;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\SharedTodoService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -64,7 +65,9 @@ class SharedTodoController extends Controller
                 'active' => (clone $active)->count(), 'mine' => (clone $active)->where('assigned_to', $request->user()->id)->count(),
                 'unassigned' => (clone $active)->whereNull('assigned_to')->count(),
                 'overdue' => (clone $active)->whereNotNull('due_at')->where('due_at', '<', now())->count(),
-                'completed_this_week' => SharedTodo::where('gallery_space_id', $space->id)->where('completed_at', '>=', now()->startOfWeek())->count(),
+                // `completed_at` je skutečný okamžik v UTC, ale „tento týden" je týden Prahy —
+                // v UTC by ho pondělní ráno ještě chvíli počítalo podle předchozího týdne.
+                'completed_this_week' => SharedTodo::where('gallery_space_id', $space->id)->where('completed_at', '>=', Cas::ted()->startOfWeek()->setTimezone('UTC'))->count(),
             ],
         ]);
     }

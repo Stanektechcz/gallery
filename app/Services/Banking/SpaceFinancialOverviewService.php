@@ -5,6 +5,7 @@ namespace App\Services\Banking;
 use App\Models\BankAccount;
 use App\Models\BankTransaction;
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -21,8 +22,8 @@ class SpaceFinancialOverviewService
             return $this->unavailable();
         }
 
-        $from = Carbon::parse($filters['from'] ?? now()->subDays(89)->toDateString())->startOfDay();
-        $to = Carbon::parse($filters['to'] ?? now()->toDateString())->endOfDay();
+        $from = Carbon::parse($filters['from'] ?? Cas::dnes()->subDays(89)->toDateString())->startOfDay();
+        $to = Carbon::parse($filters['to'] ?? Cas::dnes()->toDateString())->endOfDay();
         abort_if($from->gt($to), 422, 'Začátek období musí být před jeho koncem.');
         abort_if($from->diffInDays($to) > 3660, 422, 'Jedno období může mít nejvýše deset let.');
 

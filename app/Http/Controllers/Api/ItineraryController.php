@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -142,7 +143,8 @@ class ItineraryController extends Controller
         ]);
 
         if (isset($validated['visited']) && $validated['visited'] && ! isset($validated['visited_at'])) {
-            $validated['visited_at'] = now()->toDateString();
+            // Bez zadaného data patří návštěva k dnešnímu pražskému dni, ne k UTC dni serveru.
+            $validated['visited_at'] = Cas::dnes()->toDateString();
         }
 
         DB::table('itinerary_places')
@@ -210,7 +212,7 @@ class ItineraryController extends Controller
                     ->where('id', $place->id)
                     ->update([
                         'visited' => true,
-                        'visited_at' => $nearby->taken_at ? substr($nearby->taken_at, 0, 10) : now()->toDateString(),
+                        'visited_at' => $nearby->taken_at ? substr($nearby->taken_at, 0, 10) : Cas::dnes()->toDateString(),
                         'updated_at' => now(),
                     ]);
                 $updated++;

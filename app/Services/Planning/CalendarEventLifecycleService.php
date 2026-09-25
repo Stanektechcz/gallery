@@ -3,6 +3,7 @@
 namespace App\Services\Planning;
 
 use App\Models\CalendarEvent;
+use App\Support\Cas;
 use Illuminate\Support\Facades\DB;
 
 /** Keeps elapsed plans out of active calendar, weekly and dashboard views. */
@@ -18,7 +19,8 @@ class CalendarEventLifecycleService
         $events = CalendarEvent::query()
             ->whereIn('gallery_space_id', $spaceIds)
             ->whereIn('status', ['planned', 'confirmed'])
-            ->whereRaw('COALESCE(ends_at, starts_at) < ?', [now()->startOfDay()])
+            // Praha, ne server: v UTC by po půlnoci uzavření čekalo na doběhnutí UTC dne.
+            ->whereRaw('COALESCE(ends_at, starts_at) < ?', [Cas::dnes()])
             ->get();
 
         $completed = 0;

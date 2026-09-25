@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Finance\FinanceService;
 use App\Services\Health\CycleService;
+use App\Support\Cas;
 use Illuminate\Support\Carbon;
 
 /**
@@ -33,7 +34,8 @@ class PersonalSummaryService
     /** @return array<string, mixed> */
     public function forUser(GallerySpace $space, User $user, ?Carbon $today = null): array
     {
-        $today ??= Carbon::today();
+        // Pražský dnešek, ne UTC serveru.
+        $today ??= Carbon::parse(Cas::dnes()->toDateString());
 
         $cyklus = $this->cycle($space, $user, $today);
 

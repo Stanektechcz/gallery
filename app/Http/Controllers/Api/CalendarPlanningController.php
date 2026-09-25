@@ -28,6 +28,7 @@ use App\Services\Planning\PersonalCelebrationService;
 use App\Services\Planning\ReminderActionService;
 use App\Services\Planning\TravelInboxService;
 use App\Services\Planning\TripPartnerFinanceService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -64,8 +65,10 @@ class CalendarPlanningController extends Controller
     public function index(Request $request): JsonResponse
     {
         $data = $request->validate(['from' => 'nullable|date', 'to' => 'nullable|date|after_or_equal:from']);
-        $from = Carbon::parse($data['from'] ?? now()->startOfMonth())->startOfDay();
-        $to = Carbon::parse($data['to'] ?? now()->endOfMonth())->endOfDay();
+        // Výchozí měsíc jde podle pražského dneška — v UTC by po půlnoci ještě
+        // chvíli patřil ke včerejšímu měsíci.
+        $from = Carbon::parse($data['from'] ?? Cas::dnes()->startOfMonth())->startOfDay();
+        $to = Carbon::parse($data['to'] ?? Cas::dnes()->endOfMonth())->endOfDay();
         $user = $request->user();
         $this->eventLifecycle->completeElapsedPlans($this->spaceIds($user));
 
@@ -588,7 +591,9 @@ class CalendarPlanningController extends Controller
     {
         $event = $this->findVisibleEvent($request->user(), $uuid);
         $this->ensureCanEdit($event, $request->user());
-        abort_if($event->starts_at->isFuture(), 422, 'Společnou vzpomínku lze vytvořit až po začátku akce.');
+        // starts_at je zapsaný podle pražských hodin; Cas::zHodin ho vrátí jako
+        // skutečný okamžik, jinak akce večer vypadala jako budoucí i hodinu po startu.
+        abort_if(Cas::zHodin($event->starts_at)->isFuture(), 422, 'Společnou vzpomínku lze vytvořit až po začátku akce.');
         $data = $request->validate(['title' => 'nullable|string|max:160', 'note' => 'nullable|string|max:5000', 'media_ids' => 'nullable|array|max:48', 'media_ids.*' => 'integer|distinct']);
         $mediaIds = $data['media_ids'] ?? $event->attachments()->whereNotNull('media_item_id')->pluck('media_item_id')->all();
         $media = MediaItem::where('gallery_space_id', $event->gallery_space_id)->whereNull('trashed_at')->whereIn('id', $mediaIds)->get();
@@ -638,7 +643,8 @@ class CalendarPlanningController extends Controller
         if (! Schema::hasTable('calendar_event_reflections')) {
             return response()->json(['message' => 'Pro společné ohlédnutí dokončete migrace aplikace.'], 503);
         }
-        abort_if($event->starts_at->isFuture(), 422, 'Ohlédnutí lze uložit až po začátku akce.');
+        // Stejné pásmo jako u vzpomínky: starts_at jsou pražské hodiny, ne UTC okamžik.
+        abort_if(Cas::zHodin($event->starts_at)->isFuture(), 422, 'Ohlédnutí lze uložit až po začátku akce.');
         $data = $request->validate(['rating' => 'nullable|integer|between:1,5', 'mood' => 'nullable|in:joyful,calm,adventurous,cozy', 'highlight' => 'nullable|string|max:2000', 'next_time' => 'nullable|string|max:2000']);
         $existing = DB::table('calendar_event_reflections')->where('calendar_event_id', $event->id)->first();
         $row = $data + ['gallery_space_id' => $event->gallery_space_id, 'updated_by' => $request->user()->id, 'updated_at' => now()];
@@ -1100,13 +1106,16 @@ class CalendarPlanningController extends Controller
     public function weeklyOverview(Request $request): JsonResponse
     {
         $user = $request->user();
-        $from = now()->startOfDay();
-        $to = now()->endOfWeek();
+        // Praha, ne UTC serveru — jinak „tento týden" i „v tento den" chvíli po
+        // půlnoci ještě patřily ke včerejšku.
+        $dnes = Cas::dnes();
+        $from = $dnes->copy();
+        $to = $dnes->copy()->endOfWeek();
         $this->eventLifecycle->completeElapsedPlans($this->spaceIds($user));
         $events = $this->visibleEvents($user)->whereNotIn('status', ['completed', 'cancelled'])->whereBetween('starts_at', [$from, $to])->orderBy('starts_at')->get();
         $eventIds = $events->pluck('id');
         $unseen = MediaItem::whereIn('gallery_space_id', $this->spaceIds($user))->whereNull('trashed_at')->where('taken_at', '<', now()->subYear())->where('is_favorite', false)->latest('taken_at')->limit(6)->get(['uuid', 'display_title', 'taken_at']);
-        $onThisDay = MediaItem::whereIn('gallery_space_id', $this->spaceIds($user))->whereNull('trashed_at')->whereNotNull('taken_at')->whereYear('taken_at', '<', now()->year)->whereMonth('taken_at', now()->month)->whereDay('taken_at', now()->day)->orderByDesc('taken_at')->limit(12)->get(['id', 'uuid', 'display_title', 'original_filename', 'taken_at']);
+        $onThisDay = MediaItem::whereIn('gallery_space_id', $this->spaceIds($user))->whereNull('trashed_at')->whereNotNull('taken_at')->whereYear('taken_at', '<', $dnes->year)->whereMonth('taken_at', $dnes->month)->whereDay('taken_at', $dnes->day)->orderByDesc('taken_at')->limit(12)->get(['id', 'uuid', 'display_title', 'original_filename', 'taken_at']);
 
         return response()->json(['period' => [$from->toDateString(), $to->toDateString()], 'events' => $events, 'open_tasks' => EventTask::whereIn('event_id', $eventIds)->whereNull('completed_at')->orderBy('due_at')->get(), 'travel_inbox' => DB::table('travel_inbox_items')->whereIn('gallery_space_id', $this->spaceIds($user))->where('state', 'inbox')->latest()->limit(8)->get(), 'rediscover' => $unseen, 'on_this_day' => $onThisDay]);
     }

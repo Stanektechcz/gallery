@@ -359,7 +359,7 @@ class TripIntelligenceController extends Controller
     {
         $trip = $this->trip($request->user(), $tripId);
         $data = $this->validatedVehicleCost($request);
-        $id = DB::table('trip_vehicle_costs')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'occurred_on' => $data['occurred_on'] ?? now()->toDateString(), 'created_at' => now(), 'updated_at' => now()]);
+        $id = DB::table('trip_vehicle_costs')->insertGetId($data + ['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $request->user()->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'occurred_on' => $data['occurred_on'] ?? Cas::dnes()->toDateString(), 'created_at' => now(), 'updated_at' => now()]);
         if ($preparation->canSync()) {
             $preparation->sync($trip);
         }

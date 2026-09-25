@@ -2,6 +2,7 @@
 
 namespace App\Services\Search;
 
+use App\Support\Cas;
 use Illuminate\Support\Carbon;
 
 /**
@@ -26,7 +27,8 @@ class QueryInterpreter
     /** @return array{text: string, filters: array<string, mixed>, labels: array<int, string>} */
     public function interpret(string $dotaz, ?Carbon $dnes = null): array
     {
-        $dnes ??= Carbon::today();
+        // Pražský dnešek, ne UTC serveru.
+        $dnes ??= Carbon::parse(Cas::dnes()->toDateString());
 
         $text = mb_strtolower($dotaz);
         $filtry = [];

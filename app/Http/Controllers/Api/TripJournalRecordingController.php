@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Travel\TravelJournalStoryService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -39,11 +40,13 @@ class TripJournalRecordingController extends Controller
         $uuid = (string) Str::uuid();
         $path = $file->storeAs("travel-journal/{$id}", "{$uuid}.{$extension}", 'local');
         try {
-            $entryId = DB::transaction(function () use ($request, $id, $data, $file, $uuid, $path, $detectedMime) {
+            $entryId = DB::transaction(function () use ($request, $id, $data, $file, $uuid, $path, $detectedMime, $trip) {
                 $visibility = $data['visibility'] ?? 'shared';
                 $entryId = DB::table('travel_journal_entries')->insertGetId([
                     'trip_id' => $id,
-                    'trip_day_id' => DB::table('trip_days')->where('trip_id', $id)->where('date', now()->toDateString())->value('id'),
+                    // Den podle pásma cesty, stejně jako textový deník — jinak hlasovka
+                    // těsně po místní půlnoci spadla ještě do včerejšího dne cesty.
+                    'trip_day_id' => DB::table('trip_days')->where('trip_id', $id)->where('date', Cas::naCeste($trip->timezone ?? null)->toDateString())->value('id'),
                     'user_id' => $request->user()->id, 'type' => 'voice', 'content' => trim((string) ($data['content'] ?? '')) ?: 'Hlasová vzpomínka',
                     'visibility' => $visibility, 'mood' => $data['mood'] ?? null,
                     'is_story_worthy' => $visibility === 'shared' && ($data['is_story_worthy'] ?? true),

@@ -7,6 +7,7 @@ use App\Models\CycleSetting;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Support\Cas;
 use App\Support\Cestina;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -39,6 +40,12 @@ class CycleService
         );
     }
 
+    /** Pražský dnešek — `Carbon::today()` bral den serveru v UTC. */
+    private function dnes(): Carbon
+    {
+        return Carbon::parse(Cas::dnes()->toDateString());
+    }
+
     /**
      * Celý přehled pro jednoho člověka.
      *
@@ -46,7 +53,7 @@ class CycleService
      */
     public function overview(GallerySpace $space, User $owner, ?Carbon $today = null): array
     {
-        $today ??= Carbon::today();
+        $today ??= $this->dnes();
         $settings = $this->settings($space, $owner);
 
         $days = CycleDay::where('user_id', $owner->id)
@@ -422,7 +429,7 @@ class CycleService
      */
     public function forecast(GallerySpace $space, User $owner, int $dnu = 40, ?Carbon $today = null): array
     {
-        $today ??= Carbon::today();
+        $today ??= $this->dnes();
 
         $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
         $cycles = $this->cycles($days);
@@ -533,7 +540,7 @@ class CycleService
      */
     public function analysis(GallerySpace $space, User $owner, ?Carbon $today = null): array
     {
-        $today ??= Carbon::today();
+        $today ??= $this->dnes();
 
         $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
         $cycles = $this->cycles($days);
@@ -771,7 +778,7 @@ class CycleService
         $vFazi = [];
 
         foreach ($cycles as $cyklus) {
-            $konec = $cyklus['end'] ?? Carbon::today();
+            $konec = $cyklus['end'] ?? $this->dnes();
 
             foreach ($days as $den) {
                 if ($den->day->lessThan($cyklus['start']) || $den->day->greaterThan($konec)) {

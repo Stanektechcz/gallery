@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -42,7 +43,9 @@ class ExperienceLifecycleService
         }
         $completed = collect($steps)->where('complete', true)->count();
 
-        $isFuture = $event->starts_at->isFuture();
+        // starts_at je zapsaný podle pražských hodin; Cas::zHodin ho vrátí jako
+        // skutečný okamžik, jinak akce vypadala jako budoucí i hodiny po startu.
+        $isFuture = Cas::zHodin($event->starts_at)->isFuture();
         $nextAction = match (true) {
             $isFuture => 'prepare',
             ! $memory && $attachedMediaCount === 0 => 'add_media',

@@ -83,4 +83,19 @@ final class Cas
     {
         return self::ted()->startOfDay()->setTimezone('UTC');
     }
+
+    /**
+     * „Teď" na cestě — v pásmu cesty, jinak dvojice.
+     *
+     * Dny cesty (`trip_days.date`) i časy aktivit jsou místní hodiny; `now()`
+     * v UTC by po 22:00 ukazoval ještě včerejší den a program o dvě hodiny posunutý.
+     */
+    public static function naCeste(?string $pasmo): CarbonImmutable
+    {
+        try {
+            return CarbonImmutable::now($pasmo ?: self::pasmo());
+        } catch (\Throwable) {
+            return self::ted();
+        }
+    }
 }

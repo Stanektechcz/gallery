@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Planning\GiftIdeaService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -96,7 +97,8 @@ class CalendarAutomationController extends Controller
     public function dayNote(Request $request): JsonResponse
     {
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'date' => 'nullable|date']);
-        $date = $data['date'] ?? now()->toDateString();
+        // Bez zadaného data patří poznámka k dnešku Prahy, ne k UTC dni serveru.
+        $date = $data['date'] ?? Cas::dnes()->toDateString();
         $note = DB::table('shared_day_notes')->where('gallery_space_id', $data['gallery_space_id'])->where('note_date', $date)->whereIn('gallery_space_id', $this->spaceIds($request))->first();
 
         return response()->json(['date' => $date, 'content' => $note ? Crypt::decryptString($note->encrypted_content) : '']);
@@ -106,7 +108,8 @@ class CalendarAutomationController extends Controller
     {
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'date' => 'nullable|date', 'content' => 'nullable|string|max:10000']);
         abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
-        $date = $data['date'] ?? now()->toDateString();
+        // Stejně jako u čtení: bez data patří zápis k dnešku Prahy.
+        $date = $data['date'] ?? Cas::dnes()->toDateString();
         if (blank($data['content'] ?? null)) {
             DB::table('shared_day_notes')->where('gallery_space_id', $data['gallery_space_id'])->where('note_date', $date)->delete();
 

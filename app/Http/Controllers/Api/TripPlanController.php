@@ -7,7 +7,6 @@ use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Travel\TravelJournalStoryService;
 use App\Support\Cas;
-use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -21,7 +20,7 @@ class TripPlanController extends Controller
     {
         $trip = $this->trip($request, $id);
         $this->ensureDays($trip);
-        $ted = $this->tedNaCeste($trip);
+        $ted = Cas::naCeste($trip->timezone ?? null);
         $today = $ted->toDateString();
         $day = DB::table('trip_days')->where('trip_id', $id)->where('date', $today)->first()
             ?? DB::table('trip_days')->where('trip_id', $id)->orderBy('date')->first();
@@ -120,7 +119,7 @@ class TripPlanController extends Controller
             $journal = array_intersect_key($data, array_flip(['type', 'content', 'latitude', 'longitude', 'amount', 'currency', 'mood']));
             $journal['currency'] = isset($journal['currency']) ? strtoupper($journal['currency']) : ($data['type'] === 'expense' ? strtoupper($trip->currency ?? 'CZK') : null);
             $journal['metadata'] = $metadata ? json_encode($metadata) : null;
-            $journal['trip_day_id'] = DB::table('trip_days')->where('trip_id', $id)->where('date', $this->tedNaCeste($trip)->toDateString())->value('id');
+            $journal['trip_day_id'] = DB::table('trip_days')->where('trip_id', $id)->where('date', Cas::naCeste($trip->timezone ?? null)->toDateString())->value('id');
             $journal['visibility'] = $visibility;
             $journal['is_story_worthy'] = $visibility === 'shared' && in_array($data['type'], ['note', 'voice', 'location'], true) && ($data['is_story_worthy'] ?? true);
 
@@ -364,20 +363,6 @@ class TripPlanController extends Controller
         abort_unless($trip, 404);
 
         return $trip;
-    }
-
-    /**
-     * „Teď" na cestě — v pásmu cesty, jinak dvojice. Dny cesty (`trip_days.date`)
-     * i časy aktivit jsou místní hodiny; `now()` v UTC by po 22:00 ukazoval
-     * ještě včerejší den a program o dvě hodiny posunutý.
-     */
-    private function tedNaCeste(object $trip): CarbonImmutable
-    {
-        try {
-            return CarbonImmutable::now($trip->timezone ?: Cas::pasmo());
-        } catch (\Throwable) {
-            return Cas::ted();
-        }
     }
 
     private function activity(int $tripId, int $activityId): object

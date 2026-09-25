@@ -5,6 +5,7 @@ namespace App\Services\Planning;
 use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\Place;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -210,9 +211,11 @@ class CoupleExperienceRecommendationService
     private function suggestStart(GallerySpace $space, Place $place, ?string $requestedDate): Carbon
     {
         $duration = $place->estimated_visit_minutes ?: 120;
-        $base = $requestedDate ? Carbon::parse($requestedDate)->startOfDay() : now()->addDay()->startOfDay();
-        if ($base->isPast()) {
-            $base = now()->addDay()->startOfDay();
+        // Stejná past jako u generátoru randíček: `isPast()` je pravda skoro pořád po
+        // půlnoci, takže výslovně zadané „dnes" vždy skončilo jako „zítra".
+        $base = $requestedDate ? Carbon::parse($requestedDate)->startOfDay() : Carbon::parse(Cas::dnes()->addDay()->toDateString());
+        if ($base->lt(Cas::dnes())) {
+            $base = Carbon::parse(Cas::dnes()->addDay()->toDateString());
         }
 
         for ($offset = 0; $offset < 28; $offset++) {
