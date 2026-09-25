@@ -80,9 +80,19 @@ return Application::configure(basePath: dirname(__DIR__))
          * Klient volá `POST /sanctum/token` a čeká JSON — čte `b.message` z těla.
          * Bez téhle cesty by mu Laravel na chybnou validaci poslal přesměrování
          * s HTML a klient by hlásil neurčitou chybu místo „E-mail nebo heslo
-         * nesouhlasí". Ostatní cesty zůstávají, jak byly.
+         * nesouhlasí".
+         *
+         * Vlastní podmínka nahrazuje výchozí Laravelovu `expectsJson()`, proto ji
+         * vracíme i pro webové cesty. Bez ní dostal `axios` na `PATCH /albums/{uuid}`
+         * při chybě přesměrování, prohlížeč ho tiše následoval na 200 s HTML
+         * a nastavení alba hlásilo uložení, které neproběhlo.
+         *
+         * Inertia chce přesměrování s chybami v sezení, ne JSON — vylučuje se
+         * výslovně, i když dnes posílá `Accept: text/html`.
          */
         $exceptions->shouldRenderJsonWhen(
-            fn (Request $request) => $request->is('api/*') || $request->is('sanctum/*'),
+            fn (Request $request) => $request->is('api/*')
+                || $request->is('sanctum/*')
+                || ($request->expectsJson() && ! $request->header('X-Inertia')),
         );
     })->create();
