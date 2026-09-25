@@ -7,7 +7,7 @@ use Closure;
 use Illuminate\Http\Request;
 
 /**
- * Správce **vlastní** galerie (alias `can:admin`).
+ * Správce **vlastní** galerie (alias `spravce`).
  *
  * Rozhoduje role v prostoru, ne `users.role`. Tu (`owner`/`admin`) má každý
  * zaregistrovaný účet, takže účet bez galerie — bránou dvojice projde, protože

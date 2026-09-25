@@ -72,7 +72,9 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $middleware->alias([
-            'can:admin' => RequireAdminRole::class,
+            // Ne `can:admin` — to Laravel čte jako bránu `admin` (users.role)
+            // a tenhle alias by se nikdy nepoužil.
+            'spravce' => RequireAdminRole::class,
             'module' => EnsureModuleEnabled::class,
             'feature' => EnsureModuleEnabled::class,
             'dvojice' => JenDvojice::class,

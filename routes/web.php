@@ -474,7 +474,7 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
 
     // Pozvánka do **vlastní** galerie — hlídá tarif (limit členů) a patří
     // vlastníkovi galerie, ne provozovateli. Proto mimo skupinu výš.
-    Route::middleware([\App\Http\Middleware\RequireAdminRole::class])->post('/admin/users/invite', [AdminController::class, 'invite'])->name('admin.users.invite');
+    Route::middleware(['spravce'])->post('/admin/users/invite', [AdminController::class, 'invite'])->name('admin.users.invite');
 });
 
 // ── Google OAuth ────────────────────────────────────────

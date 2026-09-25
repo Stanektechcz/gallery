@@ -59,7 +59,7 @@ class AdminController extends Controller
 
     public function invite(Request $request): RedirectResponse
     {
-        // Sem smí každý vlastník galerie (`can:admin`), ne jen provozovatel —
+        // Sem smí každý vlastník galerie (`spravce`), ne jen provozovatel —
         // účet na adresu provozovatele by si tu založil sám. Viz `Provozovatel`.
         $data = $request->validate([
             'name' => 'required|string|max:100',

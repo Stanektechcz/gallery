@@ -887,9 +887,19 @@ class UploadController extends Controller
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
 
-        // Clean up chunks
+        // Relaci, kterou si právě převzalo dokončení, zrušit nejde: smazání
+        // částí uprostřed skládání by ho shodilo („chybí část") a řádek relace
+        // by zmizel dřív, než se k němu zapíše hotové médium.
+        $smazano = UploadSession::whereKey($session->id)
+            ->where('status', '!=', 'assembling')
+            ->delete();
+        if ($smazano === 0) {
+            $zprava = 'Soubor se právě dokončuje — zrušit ho už nejde.';
+
+            return response()->json(['error' => $zprava, 'message' => $zprava], 409);
+        }
+
         Storage::disk(self::CHUNK_DISK)->deleteDirectory(self::CHUNK_DIR.'/'.$session->uuid);
-        $session->delete();
 
         return response()->json(['status' => 'cancelled']);
     }

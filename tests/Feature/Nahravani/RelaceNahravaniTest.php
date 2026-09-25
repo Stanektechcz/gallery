@@ -177,6 +177,27 @@ class RelaceNahravaniTest extends TestCase
         $this->assertSame(0, MediaItem::count());
     }
 
+    public function test_zruseni_relace_ve_skladani_neodstrani_casti(): void
+    {
+        [$uuid] = $this->pripravenaRelace();
+        UploadSession::where('uuid', $uuid)->update(['status' => 'assembling']);
+
+        $this->actingAs($this->user)->deleteJson("/api/v1/uploads/{$uuid}")->assertStatus(409);
+
+        $this->assertNotNull(UploadSession::where('uuid', $uuid)->first());
+        Storage::disk('local')->assertExists("upload_chunks/{$uuid}/chunk_0");
+    }
+
+    public function test_zruseni_cekajici_relace_smaze_casti(): void
+    {
+        [$uuid] = $this->pripravenaRelace();
+
+        $this->actingAs($this->user)->deleteJson("/api/v1/uploads/{$uuid}")->assertOk();
+
+        $this->assertNull(UploadSession::where('uuid', $uuid)->first());
+        Storage::disk('local')->assertMissing("upload_chunks/{$uuid}/chunk_0");
+    }
+
     /** Klientovi vypadla odpověď a dokončení zopakoval — fotka je nahraná, ne chyba. */
     public function test_opakovane_dokonceni_hotove_relace_vrati_totez_medium(): void
     {
