@@ -5012,6 +5012,14 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </sc-for>
                 </div>
               </sc-if>
+
+              <!-- Odhlášení s neodeslanými změnami: zůstat, nebo je výslovně zahodit. -->
+              <sc-if value="{{ sheetIsOdhlasit }}">
+                <div style="display:flex; gap:10px; margin-top:16px">
+                  <button onClick="{{ odhlasZustat }}" class="btn btn-secondary" style="flex:1; min-height:48px">Zůstat přihlášen</button>
+                  <button onClick="{{ odhlasZahodit }}" class="btn btn-primary" style="flex:1; min-height:48px; background:var(--g-mag); border-color:var(--g-mag)">Odhlásit a zahodit</button>
+                </div>
+              </sc-if>
             </div>
           </div>
         </sc-if>
@@ -6393,9 +6401,11 @@ class Component extends DCLogic {
       if (z) z.prihlasen = false;
       this.setState({
         appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '',
-        sheet: null, lb: null,
+        sheet: null, lb: null, odhlasText: null,
+        // Výslovné „Odhlásit se" (`signOut`) není „přihlášení skončilo" — řekne, že se povedlo.
+        lockInfo: d.vyslovne ? 'Odhlášeno z tohoto zařízení.' : this.state.lockInfo,
         // Po obnovení hesla je odhlášení očekávané — hláška o novém hesle stačí.
-        lockErr: d.status === 403 && d.zprava ? d.zprava : this.state.lockInfo ? null : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
+        lockErr: d.vyslovne ? null : d.status === 403 && d.zprava ? d.zprava : this.state.lockInfo ? null : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
       });
     };
     window.addEventListener('galerie-odhlaseno', this._odhlaseno);
@@ -6665,6 +6675,38 @@ class Component extends DCLogic {
    */
   zatimNeumime(co) {
     this.toast('Tohle zatím neumíme — ' + co, { icon: 'ph-hourglass-medium' });
+  }
+  /*
+   * „Odhlásit se" na tomhle telefonu — totéž jako `odhlasitSe` na počítači.
+   *
+   * `signOut()` doručí, odhlásí a uklidí, i to, co se bez signálu neodeslalo.
+   * Proto nejdřív počet neodeslaných změn tohoto účtu; když nějaké jsou, zkusí
+   * se doručit a počítá se znovu. Co zbude, se zahodí jen na výslovné
+   * „Odhlásit a zahodit" v listu (`sheetIsOdhlasit`). Přihlášení pak ukáže
+   * `_odhlaseno` (`galerie-odhlaseno`).
+   */
+  odhlasitSe(zahodit) {
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http' || !api.signOut || this._odhlasuji) return;
+    this._odhlasuji = true;
+    this.setState({ sheet: null, odhlasText: null });
+    const pocet = () => (api.neodeslane ? api.neodeslane() : Promise.resolve(0)).catch(() => null);
+    const zbyva = zahodit ? Promise.resolve(0) : pocet().then(n => {
+      if (n === 0) return 0;
+      // Jednou a `silent`: rada, ne změna obsahu.
+      this.toast('Odesílám, co se ještě neodeslalo…', { icon: 'ph-cloud-arrow-up', silent: true });
+      return (api.dorucNeodeslane ? api.dorucNeodeslane() : Promise.resolve()).catch(() => {}).then(pocet);
+    });
+    zbyva.then(n => {
+      if (n === 0) return api.signOut();
+      const kolik = n === null
+        ? 'Nepodařilo se ověřit, jestli se všechno odeslalo.'
+        : this.pl(n, 'změna', 'změny', 'změn') + (n === 1 ? ' se ještě neodeslala' : n <= 4 ? ' se ještě neodeslaly' : ' se ještě neodeslalo') + (navigator.onLine === false ? ' (bez signálu).' : '.');
+      this.setState({
+        sheet: 'odhlasit',
+        odhlasText: kolik + ' Když se teď odhlásíte, ' + (n === null ? 'co se neodeslalo, se zahodí' : 'zahodí se') + ' — po odhlášení na tomhle telefonu nic nezůstává.'
+      });
+    }).then(() => { this._odhlasuji = false; }, () => { this._odhlasuji = false; });
   }
   toast(text, opts = {}) {
     clearTimeout(this.tt);
@@ -14286,6 +14328,10 @@ class Component extends DCLogic {
                   ? ['Obnovovací kód', 'Dostali jste ho při nastavení kódu. Nový vznikne, až kód změníte.', 'Změnit kód']
                   : ['Obnovovací kód', 'Vznikne, jakmile si nastavíte kód zámku', 'Nastavit kód']
               ])
+              // Odhlásit se jde jen tam, kde je přihlášení — ukázka žádné nemá.
+              .concat([
+                ...(window.GalerieApi && GalerieApi.mode === 'http' ? [['Odhlásit se z tohoto zařízení', 'Přihlášení i data dvojice odsud zmizí. Co se ještě neodeslalo, se nejdřív zkusí doručit.', 'Odhlásit se']] : [])
+              ])
           });
         }
         const NAV = GD.NAV_GROUPS || [];
@@ -14298,7 +14344,7 @@ class Component extends DCLogic {
           const bound = BIND[label] || null;
           // `Nastavit kód` v katalogu akcí není — bez záznamu by se řádek
           // vykreslil jako text a nešel by zmáčknout.
-          const act = ACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : null);
+          const act = ACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : base === 'Odhlásit se' ? ['ph-sign-out', null] : null);
           const stored = (s.setVals || {})[key];
           let val;
           if (bound === 'grid') val = s.cols === 2 ? 'Velká' : s.cols === 4 ? 'Malá' : 'Střední';
@@ -14355,6 +14401,8 @@ class Component extends DCLogic {
                 this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
                 return;
               }
+              // Odhlášení tohoto zařízení — nejdřív se ptá na neodeslané změny (`odhlasitSe`).
+              if (base === 'Odhlásit se') { this.odhlasitSe(); return; }
               // „Odhlásit ostatní" ukazovalo hlášku a nic nedělalo — přitom je
               // to jediné, co má člověk po ruce, když se někdo přihlásí odjinud.
               if (base === 'Odhlásit ostatní') {
@@ -14441,14 +14489,19 @@ class Component extends DCLogic {
 
       // sheety
       sheetOn: !!s.sheet,
-      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : '',
+      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : s.sheet === 'odhlasit' ? 'Odhlásit se?' : '',
       sheetNote: s.sheet === 'upload' ? 'Originály se přenesou na server, jen když je Wi-Fi nebo to povolíte.'
         : s.sheet === 'vypis' ? 'Na který účet? Pak vyberete soubor z banky (CSV, XLS nebo XLSX) — co už v knize je, se nezdvojí.'
         : s.sheet === 'sort' ? ({ memories: 'Vzpomínky', finance: 'Transakce', trips: 'Cesty', places: 'Místa', albums: 'Alba' }[screen] || null)
         // U dvojice se všechny čtyři volby stáhnou hned (tisk, ZIP, CSV, itineráře);
         // e-mail s odkazem patří ukázce, aplikace ho neposílá.
-        : s.sheet === 'export' ? (this.galerieNaServeru() ? 'Připraví se rovnou tady — tisk otevře dialog, ostatní se stáhnou do telefonu.' : 'Připraví se na serveru, odkaz přijde do e-mailu.') : null,
+        : s.sheet === 'export' ? (this.galerieNaServeru() ? 'Připraví se rovnou tady — tisk otevře dialog, ostatní se stáhnou do telefonu.' : 'Připraví se na serveru, odkaz přijde do e-mailu.')
+        : s.sheet === 'odhlasit' ? (s.odhlasText || null) : null,
       closeSheet: () => this.setState({ sheet: null }),
+      // Neodeslané změny při odhlášení — viz `odhlasitSe`.
+      sheetIsOdhlasit: s.sheet === 'odhlasit',
+      odhlasZustat: () => this.setState({ sheet: null, odhlasText: null }),
+      odhlasZahodit: () => this.odhlasitSe(true),
       sheetIsFilter: s.sheet === 'filter', sheetIsUpload: s.sheet === 'upload',
       sheetIsSearch: s.sheet === 'search', sheetIsTx: s.sheet === 'tx', sheetIsAdd: s.sheet === 'add',
       sheetIsCyc: s.sheet === 'cyc', sheetIsVypis: s.sheet === 'vypis',

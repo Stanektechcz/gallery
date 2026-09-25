@@ -14511,7 +14511,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </sc-if>
         <div class="dialog-actions">
           <sc-if value="{{ confirmCancel }}">
-            <button class="btn btn-secondary" onClick="{{ closeConfirm }}">Zrušit</button>
+            <button class="btn btn-secondary" onClick="{{ closeConfirm }}">{{ confirmCancelLabel }}</button>
           </sc-if>
           <button class="btn btn-primary" onClick="{{ confirm.go }}" style="background:{{ confirm.btnBg }}">{{ confirm.cta }}</button>
         </div>
@@ -32124,9 +32124,11 @@ class Component extends DCLogic {
       if (z) z.prihlasen = false;
       this.setState({
         appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '',
-        lb: null, show: null, searchOpen: false, keysOpen: false, notifOpen: false,
+        lb: null, show: null, searchOpen: false, keysOpen: false, notifOpen: false, confirm: null,
+        // Výslovné „Odhlásit se" (`signOut`) není „přihlášení skončilo" — řekne, že se povedlo.
+        lockInfo: d.vyslovne ? 'Odhlášeno z tohoto zařízení.' : this.state.lockInfo,
         // Po obnovení hesla je odhlášení očekávané — hláška o novém hesle stačí.
-        lockErr: d.status === 403 && d.zprava ? d.zprava : this.state.lockInfo ? null : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
+        lockErr: d.vyslovne ? null : d.status === 403 && d.zprava ? d.zprava : this.state.lockInfo ? null : 'Přihlášení na tomhle zařízení skončilo — přihlaste se znovu.'
       });
     };
     window.addEventListener('galerie-odhlaseno', this._odhlaseno);
@@ -33076,6 +33078,41 @@ class Component extends DCLogic {
     });
     if (why) this.toast(why, { icon: 'ph-lock-simple', local: true });
   };
+  /*
+   * „Odhlásit se" na tomhle zařízení.
+   *
+   * `signOut()` v datové vrstvě doručí, odhlásí a uklidí — i to, co se bez
+   * signálu neodeslalo, protože po odhlášení nemá na zařízení nic zůstat.
+   * Dřív ho nic nevolalo; a kdyby ano, zahodilo by rozepsané mlčky. Proto
+   * nejdřív počet neodeslaných změn tohoto účtu; když nějaké jsou, zkusí se
+   * doručit a počítá se znovu. Co zbude, se zahodí jen na výslovné
+   * „Odhlásit a zahodit". Přihlášení pak ukáže `_odhlaseno` (`galerie-odhlaseno`).
+   */
+  odhlasitSe(zahodit) {
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http' || !api.signOut || this._odhlasuji) return;
+    this._odhlasuji = true;
+    this.setState({ confirm: null });
+    const pocet = () => (api.neodeslane ? api.neodeslane() : Promise.resolve(0)).catch(() => null);
+    const zbyva = zahodit ? Promise.resolve(0) : pocet().then(n => {
+      if (n === 0) return 0;
+      // Jednou a `silent`: rada, ne změna obsahu.
+      this.toast('Odesílám, co se ještě neodeslalo…', { icon: 'ph-cloud-arrow-up', silent: true });
+      return (api.dorucNeodeslane ? api.dorucNeodeslane() : Promise.resolve()).catch(() => {}).then(pocet);
+    });
+    zbyva.then(n => {
+      if (n === 0) return api.signOut();
+      const kolik = n === null
+        ? 'Nepodařilo se ověřit, jestli se všechno odeslalo.'
+        : this.pl(n, 'změna', 'změny', 'změn') + (n === 1 ? ' se ještě neodeslala' : n <= 4 ? ' se ještě neodeslaly' : ' se ještě neodeslalo') + (navigator.onLine === false ? ' (bez signálu).' : '.');
+      this.setState({ confirm: {
+        title: 'Odhlásit se?',
+        body: kolik + ' Když se teď odhlásíte, ' + (n === null ? 'co se neodeslalo, se zahodí' : 'zahodí se') + ' — po odhlášení na tomhle zařízení nic nezůstává.',
+        cta: 'Odhlásit a zahodit', cancelLabel: 'Zůstat přihlášen', btnBg: 'var(--g-mag)',
+        go: () => this.odhlasitSe(true)
+      } });
+    }).then(() => { this._odhlasuji = false; }, () => { this._odhlasuji = false; });
+  }
   lockSignIn() {
     const s = this.state;
     // Prázdná kolonka znamená „ten, kdo je vybraný" — táž adresa, jakou
@@ -34225,6 +34262,10 @@ class Component extends DCLogic {
           zam.nastaveno
             ? ['Obnovovací kód', 'Dostali jste ho při nastavení kódu. Nový vznikne, až kód změníte.', 'Změnit kód']
             : ['Obnovovací kód', 'Vznikne, jakmile si nastavíte kód zámku', 'Nastavit kód']
+        ])
+        // Odhlásit se jde jen tam, kde je přihlášení — ukázka žádné nemá.
+        .concat([
+          ...(window.GalerieApi && GalerieApi.mode === 'http' ? [['Odhlásit se z tohoto zařízení', 'Přihlášení i data dvojice odsud zmizí. Co se ještě neodeslalo, se nejdřív zkusí doručit.', 'Odhlásit se']] : [])
         ]);
     }
     const setCur = setRowsMap[s.setTab] || setRowsMap.profil;
@@ -36199,7 +36240,7 @@ class Component extends DCLogic {
         };
         // `Nastavit kód` v katalogu akcí není — a bez záznamu by se řádek
         // vykreslil jako obyčejný text a nešel by zmáčknout.
-        const act = SETACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : null);
+        const act = SETACT[base] || (base === 'Nastavit kód' ? ['ph-password', null] : base === 'Odhlásit se' ? ['ph-sign-out', null] : null);
         return {
           label, hint: r[1], value: val,
           isToggle, isEnum: !isToggle && !!opts,
@@ -36237,6 +36278,8 @@ class Component extends DCLogic {
               this.setState({ pinOpen: true, pinStary: '', pinHeslo: '', pinNovy: '', pinZnovu: '', pinErr: null, pinObnovovaci: null });
               return;
             }
+            // Odhlášení tohoto zařízení — nejdřív se ptá na neodeslané změny (`odhlasitSe`).
+            if (base === 'Odhlásit se') { this.odhlasitSe(); return; }
             /*
              * „Odhlásit ostatní" ukazovalo hlášku a nic nedělalo.
              *
@@ -36440,6 +36483,8 @@ class Component extends DCLogic {
 
       confirmOpen: !!s.confirm, confirm: s.confirm || {}, closeConfirm: () => this.setState({ confirm: null }),
       confirmCancel: !(s.confirm && s.confirm.noCancel),
+      // Návrat nemusí být „Zrušit" — u odhlášení je to „Zůstat přihlášen".
+      confirmCancelLabel: (s.confirm && s.confirm.cancelLabel) || 'Zrušit',
       ...this.uctoveVals(),
       confirmOptions: (s.confirm && s.confirm.options && s.confirm.options.length) ? s.confirm.options : null,
       confirmPick: s.confirmPick || '',

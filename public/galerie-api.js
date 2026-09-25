@@ -382,17 +382,78 @@
       if (!odesliFrontuWorkeru()) dal();
     });
   }
+  /*
+   * Výsledek je `true`, když server zápis karty přímo přijal (nebo odmítl
+   * střetem) — karta pak má starou revizi a má si stav načíst znovu.
+   * Nedoručený zápis se vrací do fronty: odhlášení ho stejně zahodí, ale
+   * počet neodeslaných (`neodeslane`) ho do té doby musí vidět.
+   */
   function dorucPredOdhlasenim() {
-    var cekani = Promise.resolve();
+    var cekani = Promise.resolve(false);
     var nejistyUcet = pendingUcet && tokenBezUctu();
     if (Object.keys(pending).length && !nejistyUcet && odmitnutyToken === undefined) {
       var zapsal = pendingUcet || kdoTed();
       var patch = pending;
       pending = {};
       cekani = fetch(base + '/state', { method: 'PATCH', headers: headers(), credentials: 'same-origin', body: teloZapisu(patch, zapsal) })
-        .catch(function () {});
+        .then(function (r) {
+          // 202: zápis převzal worker do své fronty — počítá se tam.
+          if (r.status === 202) { queuedBySw = true; return false; }
+          if (r.ok || r.status === 409) return true;
+          vratDoFronty(patch, zapsal);
+          return false;
+        })
+        .catch(function () { vratDoFronty(patch, zapsal); return false; });
     }
-    return cekani.then(pockejNaFrontuWorkera);
+    return cekani.then(function (primo) {
+      return pockejNaFrontuWorkera().then(function () { return primo; });
+    });
+  }
+
+  /*
+   * Neodeslané změny tohoto účtu.
+   *
+   * Odhlášení bez signálu zahodí, co se ještě neodeslalo — nic soukromého
+   * nemá na zařízení zůstat. Dřív to udělalo mlčky; obrazovka se teď nejdřív
+   * zeptá. Počítá se paměť karty i fronta workera, obojí jen se zápisy
+   * tohoto účtu, a to po klíčích stavu: dvě úpravy téhož seznamu jsou jedna
+   * změna, rozdíl seznamu (`__odebrane`…) patří ke svému klíči.
+   */
+  function klicePatche(patch, klice) {
+    var hlavni = Object.keys(patch || {}).filter(function (k) { return ROZDIL.indexOf(k) < 0; });
+    hlavni.forEach(function (k) { klice[k] = 1; });
+    if (!hlavni.length && Object.keys(patch || {}).length) klice.__rozdil = 1;
+  }
+  // Položky fronty workera, jak je uložil (`{ url, headers, body }`); bez fronty prázdno.
+  function ctiFrontuWorkera() {
+    return new Promise(function (hotovo) {
+      var r = null;
+      try { if (window.indexedDB) r = indexedDB.open(QUEUE_DB, 1); } catch (e) {}
+      if (!r) { hotovo([]); return; }
+      // Fronta ještě nevznikla: tady ji nezakládat — worker by pak neměl svůj sklad.
+      r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} };
+      r.onerror = function (e) { try { e.preventDefault(); } catch (x) {} hotovo([]); };
+      r.onsuccess = function () {
+        var db = r.result;
+        var out = [];
+        db.onversionchange = function () { db.close(); };
+        try {
+          var tx = db.transaction('patches', 'readonly');
+          tx.objectStore('patches').openCursor().onsuccess = function (ev) {
+            var cur = ev.target.result;
+            if (cur) { out.push(cur.value); cur.continue(); }
+          };
+          tx.oncomplete = tx.onabort = function () { db.close(); hotovo(out); };
+        } catch (e) { db.close(); hotovo([]); }
+      };
+    });
+  }
+  // Rozeslaný zápis ještě běží — po něm teprve je jasné, jestli odešel, nebo čeká.
+  function pockejNaOdeslani() {
+    var konec = Date.now() + CEKANI_NA_FRONTU;
+    return new Promise(function (hotovo) {
+      (function znovu() { if (!inflight || Date.now() > konec) hotovo(); else setTimeout(znovu, 100); })();
+    });
   }
   function zahodFrontuWorkera() {
     // Worker spojení při `versionchange` zavře, takže mazání nečeká.
@@ -807,8 +868,56 @@
           zahodKopieDat();
           zahodFrontuWorkera();
           odhlasuji = false;
+          // Aplikace ukáže přihlášení — tutéž obrazovku jako po prošlém tokenu.
+          ohlas('galerie-odhlaseno', { status: 0, zprava: '', vyslovne: true });
           return odpoved;
         });
+    },
+
+    /*
+     * Kolik změn tohoto účtu se ještě neodeslalo (Promise<number>).
+     *
+     * Paměť karty a fronta workera; cizí zápis (jiný autor) se nepočítá —
+     * ten neodejde pod tímhle účtem nikdy. Zápis bez autora z fronty patří
+     * tomu, pod čím tokenem vznikl. Viz „Neodeslané změny tohoto účtu".
+     */
+    neodeslane: function () {
+      if (mode !== 'http') return Promise.resolve(0);
+      return pockejNaOdeslani().then(ctiFrontuWorkera).then(function (fronta) {
+        var ja = kdoTed() || kdo;
+        var tokenTed = window.GALERIE_API_TOKEN ? 'Bearer ' + window.GALERIE_API_TOKEN : null;
+        var klice = {};
+        if (!(pendingUcet && ja && pendingUcet !== ja)) klicePatche(pending, klice);
+        fronta.forEach(function (it) {
+          var telo = null;
+          try { telo = JSON.parse(it && it.body); } catch (e) {}
+          if (!telo || typeof telo !== 'object') return;
+          var autor = telo.ucet === undefined || telo.ucet === null || telo.ucet === '' ? null : String(telo.ucet);
+          var muj = autor ? autor === ja : !!tokenTed && ((it.headers || {}).authorization || null) === tokenTed;
+          if (muj) klicePatche(telo.data, klice);
+        });
+        return Object.keys(klice).length;
+      });
+    },
+
+    /*
+     * Zkusit doručit, co čeká — tentýž krok, jakým začíná `signOut`.
+     *
+     * Když se člověk po dotazu rozhodne zůstat přihlášený, karta má po
+     * přímém doručení starou revizi; stav se proto načte znovu. Po doručení
+     * frontou workera se načítá sám (`galerie-sync-done`).
+     */
+    dorucNeodeslane: function () {
+      if (mode !== 'http') return Promise.resolve();
+      if (timer) { clearTimeout(timer); timer = null; }
+      var api = this;
+      return pockejNaOdeslani().then(dorucPredOdhlasenim).then(function (primo) {
+        if (odhlasuji) return;
+        // Co se nedoručilo, je zpátky ve frontě karty — a jde dál běžnou cestou
+        // s prodlevou; bez toho by čekalo na další úpravu nebo návrat signálu.
+        if (Object.keys(pending).length) schedule(Math.max(prodleva, 4000));
+        if (primo) return api.load().then(function () {});
+      });
     },
 
     /*

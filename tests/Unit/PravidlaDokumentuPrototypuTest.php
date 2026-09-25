@@ -856,4 +856,72 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         // Starý tvar: hotovost kroku podle konstanty z veřejného souboru.
         $this->assertStringNotContainsString('const ready = [true, paired,', $pocitac);
     }
+
+    /**
+     * „Odhlásit se" je v aplikaci a nezahodí neodeslané změny mlčky.
+     *
+     * `signOut()` v datové vrstvě byl hotový, ale nic ho nevolalo — účet se
+     * měnil jen na zamčené obrazovce. A odhlášení bez signálu zahodí, co se
+     * ještě neodeslalo (nic soukromého nemá na zařízení zůstat); dřív bez
+     * varování. Obě rozhraní teď nejdřív spočítají neodeslané změny tohoto
+     * účtu, zkusí je doručit a zeptají se, jestli něco zbylo.
+     */
+    public function test_odhlasit_se_nejdriv_spocita_neodeslane(): void
+    {
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+
+        // Počet: paměť karty i fronta workera, jen zápisy tohoto účtu.
+        $this->assertStringContainsString('neodeslane: function () {', $api);
+        $this->assertStringContainsString('dorucNeodeslane: function () {', $api);
+        preg_match('/neodeslane: function \(\) \{\n(.*?)\n    \},/s', $api, $pocet);
+        $this->assertNotEmpty($pocet, 'GalerieApi.neodeslane() se nenašla.');
+        $this->assertStringContainsString('.then(ctiFrontuWorkera)', $pocet[1]);
+        $this->assertStringContainsString('autor === ja', $pocet[1]);
+        $this->assertStringContainsString('klicePatche(pending, klice);', $pocet[1]);
+        // Čtení nesmí frontu založit — worker by pak neměl svůj sklad.
+        $this->assertStringContainsString('r.transaction.abort();', $api);
+        // Nedoručený zápis se vrátí do fronty, jinak by ho počet už neviděl.
+        $this->assertStringContainsString('.catch(function () { vratDoFronty(patch, zapsal); return false; });', $api);
+        // Po odhlášení aplikace ukáže přihlášení — tutéž obrazovku jako po prošlém tokenu.
+        $signOut = substr($api, (int) strpos($api, 'signOut: function () {'));
+        $this->assertStringContainsString("ohlas('galerie-odhlaseno', { status: 0, zprava: '', vyslovne: true });", $signOut);
+
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            // Řádek jen u přihlášené dvojice, ne v ukázce.
+            $this->assertStringContainsString("...(window.GalerieApi && GalerieApi.mode === 'http' ? [['Odhlásit se z tohoto zařízení',", $dokument, $nazev);
+            $this->assertStringContainsString("if (base === 'Odhlásit se') { this.odhlasitSe(); return; }", $dokument, $nazev);
+            $this->assertStringContainsString("base === 'Odhlásit se' ? ['ph-sign-out', null]", $dokument, $nazev);
+
+            // Jediná obsluha, a v ní se počítá dřív, než se cokoli zahodí.
+            preg_match('/\n  odhlasitSe\(zahodit\) \{\n(.*?)\n  \}\n/s', $dokument, $obsluha);
+            $this->assertNotEmpty($obsluha, $nazev.': obsluha odhlasitSe(zahodit) se nenašla.');
+            $telo = $obsluha[1];
+            $this->assertSame(1, substr_count($dokument, '.signOut('), $nazev.': signOut se volá jinde než v obsluze.');
+            $this->assertStringContainsString('api.signOut()', $telo, $nazev);
+            $this->assertLessThan(strpos($telo, 'api.dorucNeodeslane()'), strpos($telo, 'api.neodeslane()'), $nazev);
+            $this->assertLessThan(strpos($telo, 'api.signOut()'), strpos($telo, 'api.dorucNeodeslane()'), $nazev);
+            $this->assertStringNotContainsString('window.confirm(', $dokument, $nazev);
+
+            // Výslovné odhlášení není „přihlášení skončilo".
+            $this->assertStringContainsString('lockErr: d.vyslovne ? null :', $dokument, $nazev);
+        }
+
+        // Počítač: tlačítko zpět v potvrzení umí říct „Zůstat přihlášen".
+        $pocitac = self::dokument('galerie-desktop.dc.html');
+        $this->assertStringContainsString('{{ confirmCancelLabel }}', $pocitac);
+        $this->assertStringContainsString("cta: 'Odhlásit a zahodit', cancelLabel: 'Zůstat přihlášen'", $pocitac);
+        // Telefon: vlastní list místo potvrzovacího dialogu — a obě volby v něm.
+        $telefon = self::dokument('galerie-mobil.dc.html');
+        $this->assertStringContainsString('<sc-if value="{{ sheetIsOdhlasit }}">', $telefon);
+        $this->assertStringContainsString("sheetIsOdhlasit: s.sheet === 'odhlasit',", $telefon);
+        $this->assertStringContainsString('onClick="{{ odhlasZustat }}" class="btn btn-secondary" style="flex:1; min-height:48px">Zůstat přihlášen</button>', $telefon);
+        $this->assertStringContainsString('>Odhlásit a zahodit</button>', $telefon);
+        $this->assertStringContainsString('odhlasZahodit: () => this.odhlasitSe(true),', $telefon);
+        // Nedoručené po „Zůstat přihlášen" nečeká na další úpravu.
+        preg_match('/dorucNeodeslane: function \(\) \{\n(.*?)\n    \},/s', $api, $doruc);
+        $this->assertNotEmpty($doruc, 'GalerieApi.dorucNeodeslane() se nenašla.');
+        $this->assertStringContainsString('if (Object.keys(pending).length) schedule(', $doruc[1]);
+    }
 }
