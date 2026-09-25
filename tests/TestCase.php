@@ -7,6 +7,7 @@ use App\Support\Cas;
 use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use Illuminate\Support\Facades\Http;
 
 abstract class TestCase extends BaseTestCase
 {
@@ -29,6 +30,12 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // Testy na síť nesahají. Dotaz bez `Http::fake()` spadne místo toho, aby tiše
+        // šel ven — jinak by třeba součet rozpočtu v korunách vyšel podle dnešního
+        // kurzu ECB, na počítači bez internetu jinak a při výpadku služby test čekal
+        // sekundy. Kurz tak v testu není známý, dokud si ho test sám nepodvrhne.
+        Http::preventStrayRequests();
 
         $testovaciCas = getenv('TESTY_CAS');
 

@@ -169,11 +169,23 @@ class FreeTravelDataService
         return $this->http()->get('https://api.open-meteo.com/v1/forecast', $query)->throw()->json();
     }
 
-    public function rate(string $base, string $quote, ?string $date = null): array
+    /**
+     * Kurz ECB z Frankfurteru.
+     *
+     * `$cekatSekund` je pro volání uvnitř načítání obrazovky (součty rozpočtu v hlavní
+     * měně): tam je lepší kurz nemít, než nechat stránku viset osm sekund a ještě
+     * jednou zkoušet, když služba nejede. Omezí se tím i navázání spojení, které by
+     * jinak mohlo čekat výchozích deset sekund. Bez něj se chová jako dosud.
+     */
+    public function rate(string $base, string $quote, ?string $date = null, ?int $cekatSekund = null): array
     {
         $path = $date ? "v2/rate/{$base}/{$quote}?date={$date}&providers=ECB" : "v2/rate/{$base}/{$quote}?providers=ECB";
 
-        return $this->http()->get('https://api.frankfurter.dev/'.$path)->throw()->json();
+        $http = $cekatSekund === null
+            ? $this->http()
+            : Http::acceptJson()->connectTimeout($cekatSekund)->timeout($cekatSekund);
+
+        return $http->get('https://api.frankfurter.dev/'.$path)->throw()->json();
     }
 
     public function route(float $fromLat, float $fromLng, float $toLat, float $toLng, string $profile = 'driving-car'): array
