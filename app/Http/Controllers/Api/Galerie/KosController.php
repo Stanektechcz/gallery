@@ -187,11 +187,24 @@ class KosController extends Controller
         ], 403);
     }
 
-    /** @return Builder<MediaItem> */
+    /**
+     * Co koš ukazuje, s tím se smí pracovat — nic víc.
+     *
+     * Fotku z trezoru seznam koše se zamčeným trezorem neukazuje (`System::kos`),
+     * ale „Vyprázdnit koš" ji dřív smazal nadobro taky: potvrdilo se číslo, které
+     * na obrazovce stálo, a zmizelo i to, co tam nestálo. Podmínka je tatáž
+     * jako u seznamu, sezení s odemčeným trezorem.
+     *
+     * @return Builder<MediaItem>
+     */
     private function vKosi(GallerySpace $prostor)
     {
+        $trezor = request()->hasSession()
+            && (int) request()->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->whereNotNull('trashed_at');
+            ->whereNotNull('trashed_at')
+            ->when(! $trezor, fn ($q) => $q->where('is_hidden', false));
     }
 }

@@ -168,6 +168,34 @@ class KosTest extends TestCase
         $this->assertSame(1, MediaItem::count());
     }
 
+    /**
+     * Se zamčeným trezorem se z koše nemaže, co z trezoru přišlo.
+     *
+     * Seznam koše fotky z trezoru se zamčeným trezorem neukazuje — a „Vyprázdnit
+     * koš" je přesto nadobro smazal: člověk potvrdil počet, který viděl, a přišel
+     * i o to, co neviděl. Stejně šla trvale smazat jednotlivě podle uuid.
+     */
+    public function test_se_zamcenym_trezorem_se_z_kose_nemaze_trezor(): void
+    {
+        $bezna = $this->fotka(['trashed_at' => now()->subDay()], 1);
+        $trezor = $this->fotka(['trashed_at' => now()->subDay(), 'is_hidden' => true], 2);
+
+        $this->postJson('/api/kos/odstranit', ['id' => $trezor->uuid])->assertNotFound();
+
+        $this->postJson('/api/kos/vyprazdnit')
+            ->assertOk()
+            ->assertJsonPath('zprava', 'Koš vyprázdněn — 1 položka trvale odstraněna');
+
+        $this->assertNull(MediaItem::withTrashed()->find($bezna->id));
+        $this->assertNotNull(MediaItem::find($trezor->id), 'Fotka z trezoru, kterou koš neukázal, zůstává.');
+
+        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->postJson('/api/kos/odstranit', ['id' => $trezor->uuid])
+            ->assertOk();
+
+        $this->assertNull(MediaItem::withTrashed()->find($trezor->id));
+    }
+
     /** Kdo nesmí mazat, dostane vysvětlení, ne ticho. */
     public function test_bez_opravneni_se_nemaze_a_rekne_se_to(): void
     {
