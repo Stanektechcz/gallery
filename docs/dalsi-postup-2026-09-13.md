@@ -804,6 +804,92 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ah. Třicáté páté kolo — zápisy bez signálu, trezor, upozornění, noc (25. 9.)
+
+Kolo podle plánu (`task-plan`) a oprav po dávkách (`task-deep`, `task-build`);
+každý nález nejdřív potvrdil test, který bez opravy spadl.
+
+### Zabezpečení
+
+* **Zápis bez signálu odešel pod jiným účtem.** Fronta service workeru nesla
+  zápisy i s hlavičkami a při „Odeslat" jim vyměnila token za právě
+  přihlášený; odhlášení frontu nemazalo. Na sdíleném tabletu tak neodeslané
+  změny jednoho skončily u druhého a pod jeho jménem. Teď každý zápis nese
+  autora (`ucet`), worker vymění token jen u téhož účtu a server zápis
+  s cizím autorem odmítne (422 `jiny_ucet`). Odhlášení napřed doručí vlastní
+  zápisy, pak frontu smaže.
+* **Vývoz vydal fotky z trezoru a z koše** — úloha filtrovala jen podle
+  galerie, webové stažení hlídalo koš, ale ne trezor.
+* **Odhlášený telefon dál dostával upozornění** — odhlášení, „odhlásit
+  ostatní" ani odebraný přístup odběr (`push_subscriptions`) nerušily; text
+  upozornění je vidět i na zamčené obrazovce. Hostům a účtům bez přístupu
+  (`PristupDoGalerie`) se teď nic neposílá.
+
+### Ztráta dat a špatná čísla
+
+* **Dvě úpravy téhož klíče bez signálu: druhá se ztratila** (409 při doručení,
+  worker ji potichu zahodil). Teď jedna položka fronty na adresu a autora,
+  nejstarší `rev`, střety se kartě ohlásí.
+* **Finance sčítaly koruny s eury** — u rozpočtu v eurech „utraceno 1 520 €"
+  z 1 500 Kč a 20 €; každý řádek nesl měnu rozpočtu; převody se počítaly
+  jako útrata.
+* **Připomínka rozhodnutí k revizi nikdy neodešla** — četla rozhodnutí ze
+  stavu, kde od převodu do `couple_decisions` nejsou.
+
+### Noc mezi půlnocí a druhou
+
+Osm testů padalo po pražské půlnoci. Šest z nich počítalo očekávání v UTC,
+ale průchod celé sady v noci našel čtyři skutečné chyby: „Odhad vs.
+skutečnost" v noci vynechal dnešní útratu (a 1. ledna zmizel celý), horizont
+plateb měl první noc v měsíci o měsíc méně, jistota předpovědi taky, a starší
+obrazovka cesty psala „zbývá 19 dní" vedle částky na 21 dní.
+
+`TESTY_CAS` v `tests/TestCase.php` pustí celou sadu v libovolném okamžiku:
+
+```bash
+TESTY_CAS="2026-09-25 00:30 Europe/Prague" vendor/bin/phpunit
+```
+
+Cestou odzbrojené testy, které by padaly od prosince (napevno září) a prvního
+či druhého dne v měsíci.
+
+### Opravený závěr z kola 2ae
+
+„Chyba 500 u validace na webových cestách" nebyla pravda — server vracel 302
+a padala až hláška testu. Skutečnou chybu (axios tiše následoval přesměrování)
+opravil samostatný úkol ve větvích `claude/kind-perlman-108d25`
+a `claude/elated-tesla-64fdeb` — **zatím nesloučeno do `main`**.
+
+### Zbývá
+
+* V aplikaci **není tlačítko „Odhlásit se"** — nic nevolá `signOut()`; účet se
+  mění jen na zamykací obrazovce („Jiný účet", otisk prstu). Oprava fronty
+  pokrývá i tyhle cesty.
+* Odhlášení bez signálu neodeslané změny zahodí (záměrně, ať nic nezůstane)
+  — bez varování.
+* Po vypršení tokenu (401, ne odhlášení) zůstane fronta v IndexedDB, dokud se
+  týž účet nepřihlásí nebo neodhlásí.
+* Ověřit v prohlížeči s přihlášenou dvojicí: dvě úpravy bez signálu → jedna
+  položka fronty; „Jiný účet" → žádný zápis s cizími daty; odhlášení →
+  fronta pryč.
+
+| Commit | Co |
+|---|---|
+| `b30a09a1` | Oprava závěru „chyba 500 u validace" |
+| `d8b62336` | Vývoz nevydá fotky z trezoru ani z koše |
+| `c14440e2` | Odhlášený telefon přestane dostávat upozornění |
+| `76bd35de` | Připomínka rozhodnutí k revizi konečně odchází |
+| `b8baf043` | Mezi půlnocí a druhou ráno počítají finance a testy správný den |
+| `bb30dabb` | Finance nesčítají koruny s eury |
+| `4b43d471` | Testy, které by padaly od prosince a prvního v měsíci |
+| `0e7c1a0a` | Další dva testy nezávislé na dni spuštění |
+| `ac1ad496` | Zápis bez signálu odejde jen pod účtem, který ho napsal |
+
+Testy: **1711 PHP testů**, všechny prošly — i s `TESTY_CAS` v letní a zimní
+noci, 1. října a v prosinci. Bez migrace.
+
+---
+
 ## 2ag. Třicáté čtvrté kolo — záloha databáze, která opravdu existuje (24. 9.)
 
 Bod 3.9 („obnova ze zálohy nebyla ověřená") se při prověrce ukázal horší:
