@@ -1,3 +1,4 @@
+import { popisChyby } from '@/lib/popisChyby';
 import { Head } from '@inertiajs/react';
 import axios from 'axios';
 import { CheckCircle2, Download, ImagePlus, MessageCircle, Upload } from 'lucide-react';
@@ -18,6 +19,7 @@ export default function SharedShow({ link, media, comments = [] }: { link: any; 
     const [name, setName] = useState('');
     const [busy, setBusy] = useState(false);
     const [done, setDone] = useState(false);
+    const [chybaNahrani, setChybaNahrani] = useState<string | null>(null);
 
     const [vzkazy, setVzkazy] = useState<Vzkaz[]>(comments);
     const [jmeno, setJmeno] = useState('');
@@ -28,13 +30,20 @@ export default function SharedShow({ link, media, comments = [] }: { link: any; 
     const send = async () => {
         if (!files.length) return;
         setBusy(true);
+        setChybaNahrani(null);
         const body = new FormData();
         files.forEach(f => body.append('files[]', f));
         body.append('contributor_name', name);
-        await axios.post(`/s/${link.token}/upload`, body);
-        setDone(true);
-        setFiles([]);
-        setBusy(false);
+        try {
+            await axios.post(`/s/${link.token}/upload`, body);
+            setDone(true);
+            setFiles([]);
+        } catch (e) {
+            // Vybrané soubory zůstanou, ať jde odeslat znovu bez nového hledání.
+            setChybaNahrani(popisChyby(e, 'Fotky se nepodařilo odeslat.'));
+        } finally {
+            setBusy(false);
+        }
     };
 
     const posli = async () => {
@@ -54,7 +63,10 @@ export default function SharedShow({ link, media, comments = [] }: { link: any; 
             ]);
             setText('');
         } catch (e: any) {
-            setChyba(e?.response?.data?.zprava ?? 'Vzkaz se nepodařilo odeslat. Zkuste to prosím znovu.');
+            // Vlastní věty kontroleru chodí v `zprava`; zbytek (419 po dlouhém otevření,
+            // validace, výpadek) popíše pomocník — „zkuste znovu" by po 419 bez obnovení
+            // stránky selhalo zas.
+            setChyba(e?.response?.data?.zprava ?? popisChyby(e, 'Vzkaz se nepodařilo odeslat.'));
         }
         setPosilam(false);
     };
@@ -161,6 +173,7 @@ export default function SharedShow({ link, media, comments = [] }: { link: any; 
                                 <button onClick={send} disabled={busy || !files.length} className="mt-3 min-h-12 w-full rounded-xl bg-violet-600 font-medium disabled:opacity-40">
                                     {busy ? 'Odesílám…' : 'Odeslat ke schválení'}
                                 </button>
+                                {chybaNahrani && <div role="alert" className="mt-3 rounded-xl bg-red-500/10 p-3 text-sm text-red-300">{chybaNahrani}</div>}
                             </>
                         )}
                     </section>

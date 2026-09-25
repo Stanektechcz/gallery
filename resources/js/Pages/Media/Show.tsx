@@ -5,6 +5,7 @@ import {
 } from '@/Components/Media/DetailPanels';
 import ProgressiveImage from '@/Components/Media/ProgressiveImage';
 import AppLayout from '@/Layouts/AppLayout';
+import { popisChyby } from '@/lib/popisChyby';
 import { takenAtDate } from '@/lib/takenAt';
 import { Head, Link, router } from '@inertiajs/react';
 import axios from 'axios';
@@ -282,16 +283,24 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
     };
 
     const archiveItem = async () => {
-        const res = await axios.post(`/media/${item.uuid}/archive`);
-        if (res.data.is_archived) {
-            router.visit('/archive');
+        try {
+            const res = await axios.post(`/media/${item.uuid}/archive`);
+            if (res.data.is_archived) {
+                router.visit('/archive');
+            }
+        } catch (e) {
+            hlaska(popisChyby(e, 'Archivace se nepodařila.'), 'chyba');
         }
     };
 
     const toggleVault = async () => {
-        const response = await axios.post(`/vault/media/${item.uuid}/toggle`);
-        setItem(previous => ({ ...previous, is_hidden: response.data.is_hidden }));
-        if (response.data.is_hidden) router.visit('/vault');
+        try {
+            const response = await axios.post(`/vault/media/${item.uuid}/toggle`);
+            setItem(previous => ({ ...previous, is_hidden: response.data.is_hidden }));
+            if (response.data.is_hidden) router.visit('/vault');
+        } catch (e) {
+            hlaska(popisChyby(e, item.is_hidden ? 'Z trezoru se to nepodařilo vrátit.' : 'Do trezoru se to nepodařilo přesunout.'), 'chyba');
+        }
     };
 
     const trashItem = async () => {
@@ -299,9 +308,8 @@ export default function MediaShow({ media, breadcrumb, prev, next }: Props) {
         try {
             await axios.delete(`/media/${item.uuid}`);
             router.visit('/timeline');
-        } catch (e: any) {
-            const msg = e?.response?.data?.message ?? e?.message ?? 'Chyba p\u0159i p\u0159esunu do ko\u0161e';
-            hlaska(msg, 'chyba');
+        } catch (e) {
+            hlaska(popisChyby(e, 'Do ko\u0161e se to nepoda\u0159ilo p\u0159esunout.'), 'chyba');
         }
     };
 

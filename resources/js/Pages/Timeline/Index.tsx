@@ -1,6 +1,7 @@
 import { hlaska } from '@/Components/Hlasky';
 import { media, polozky } from '@/lib/cestina';
 import { previewUrl } from '@/lib/mediaUrl';
+import { popisChyby } from '@/lib/popisChyby';
 import { BulkActionBar } from '@/Components/BulkActionBar';
 import AlbumSuggestionPanel, { type AlbumSuggestion } from '@/Components/AlbumSuggestionPanel';
 import CameraCapture from '@/Components/CameraCapture';
@@ -177,7 +178,7 @@ export default function TimelineIndex() {
         if (!confirm('Přesunout do koše?')) return;
         setLocalItems(p => ({ ...p, [uuid]: { ...(p[uuid]??{}), _trashed: true } as any }));
         try { await axios.delete(`/media/${uuid}`); queryClient.invalidateQueries({ queryKey: ['timeline'] }); }
-        catch (e: any) { setLocalItems(p => { const n={...p}; delete n[uuid]; return n; }); hlaska(e?.response?.data?.message??'Něco se nepovedlo.','chyba'); }
+        catch (e) { setLocalItems(p => { const n={...p}; delete n[uuid]; return n; }); hlaska(popisChyby(e, 'Do koše se to nepodařilo přesunout.'),'chyba'); }
     }, [queryClient]);
     const toggleSelect = useCallback((uuid: string) => setSelected(prev => { const n=new Set(prev); n.has(uuid)?n.delete(uuid):n.add(uuid); return n; }), []);
     const clearSelect  = useCallback(() => setSelected(new Set()), []);

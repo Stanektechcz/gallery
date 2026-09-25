@@ -1,4 +1,5 @@
 import LocationPicker, { type LocationValue } from '@/Components/LocationPicker';
+import { popisChyby } from '@/lib/popisChyby';
 import axios from 'axios';
 import { router } from '@inertiajs/react';
 import { Check, MapPin, X } from 'lucide-react';
@@ -86,6 +87,7 @@ export default function AlbumSettings({ albumUuid, album, candidates = [], cover
     /** Poloha alba se ukládá hned; přenesení na obsah je vědomý druhý krok. */
     const saveLocation = async (next: LocationValue) => {
         setApplied('');
+        setError('');
 
         try {
             await axios.patch(`/albums/${albumUuid}`, {
@@ -94,8 +96,8 @@ export default function AlbumSettings({ albumUuid, album, candidates = [], cover
                 longitude: next.longitude === '' ? null : next.longitude,
                 location_country: next.location_country || null,
             });
-        } catch {
-            setError('Místo alba se nepodařilo uložit.');
+        } catch (problem) {
+            setError(popisChyby(problem, 'Místo alba se nepodařilo uložit.'));
         }
     };
 
@@ -177,9 +179,8 @@ export default function AlbumSettings({ albumUuid, album, candidates = [], cover
             // catching up, not the change failing.
             router.reload({ only: ['album', 'media'] });
             onClose();
-        } catch (problem: any) {
-            const errors = problem?.response?.data?.errors;
-            setError(errors ? Object.values(errors).flat().join(' ') : 'Nastavení se nepodařilo uložit.');
+        } catch (problem) {
+            setError(popisChyby(problem, 'Nastavení se nepodařilo uložit.'));
         } finally {
             setSaving(false);
         }
