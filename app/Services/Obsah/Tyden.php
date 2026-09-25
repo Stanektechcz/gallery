@@ -5,6 +5,7 @@ namespace App\Services\Obsah;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Services\Finance\ExchangeRateService;
+use App\Services\Finance\SouctyPoMenach;
 use App\Support\Cas;
 use App\Support\Meny;
 use App\Support\Tabulky;
@@ -728,7 +729,7 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
         $pocty = [];
 
         foreach ($radky as $r) {
-            $mena = strtoupper(trim((string) $r->mena)) ?: $hlavni;
+            $mena = SouctyPoMenach::klic($r->mena, $hlavni);
             $castka = $jenPocty ? (int) $r->n : (float) ($r->soucet ?? $r->castka ?? 0);
             $soucty[$mena] = ($soucty[$mena] ?? 0.0) + $castka;
             $pocty[$mena] = ($pocty[$mena] ?? 0) + (int) $r->n;
@@ -753,13 +754,13 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Částka jako na celé obrazovce týdne: tisíce pevnou mezerou, ať se číslo nezlomí. */
     private function castka(float $castka, string $mena): string
     {
-        return number_format($castka, 0, ',', "\u{00A0}").' '.Meny::znak($mena);
+        return SouctyPoMenach::castkaPevnaMezera($castka, $mena);
     }
 
     /** @param  array<string, float>  $castky  „3 000 Kč + 50 €" */
     private function castky(array $castky): string
     {
-        return implode(' + ', array_map(fn (string $mena, float $castka) => $this->castka($castka, $mena), array_keys($castky), $castky));
+        return SouctyPoMenach::spoj($castky, ' + ', $this->castka(...));
     }
 
     // ——— příští týden ———

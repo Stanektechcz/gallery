@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Services\Finance\ExchangeRateService;
+use App\Services\Finance\SouctyPoMenach;
 use App\Support\Cas;
 use App\Support\Meny;
 use App\Support\Tabulky;
@@ -1019,10 +1020,9 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             $soucty[$mena] = round(($soucty[$mena] ?? 0.0) + (float) $u->amount, 2);
         }
 
-        $soucty = array_filter($soucty, fn (float $c) => abs($c) >= 0.005);
+        $soucty = SouctyPoMenach::odfiltrujNulove($soucty);
 
-        // `array_merge` nechá klíč na místě, kde se objevil poprvé — tady vpředu.
-        return isset($soucty[$vychozi]) ? array_merge([$vychozi => $soucty[$vychozi]], $soucty) : $soucty;
+        return SouctyPoMenach::presunNaZacatek($soucty, $vychozi);
     }
 
     /**
@@ -1035,7 +1035,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function castky(array $castky): string
     {
-        return implode(' + ', array_map(fn (string $mena, float $castka) => Meny::castka($castka, $mena), array_keys($castky), $castky));
+        return SouctyPoMenach::spoj($castky, ' + ', Meny::castka(...));
     }
 
     /**

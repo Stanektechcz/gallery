@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Finance\ExchangeRateService;
 use App\Services\Finance\LedgerService;
+use App\Services\Finance\SouctyPoMenach;
 use App\Services\Media\MazaniFotek;
 use App\Services\Notifications\NotificationPreferenceService;
 use App\Services\Provoz\AdministraceGalerie;
@@ -1876,9 +1877,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function klicMeny(mixed $mena, string $hlavni): string
     {
-        $kod = strtoupper(trim((string) $mena));
-
-        return $kod === '' ? $hlavni : $kod;
+        return SouctyPoMenach::klic($mena, $hlavni);
     }
 
     /**
@@ -1894,9 +1893,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     private function vHlavniMene(array $poMenach, GallerySpace $prostor): array
     {
         $vysledek = $this->kurzy->doHlavni($poMenach, $prostor);
-        $soucty = $vysledek['poMenach'];
-        // Rozpis s hlavní měnou vpředu; `array_merge` nechá klíč na prvním místě.
-        $soucty = isset($soucty[$vysledek['mena']]) ? array_merge([$vysledek['mena'] => $soucty[$vysledek['mena']]], $soucty) : $soucty;
+        // Rozpis s hlavní měnou vpředu.
+        $soucty = SouctyPoMenach::presunNaZacatek($vysledek['poMenach'], $vysledek['mena']);
 
         if ($vysledek['uplne']) {
             return [
@@ -1963,7 +1961,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return match (true) {
             $soucet['prepocet'] !== null => ' · '.$soucet['prepocet'],
-            $soucet['stranou'] !== [] => ' · '.$this->castky($soucet['stranou']).' '.$slovo,
+            $soucet['stranou'] !== [] => ' · '.SouctyPoMenach::poznamka($soucet['stranou'], Meny::castka(...), pripona: ' '.$slovo),
             default => '',
         };
     }
@@ -1971,7 +1969,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @param  array<string, float>  $castky  měna => částka; „1 000 € + 20 $" */
     private function castky(array $castky): string
     {
-        return implode(' + ', array_map(fn (string $mena, float $castka) => Meny::castka($castka, $mena), array_keys($castky), $castky));
+        return SouctyPoMenach::spoj($castky, ' + ', Meny::castka(...));
     }
 
     private function cislo(int $kolik): string

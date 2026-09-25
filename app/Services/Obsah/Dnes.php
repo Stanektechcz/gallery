@@ -8,6 +8,7 @@ use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Finance\ExchangeRateService;
+use App\Services\Finance\SouctyPoMenach;
 use App\Support\Cas;
 use App\Support\Meny;
 use App\Support\SpaceContext;
@@ -763,7 +764,7 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
     /** Tisíce pevnou mezerou, ať se částka na úvodní obrazovce nezlomí; znak podle `Meny`. */
     private function castka(float $castka, string $mena): string
     {
-        return number_format($castka, 0, ',', "\u{00A0}").' '.Meny::znak($mena);
+        return SouctyPoMenach::castkaPevnaMezera($castka, $mena);
     }
 
     private function pocet(int $n, string $jedna, string $dve, string $pet): string

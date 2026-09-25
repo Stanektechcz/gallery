@@ -8,6 +8,7 @@ use App\Models\Transaction;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Finance\ExchangeRateService;
 use App\Services\Finance\FinanceService;
+use App\Services\Finance\SouctyPoMenach;
 use App\Support\Cas;
 use App\Support\Meny;
 use App\Support\SpaceContext;
@@ -1196,14 +1197,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private static function castkyCesty(Collection $utraty, string $hlavni): array
     {
-        $poMenach = [];
-
-        foreach ($utraty as $u) {
-            $mena = self::mena($u->currency, $hlavni);
-            $poMenach[$mena] = ($poMenach[$mena] ?? 0.0) + (float) $u->amount;
-        }
-
-        return $poMenach;
+        return SouctyPoMenach::secti($utraty, fn ($u) => $u->currency, fn ($u) => (float) $u->amount, $hlavni);
     }
 
     /**
@@ -1239,9 +1233,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private static function mena(?string $mena, string $hlavni): string
     {
-        $kod = strtoupper(trim((string) $mena));
-
-        return $kod === '' ? $hlavni : $kod;
+        return SouctyPoMenach::klic($mena, $hlavni);
     }
 
     /**
@@ -1254,14 +1246,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private static function poMenach(iterable $radky, string $hlavni): array
     {
-        $soucty = [];
-
-        foreach ($radky as $r) {
-            $mena = self::mena($r->mena, $hlavni);
-            $soucty[$mena] = ($soucty[$mena] ?? 0.0) + (float) $r->castka;
-        }
-
-        return $soucty;
+        return SouctyPoMenach::secti($radky, fn ($r) => $r->mena, fn ($r) => (float) $r->castka, $hlavni);
     }
 
     /**
