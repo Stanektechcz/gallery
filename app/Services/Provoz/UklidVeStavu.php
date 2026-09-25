@@ -4,11 +4,15 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\User;
+use App\Services\Media\MazaniFotek;
+use App\Services\Media\VysledekMazani;
 use App\Services\Obsah\Uklid;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 /**
  * Úklid knihovny, který přišel jako změna stavu.
@@ -22,10 +26,22 @@ use Illuminate\Support\Facades\DB;
  *
  * Zápis je záměrně **idempotentní** — klíče zůstávají ve stavu, takže tentýž
  * seznam přijde i s dalším patchem. Druhé provedení už nemá co změnit.
+ *
+ * Do koše se nic neposílá napřímo, jen přes `MazaniFotek::doKose()`: ve
+ * dvojici je „Pustit" i „Sloučit" jen návrh, který musí potvrdit druhý,
+ * skryté fotky zamčený trezor chrání a každý přesun má záznam v protokolu
+ * a lhůtu koše z nastavení. Host ani účet jen pro čtení tu nevyhodí nic —
+ * zbytek jeho zápisu stavu se ale uloží.
  */
 class UklidVeStavu
 {
-    public function __construct(private readonly Uklid $obsah) {}
+    /** `dupKeep[nález] = '*'` — „Necháváme obě": nález se uzavře a nic nejde do koše. */
+    public const NECHAT_VSE = '*';
+
+    public function __construct(
+        private readonly Uklid $obsah,
+        private readonly MazaniFotek $mazani,
+    ) {}
 
     public function tykaSe(array $patch): bool
     {
@@ -41,15 +57,24 @@ class UklidVeStavu
      * načtení stránky ta čísla nemá z čeho složit, takže se dosadí to, co
      * z databáze opravdu zmizelo.
      *
+     * @param  bool  $trezor  `Trezor::odemcen()` — zamčený trezor skryté fotky mine
      * @return array<string, mixed>
      */
-    public function zpracuj(array $patch, GallerySpace $prostor): array
+    public function zpracuj(array $patch, GallerySpace $prostor, User $kdo, bool $trezor): array
     {
-        $this->karantena($patch, $prostor);
+        // Karanténu i duplicity rozhoduje jen dvojice. Host se sem přes bránu
+        // nedostane, účet jen pro čtení ano — a jeho zápis stavu má projít,
+        // jen bez mazání (služba by odmítla 403 a celý zápis by spadl).
+        $smi = $this->mazani->jeClenDvojice($prostor, $kdo);
+
+        if ($smi) {
+            $this->karantena($patch, $prostor, $kdo, $trezor);
+        }
+
         $this->datovani($patch, $prostor);
 
         if (array_key_exists('dupDone', $patch)) {
-            $patch['clnFreed'] = $this->duplicity($patch, $prostor);
+            $patch['clnFreed'] = $this->duplicity($patch, $prostor, $smi ? $kdo : null, $trezor);
         }
 
         return $patch;
@@ -143,8 +168,21 @@ class UklidVeStavu
      * `is_archived` nechala, vrácení z koše by ji vrátilo do fronty otázek,
      * kterou už dvojice zodpověděla — a schovaná by pak byla jen tím, co si
      * o ní pamatuje prohlížeč.
+     *
+     * „Pustit" jde přes `MazaniFotek::doKose()` — ve dvojici je to návrh.
+     * **Co už je vyřízené, pozná server podle fotky, ne podle stavu:** každé
+     * provedené rozhodnutí (přesun, návrh i souhlas) karanténu ukončí
+     * (`is_archived = false`) a sem se berou jen fotky, které v karanténě
+     * pořád jsou. Když partner návrh odmítne („Ponechat"), fotka zůstane
+     * v knihovně a tentýž `drop`, který přijde s každým dalším patchem (nebo
+     * ze staré kopie stavu na druhém zařízení), už nic nenavrhne. Porovnávat
+     * se s uloženým stavem by nestačilo — druhé zařízení může poslat starou
+     * kopii, ve které rozhodnutí vypadá jako nové.
+     *
+     * Skrytá fotka při zamčeném trezoru zůstane v karanténě i s rozhodnutím —
+     * dokončí se, až bude trezor odemčený.
      */
-    private function karantena(array $patch, GallerySpace $prostor): void
+    private function karantena(array $patch, GallerySpace $prostor, User $kdo, bool $trezor): void
     {
         $rozhodnuti = (array) ($patch['quarGone'] ?? []);
 
@@ -158,28 +196,54 @@ class UklidVeStavu
             ->where('is_archived', true);
 
         if ($nechat = $vybrat('keep')) {
-            (clone $dotaz())
+            $dotaz()
                 ->whereIn('uuid', $nechat)
                 ->update(['is_archived' => false, 'purge_after' => null]);
         }
 
-        if ($pustit = $vybrat('drop')) {
-            (clone $dotaz())
-                ->whereIn('uuid', $pustit)
-                ->update(['is_archived' => false, 'purge_after' => null, 'trashed_at' => now()]);
+        $pustit = $vybrat('drop');
+
+        if (! $pustit) {
+            return;
+        }
+
+        $vKarantene = $dotaz()->whereIn('uuid', $pustit)->whereNull('trashed_at')->pluck('uuid')->all();
+        $vysledek = $vKarantene === [] ? null : $this->doKose($prostor, $kdo, $vKarantene, 'uklid-karantena', $trezor);
+
+        if ($vysledek === null) {
+            return;
+        }
+
+        // V koši: lhůtu koše právě nastavila služba — tu přepsat nesmíme.
+        if ($vKosi = $vysledek->vKosi()) {
+            MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)
+                ->whereIn('uuid', $vKosi)
+                ->update(['is_archived' => false]);
+        }
+
+        // Návrh čeká na partnera v knihovně; lhůta karantény („pustíme sama
+        // za…") s rozhodnutím končí, jinak by visela u fotky, která už v karanténě není.
+        if ($ceka = [...$vysledek->navrzeno, ...$vysledek->uzNavrzeno]) {
+            $dotaz()
+                ->whereIn('uuid', $ceka)
+                ->update(['is_archived' => false, 'purge_after' => null]);
         }
     }
 
     /**
      * Sloučení duplicit: `dupDone` jsou uzavřené nálezy, `dupKeep` vítěz.
      *
-     * Vítěz je **pořadí** v seznamu, který poslal server — proto se tu čte
-     * přesně tímtéž řazením jako v `Knihovna::duplicity()`. Ostatní kopie jdou
-     * do koše a nález se uzavře, aby se příště nenabízel znovu.
+     * Vítěz je uuid kopie (starší klient posílal **pořadí** v seznamu, který
+     * poslal server — proto se tu čte přesně tímtéž řazením jako
+     * v `Knihovna::duplicity()`), nebo `*` = nechat všechny. Ostatní kopie jdou
+     * přes `doKose()` (ve dvojici k návrhu) a nález se uzavře, aby se příště
+     * nenabízel znovu.
      *
+     * @param  User|null  $kdo  `null` = nikdo z dvojice; nález se jen spočítá, neslučuje
      * @return float uvolněné místo v MB, spočítané z toho, co šlo do koše
      */
-    private function duplicity(array $patch, GallerySpace $prostor): float
+    private function duplicity(array $patch, GallerySpace $prostor, ?User $kdo, bool $trezor): float
     {
         if (! Tabulky::je('duplicate_groups')) {
             return 0.0;
@@ -196,7 +260,7 @@ class UklidVeStavu
         // stránky spadlo na to, co dvojice stihla v téhle relaci.
         $uvolneno = $this->uvolneno($prostor);
 
-        if (! $hotove) {
+        if (! $hotove || $kdo === null) {
             return $uvolneno;
         }
 
@@ -207,17 +271,50 @@ class UklidVeStavu
             ->get(['id', 'uuid']);
 
         foreach ($skupiny as $skupina) {
-            $uvolneno += $this->sluc($skupina, $vitezove[$skupina->uuid] ?? null, $prostor);
+            $vitez = $vitezove[$skupina->uuid] ?? null;
+
+            /*
+             * Bez výslovného vítěze se nevyhazuje nic a nález zůstane otevřený.
+             *
+             * „Necháváme obě" na počítači posílalo jen `dupDone` — a záložní
+             * výběr (největší kopie) pak ostatní poslal do koše. Chybějící
+             * vítěz ale nemusí znamenat ani „nechat obě": telefon při
+             * sloučení posílal prázdné `dupKeep`. Neví-li server, co člověk
+             * chtěl, nesmaže nic a nález nezavře — dá se rozhodnout znovu.
+             */
+            if ($vitez === null || $vitez === '') {
+                continue;
+            }
+
+            $uvolneno += $vitez === self::NECHAT_VSE
+                ? $this->nechatVse($skupina, $prostor)
+                : $this->sluc($skupina, $vitez, $prostor, $kdo, $trezor);
         }
 
         return round($uvolneno, 1);
     }
 
+    /** „Necháváme obě": nález se uzavře, všechny kopie zůstanou. */
+    private function nechatVse(object $skupina, GallerySpace $prostor): float
+    {
+        DB::table('duplicate_group_items')
+            ->where('duplicate_group_id', $skupina->id)
+            ->update(['is_kept' => true, 'updated_at' => now()]);
+
+        DB::table('duplicate_groups')
+            ->where('id', $skupina->id)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('resolved_at')
+            ->update(['resolution' => 'kept_all', 'resolved_at' => now(), 'updated_at' => now()]);
+
+        return 0.0;
+    }
+
     /**
-     * @param  string|int|null  $vitez  identifikátor vybrané kopie (starší klient posílal pořadí)
-     * @return float uvolněné MB
+     * @param  string|int  $vitez  identifikátor vybrané kopie (starší klient posílal pořadí)
+     * @return float uvolněné MB — jen za kopie, které opravdu skončily v koši
      */
-    private function sluc(object $skupina, $vitez, GallerySpace $prostor): float
+    private function sluc(object $skupina, $vitez, GallerySpace $prostor, User $kdo, bool $trezor): float
     {
         $radky = DB::table('duplicate_group_items as p')
             ->join('media_items as m', 'm.id', '=', 'p.media_item_id')
@@ -255,8 +352,22 @@ class UklidVeStavu
             is_string($vitez) && $vitez !== '' => $radky->firstWhere('uuid', $vitez),
             is_int($vitez) => $radky[$vitez] ?? null,
             default => null,
-        } ?? $radky->first();
+        };
+
+        // Vybraná kopie mezitím zmizela (nebo přišel nesmysl): záložní výběr
+        // by poslal do koše kopii, kterou nikdo nevybral. Nález zůstane otevřený.
+        if ($nechat === null) {
+            return 0.0;
+        }
+
         $doKose = $radky->reject(fn (object $r) => $r->media === $nechat->media);
+
+        // Nejdřív služba: když odmítne (souběh se změnou role), nález se nezavře.
+        $vysledek = $this->doKose($prostor, $kdo, $doKose->pluck('uuid')->all(), 'uklid-duplicity', $trezor);
+
+        if ($vysledek === null) {
+            return 0.0;
+        }
 
         DB::table('duplicate_group_items')
             ->where('duplicate_group_id', $skupina->id)
@@ -266,15 +377,40 @@ class UklidVeStavu
             ->where('id', $nechat->vazba)
             ->update(['is_kept' => true, 'updated_at' => now()]);
 
-        DB::table('media_items')
-            ->whereIn('id', $doKose->pluck('media'))
-            ->update(['trashed_at' => now(), 'updated_at' => now()]);
-
+        /*
+         * Nález se uzavře i tehdy, když kopie jen čekají na souhlas partnera.
+         *
+         * Rozhodnutí „tuhle nechat" padlo; o zbytku teď rozhoduje návrh
+         * v knihovně. Odmítne-li ho partner, kopie zůstane — a nález se
+         * nevrátí, protože ho znovu poslaný `dupDone` díky `resolved_at` mine.
+         */
         DB::table('duplicate_groups')
             ->where('id', $skupina->id)
             ->update(['resolution' => 'merged', 'resolved_at' => now(), 'updated_at' => now()]);
 
-        return round((int) $doKose->sum('size_bytes') / 1_048_576, 1);
+        // Uvolnilo se jen to, co je opravdu v koši — návrh zatím nic.
+        $vKosi = $vysledek->vKosi();
+
+        return round((int) $doKose->whereIn('uuid', $vKosi)->sum('size_bytes') / 1_048_576, 1);
+    }
+
+    /**
+     * „Do koše" přes společné schválení; `null`, když služba odmítla (host,
+     * jen pro čtení, cizí prostor) — zápis stavu pak projde bez mazání.
+     *
+     * @param  list<string>  $uuids
+     */
+    private function doKose(GallerySpace $prostor, User $kdo, array $uuids, string $odkud, bool $trezor): ?VysledekMazani
+    {
+        try {
+            return $this->mazani->doKose($prostor, $kdo, $uuids, $odkud, $trezor);
+        } catch (HttpExceptionInterface $e) {
+            if ($e->getStatusCode() !== 403) {
+                throw $e;
+            }
+
+            return null;
+        }
     }
 
     /** Kolik už dvojice uklizením duplicit uvolnila — z uzavřených nálezů. */

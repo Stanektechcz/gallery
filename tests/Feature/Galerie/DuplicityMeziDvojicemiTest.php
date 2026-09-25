@@ -128,7 +128,8 @@ class DuplicityMeziDvojicemiTest extends TestCase
         $this->assertStringNotContainsString('jejich-tajny-vylet.jpg', $seznam);
         $this->assertStringNotContainsString('Jejich chata', $seznam);
 
-        $this->patchJson('/api/state', ['data' => ['dupDone' => [$uuid]]])->assertOk();
+        // Vítěz výslovně — bez něj se nevyhazuje nic (viz UklidVeStavuTest).
+        $this->patchJson('/api/state', ['data' => ['dupDone' => [$uuid], 'dupKeep' => [$uuid => $nase1->uuid]]])->assertOk();
 
         $this->assertNull($nase1->refresh()->trashed_at);
         $this->assertNotNull($nase2->refresh()->trashed_at, 'Vlastní kopie jde do koše jako dřív.');

@@ -65,7 +65,12 @@ class UklidVeStavuTest extends TestCase
         $this->assertNotNull($f->trashed_at);
         $this->assertNull($f->deleted_at);
         $this->assertFalse((bool) $f->is_archived);
-        $this->assertNull($f->purge_after);
+        // Lhůta karantény končí, místo ní platí lhůta koše (jako u každého „Do koše").
+        $this->assertEqualsWithDelta(
+            $f->trashed_at->copy()->addDays((int) config('gallery.trash_retention_days', 30))->getTimestamp(),
+            $f->purge_after->getTimestamp(),
+            2,
+        );
     }
 
     /** Rozhodnutí se pošle znovu s dalším patchem — a podruhé už nemá co změnit. */
@@ -144,17 +149,23 @@ class UklidVeStavuTest extends TestCase
         $this->assertNotNull($stredni->refresh()->trashed_at);
     }
 
-    /** Bez výběru zůstane největší kopie. */
-    public function test_bez_vyberu_zustava_nejvetsi_kopie(): void
+    /**
+     * Bez výběru se nevyhodí nic a nález zůstane otevřený.
+     *
+     * Dřív zůstala největší kopie a zbytek šel do koše — jenže „Necháváme
+     * obě" na počítači posílalo právě jen `dupDone`, takže vyhazovalo.
+     */
+    public function test_bez_vyberu_se_nic_nevyhodi(): void
     {
         $velka = $this->fotka(['size_bytes' => 8_388_608], 1);
         $mala = $this->fotka(['size_bytes' => 3_145_728], 2);
-        [, $uuid] = $this->nalez([$velka, $mala]);
+        [$skupina, $uuid] = $this->nalez([$velka, $mala]);
 
         $this->stav(['dupDone' => [$uuid]])->assertOk();
 
         $this->assertNull($velka->refresh()->trashed_at);
-        $this->assertNotNull($mala->refresh()->trashed_at);
+        $this->assertNull($mala->refresh()->trashed_at);
+        $this->assertNull(DB::table('duplicate_groups')->where('id', $skupina)->value('resolved_at'));
     }
 
     /** Druhá kopie mezitím zmizela — pak není co slučovat. */
@@ -252,7 +263,7 @@ class UklidVeStavuTest extends TestCase
         $mala = $this->fotka(['size_bytes' => 3_145_728], 2);
         [, $uuid] = $this->nalez([$velka, $mala]);
 
-        $this->stav(['dupDone' => [$uuid]])->assertOk();
+        $this->stav(['dupDone' => [$uuid], 'dupKeep' => [$uuid => $velka->uuid]])->assertOk();
 
         // Nová relace pošle tentýž seznam; nález je už uzavřený.
         $odpoved = $this->stav(['dupDone' => [$uuid]])->assertOk();

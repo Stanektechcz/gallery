@@ -314,9 +314,12 @@ class StateController extends Controller
              * originál ležel na disku dál a druhý z dvojice viděl karanténu
              * nedotčenou. Klíče ve stavu zůstávají (drží tlačítko Zpět), ale
              * rozhodnutí se provede v knihovně.
+             *
+             * Do koše jen po společném schválení (ve dvojici je to návrh)
+             * a skryté fotky jen s odemčeným trezorem — proto kdo a trezor.
              */
             if ($this->uklid->tykaSe($patch)) {
-                $patch = $this->uklid->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                $patch = $this->uklid->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel, Trezor::odemcen($request));
             }
 
             /*
