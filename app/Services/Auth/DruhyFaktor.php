@@ -39,7 +39,7 @@ class DruhyFaktor
     {
         $kod = trim($kod);
 
-        if ($kod !== '' && ($this->totp->verify((string) $user->two_factor_secret, $kod) || $this->spotrebujObnovovaci($user, $kod))) {
+        if ($kod !== '' && ($this->prijmiKodAplikace($user, $kod) || $this->spotrebujObnovovaci($user, $kod))) {
             RateLimiter::clear($this->klic($user));
 
             return true;
@@ -52,12 +52,62 @@ class DruhyFaktor
     }
 
     /**
+     * Kód z aplikace platí jednou.
+     *
+     * Okno ±30 s by jinak pustilo tentýž kód znovu (a po novějším i ten
+     * předchozí). Pamatuje se poslední přijatý časový krok a projde jen
+     * novější. Zápis je podmíněný, takže ze dvou souběžných požadavků se
+     * stejným kódem projde jen jeden.
+     */
+    private function prijmiKodAplikace(User $user, string $kod): bool
+    {
+        $krok = $this->totp->matchingStep((string) $user->two_factor_secret, $kod);
+
+        if ($krok === null) {
+            return false;
+        }
+
+        $prijato = User::query()
+            ->whereKey($user->getKey())
+            ->where(fn ($q) => $q->whereNull('two_factor_last_step')->orWhere('two_factor_last_step', '<', $krok))
+            ->update(['two_factor_last_step' => $krok]);
+
+        if ($prijato !== 1) {
+            AuditLog::record('auth.2fa.replayed', $user);
+
+            return false;
+        }
+
+        $user->forceFill(['two_factor_last_step' => $krok])->syncOriginalAttribute('two_factor_last_step');
+
+        return true;
+    }
+
+    /**
+     * Obnovovací kód ve tvaru, ve kterém vznikl (`ABCDE-12345`).
+     *
+     * Opisuje se z papíru: malými písmeny, s mezerou místo pomlčky nebo bez ní.
+     * Uloženy jsou jen haše, takže se porovnat dá jen jeden přesný tvar.
+     */
+    private function tvarObnovovaciho(string $kod): string
+    {
+        $kod = strtoupper(preg_replace('/\s+/u', '', strtr($kod, ['–' => '-', '—' => '-'])) ?? '');
+
+        if (! str_contains($kod, '-') && strlen($kod) === 10) {
+            $kod = substr($kod, 0, 5).'-'.substr($kod, 5);
+        }
+
+        return $kod;
+    }
+
+    /**
      * Použitý obnovovací kód se odstraní, ne označí: jednorázový kód, který
      * použití přežije, je heslo.
      */
     private function spotrebujObnovovaci(User $user, string $kod): bool
     {
         $otisky = (array) $user->two_factor_recovery_codes;
+        $kod = $this->tvarObnovovaciho($kod);
 
         foreach ($otisky as $index => $otisk) {
             if (! Hash::check($kod, $otisk)) {

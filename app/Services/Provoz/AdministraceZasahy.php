@@ -6,6 +6,7 @@ use App\Models\AuditLog;
 use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Models\WebauthnCredential;
 use App\Notifications\InvitationNotification;
 use App\Services\Billing\EntitlementService;
 use App\Services\Notifications\OdberyPush;
@@ -106,6 +107,10 @@ class AdministraceZasahy
             // Stejně tak upozornění: jejich text je vidět i na zamčeném telefonu.
             $clen->tokens()->delete();
             OdberyPush::zrusVse($clen);
+            // Otisk by vydal nový token hned po obnovení přístupu, a cookie
+            // „zapamatovat si mě" by otevřela staré rozhraní — ruší se obojí.
+            WebauthnCredential::zrusKromeTokenu($clen);
+            $clen->forceFill(['remember_token' => Str::random(60)])->save();
         }
 
         $this->zapis('admin.access', $clen, $aktivni
@@ -133,19 +138,18 @@ class AdministraceZasahy
         }
 
         /*
-         * Účet, který pozvánku už jednou přijal, se znovu pozvat nedá.
+         * Existující účet pozvánka neotevře.
          *
          * Bez téhle podmínky stačilo znát cizí e-mail: zápis níž přepsal tomu
-         * účtu `invitation_token`, vrátil `invitation_accepted_at` na `null`
-         * a odkaz se vrátil volajícímu. Kdo ho otevřel, nastavil si na cizí
-         * účet nové heslo a přihlásil se do cizího deníku, trezoru a financí —
-         * původní majitel se naopak nepřihlásil už nikdy.
+         * účtu `invitation_token` a odkaz se vrátil volajícímu. Kdo ho otevřel,
+         * nastavil si na cizí účet nové heslo a přihlásil se do cizího deníku,
+         * trezoru a financí — původní majitel se naopak nepřihlásil už nikdy.
          *
-         * Vlastní registrace nastavuje `invitation_accepted_at` také, takže je
-         * to spolehlivé „tenhle účet už někdo má". Stojí to tady, a ne jen
+         * Dřív to hlídalo jen `invitation_accepted_at`, jenže to nemají ani účty
+         * ze seedu, ani čekající pozvaní jiných galerií. Stojí to tady, a ne jen
          * v kontroleru, protože zvát umí i stavová cesta (`AdminVeStavu`).
          */
-        if ($stavajici && $stavajici->invitation_accepted_at !== null) {
+        if ($stavajici && $this->ucetUzPatriJinam($stavajici, $kdo)) {
             return null;
         }
 
@@ -164,9 +168,13 @@ class AdministraceZasahy
             'is_active' => true,
         ]);
 
-        if ($stavajici) {
-            $pozvany->update(['invitation_token' => $token, 'invitation_accepted_at' => null]);
-        }
+        // Sem se dostane jen účet, který tentýž vlastník založil a nikdo ho
+        // nepřevzal (viz `ucetUzPatriJinam`) — nový token staré odkazy zneplatní.
+        $pozvany->forceFill([
+            'invitation_token' => $token,
+            'invitation_accepted_at' => null,
+            'invitation_sent_at' => now(),
+        ])->save();
 
         /*
          * Členství vzniká hned, ne až přijetím pozvánky.
@@ -221,6 +229,27 @@ class AdministraceZasahy
         }
 
         return $odkaz;
+    }
+
+    /**
+     * Patří existující účet s tímhle e-mailem někomu, koho pozvánka nesmí otevřít?
+     *
+     * Pozvánka nasazuje účtu nový token a jeho přijetí nové heslo. Samotné
+     * „pozvánku ještě nepřijal" (`invitation_accepted_at === null`) nestačí:
+     * tak vypadají účty ze seedu i čekající pozvaní **jiných** galerií, a vlastník
+     * cizí galerie si tak otevřel účet, který mu nepatří.
+     *
+     * Znovu pozvat jde jen účet, který tentýž vlastník sám založil, nikdo ho
+     * nepřevzal a nepatří do žádné galerie. Každý jiný existující účet je obsazený
+     * — připojení existujícího účtu do další galerie pozvánkou neumíme.
+     */
+    public function ucetUzPatriJinam(User $stavajici, User $kdo): bool
+    {
+        return $stavajici->invitation_accepted_at !== null
+            || $stavajici->invitation_token === null
+            // Bez přetypování by MySQL s id jako řetězcem zablokoval i oprávněné znovupozvání.
+            || (int) $stavajici->invited_by_user_id !== (int) $kdo->id
+            || $stavajici->gallerySpaces()->exists();
     }
 
     private function clen(GallerySpace $prostor, int $id): ?User

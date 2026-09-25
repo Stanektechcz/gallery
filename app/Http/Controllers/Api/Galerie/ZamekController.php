@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Models\WebauthnCredential;
 use App\Services\Notifications\OdberyPush;
 use App\Services\Provoz\PokusyOvereni;
 use App\Support\Tabulky;
@@ -229,20 +230,32 @@ class ZamekController extends Controller
                 ->delete();
         }
 
-        $tohle = $clovek->currentAccessToken();
+        $tohle = WebauthnCredential::tokenPozadavku($clovek);
 
         $klice = DB::table('personal_access_tokens')
             ->where('tokenable_type', User::class)
             ->where('tokenable_id', $clovek->id)
-            ->when($tohle?->id, fn ($q, $id) => $q->where('id', '!=', $id))
+            ->when($tohle, fn ($q, $id) => $q->where('id', '!=', $id))
             ->delete();
+
+        /*
+         * Otisky ostatních zařízení a „zapamatovat si mě".
+         *
+         * Otisk vydá nový token sám, takže bez jeho zrušení se odhlášené
+         * zařízení otiskem hned přihlásilo zpátky. Zůstává jen otisk tohohle
+         * zařízení (patří tokenu, kterým přišel tenhle požadavek). Nový
+         * `remember_token` zneplatní cookie „zapamatovat si mě" ze starého
+         * rozhraní — i v tomhle prohlížeči, sezení tady ale běží dál.
+         */
+        $otisky = WebauthnCredential::zrusKromeTokenu($clovek, $tohle);
+        $clovek->forceFill(['remember_token' => Str::random(60)])->save();
 
         // Odhlášené zařízení nesmí dál dostávat upozornění. Který odběr patří
         // tomuhle zařízení, ví jen klient: pošle-li jeho adresu, zůstane; jinak
         // se ruší všechny a tohle zařízení si odběr obnoví samo.
         $odbery = OdberyPush::zrusVse($clovek, $request->input('endpoint'));
 
-        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'odbery' => $odbery]);
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'otisky' => $otisky, 'odbery' => $odbery]);
 
         return response()->json([
             'sezeni' => $sezeni,

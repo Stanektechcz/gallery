@@ -53,7 +53,8 @@ class TwoFactorController extends Controller
         abort_if((bool) $user->two_factor_confirmed_at, 422, 'Dvoufázové ověření už je zapnuté.');
 
         $secret = $this->totp->generateSecret();
-        $user->forceFill(['two_factor_secret' => $secret, 'two_factor_confirmed_at' => null])->save();
+        // A new secret starts a new sequence of steps; the old last step means nothing now.
+        $user->forceFill(['two_factor_secret' => $secret, 'two_factor_confirmed_at' => null, 'two_factor_last_step' => null])->save();
 
         return response()->json([
             'secret' => $secret,
@@ -70,7 +71,9 @@ class TwoFactorController extends Controller
 
         abort_unless($user->two_factor_secret, 422, 'Nejdřív si nechte vygenerovat kód.');
 
-        if (! $this->totp->verify($user->two_factor_secret, $request->string('code')->toString())) {
+        $step = $this->totp->matchingStep($user->two_factor_secret, $request->string('code')->toString());
+
+        if ($step === null) {
             throw ValidationException::withMessages(['code' => 'Kód nesouhlasí. Zkontrolujte čas na telefonu.']);
         }
 
@@ -78,6 +81,8 @@ class TwoFactorController extends Controller
 
         $user->forceFill([
             'two_factor_confirmed_at' => now(),
+            // The code that switched it on has been seen; it must not also sign in.
+            'two_factor_last_step' => $step,
             // Hashed, like passwords: a recovery code is a password that works once.
             'two_factor_recovery_codes' => array_map(fn (string $code) => Hash::make($code), $codes),
         ])->save();
@@ -102,6 +107,7 @@ class TwoFactorController extends Controller
             'two_factor_secret' => null,
             'two_factor_recovery_codes' => null,
             'two_factor_confirmed_at' => null,
+            'two_factor_last_step' => null,
         ])->save();
 
         AuditLog::record('auth.2fa.disabled', $user);

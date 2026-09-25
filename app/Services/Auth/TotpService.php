@@ -50,9 +50,21 @@ class TotpService
 
     public function verify(string $secret, string $code, ?int $at = null): bool
     {
+        return $this->matchingStep($secret, $code, $at) !== null;
+    }
+
+    /**
+     * The time step the code belongs to, or null when it matches none in the window.
+     *
+     * Callers that sign someone in must remember the step and refuse it (and anything
+     * older) next time — see `DruhyFaktor::over`. Without that, the same code works for
+     * the whole drift window: anyone who saw it over a shoulder can use it again.
+     */
+    public function matchingStep(string $secret, string $code, ?int $at = null): ?int
+    {
         $code = preg_replace('/\D/', '', $code) ?? '';
         if (strlen($code) !== self::DIGITS) {
-            return false;
+            return null;
         }
 
         $counter = intdiv($at ?? time(), self::PERIOD);
@@ -61,11 +73,11 @@ class TotpService
             // hash_equals, not ===: comparing codes character by character leaks how much
             // of a guess was right, and this runs on an unauthenticated-ish path.
             if (hash_equals($this->at($secret, $counter + $offset), $code)) {
-                return true;
+                return $counter + $offset;
             }
         }
 
-        return false;
+        return null;
     }
 
     public function at(string $secret, int $counter): string

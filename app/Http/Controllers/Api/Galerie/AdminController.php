@@ -84,6 +84,11 @@ class AdminController extends Controller
         abort_if($stavajici && $stavajici->invitation_accepted_at !== null, 422,
             'Tenhle e-mail už má vlastní účet. Pozvánka by mu přepsala heslo, takže ji neposíláme.');
 
+        // Účet ze seedu nebo čekající pozvaný jiné galerie datum přijetí nemá,
+        // ale je obsazený stejně — pozvánka by ho otevřela někomu cizímu.
+        abort_if($stavajici && $this->zasahy->ucetUzPatriJinam($stavajici, $request->user()), 422,
+            'Tenhle e-mail už v aplikaci účet má. Pozvánka by ho otevřela někomu jinému, takže ji neposíláme — připojit existující účet do další galerie zatím nejde.');
+
         $pozvany = $this->zasahy->pozvi($prostor, $request->user(), $data['email'], $data['role'] ?? 'host');
 
         abort_if($pozvany === null, 422, 'Pozvánku se nepodařilo vytvořit.');
@@ -99,8 +104,12 @@ class AdminController extends Controller
 
         abort_if($clen->invitation_accepted_at !== null, 422, 'Tenhle účet už pozvánku přijal.');
 
+        // Bez čekající pozvánky je to účet, který někdo používá (třeba ze seedu,
+        // bez data přijetí) — nový token by vlastníkovi dal odkaz na jeho heslo.
+        abort_if($clen->invitation_token === null, 422, 'Tenhle účet žádnou čekající pozvánku nemá.');
+
         $token = Str::random(60);
-        $clen->update(['invitation_token' => $token]);
+        $clen->forceFill(['invitation_token' => $token, 'invitation_sent_at' => now()])->save();
 
         $this->zapis($request, 'admin.invite.resend', $clen, 'Pozvánka pro '.$clen->name.' odeslána znovu na '.$clen->email);
 

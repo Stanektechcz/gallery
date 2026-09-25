@@ -3,10 +3,12 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\WebauthnCredential;
 use App\Services\Notifications\OdberyPush;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -42,10 +44,15 @@ class SecuritySessionController extends Controller
 
         $sezeni = DB::table('sessions')->where('user_id', $user->id)->where('id', '!=', $request->session()->getId())->delete();
         $klice = $user->tokens()->delete();
+        // Otisky vydávají nové tokeny, takže se ruší s nimi — tohle je sezení
+        // prohlížeče, žádný token (ani otisk) mu nepatří. Nový `remember_token`
+        // zneplatní cookie „zapamatovat si mě" v ostatních prohlížečích.
+        $otisky = WebauthnCredential::zrusKromeTokenu($user);
+        $user->forceFill(['remember_token' => Str::random(60)])->save();
         // A upozornění do telefonu — odhlášené zařízení by jinak zvonilo dál.
         $odbery = OdberyPush::zrusVse($user, $request->input('endpoint'));
 
-        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'odbery' => $odbery]);
+        AuditLog::record('app_lock.sign_out_others', null, ['sezeni' => $sezeni, 'klice' => $klice, 'otisky' => $otisky, 'odbery' => $odbery]);
 
         return response()->json(['status' => 'revoked_others']);
     }

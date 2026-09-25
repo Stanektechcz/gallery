@@ -79,6 +79,7 @@ class AdminController extends Controller
             'role' => $data['role'],
             'password' => \Hash::make(Str::random(32)),
             'invitation_token' => $token,
+            'invitation_sent_at' => now(),
             'invited_by' => true,
             'invited_by_user_id' => $request->user()->id,
             'is_active' => true,

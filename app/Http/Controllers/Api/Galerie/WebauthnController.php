@@ -130,6 +130,9 @@ class WebauthnController extends Controller
                 // a MySQL na rozdíl od SQLite v testech takový zápis odmítne.
                 'label' => mb_substr($request->string('label')->value() ?: (string) $request->userAgent(), 0, 200),
                 'last_used_at' => now(),
+                // Ke kterému přihlášení otisk patří — „Odhlásit ostatní" podle
+                // toho pozná otisk tohohle zařízení (`ZamekController::odhlasOstatni`).
+                'personal_access_token_id' => WebauthnCredential::tokenPozadavku($user),
             ],
         );
 
@@ -239,9 +242,13 @@ class WebauthnController extends Controller
         // Jedno zařízení = jeden token, stejně jako u přihlášení heslem.
         $jmeno = $zaznam->label ?: 'telefon';
         $user->tokens()->where('name', $jmeno)->delete();
+        $klic = $user->createToken($jmeno);
+
+        // Otisk teď patří novému tokenu; ten předchozí právě zanikl.
+        $zaznam->update(['personal_access_token_id' => $klic->accessToken->getKey()]);
 
         return response()->json([
-            'token' => $user->createToken($jmeno)->plainTextToken,
+            'token' => $klic->plainTextToken,
             'user' => ['id' => $user->id, 'name' => $user->name],
         ]);
     }

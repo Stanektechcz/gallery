@@ -21,13 +21,13 @@ class User extends Authenticatable
     protected $fillable = [
         'uuid', 'name', 'email', 'password', 'role', 'avatar_path', 'avatar_preset', 'avatar_colour',
         'is_active', 'invited_by', 'invited_by_user_id', 'invitation_token', 'invitation_accepted_at',
-        'preferences', 'last_login_at', 'last_login_ip', 'read_only_mode',
+        'invitation_sent_at', 'preferences', 'last_login_at', 'last_login_ip', 'read_only_mode',
     ];
 
     protected $hidden = [
         'password', 'remember_token', 'invitation_token',
         // A secret that reaches the browser once is a secret in somebody's browser history.
-        'two_factor_secret', 'two_factor_recovery_codes',
+        'two_factor_secret', 'two_factor_recovery_codes', 'two_factor_last_step',
         // The app-lock code is the owner's alone: not their partner's, and not
         // the browser's. Even hashed it never leaves the server.
         'app_lock_pin', 'app_lock_recovery',
@@ -74,6 +74,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'invitation_accepted_at' => 'datetime',
+            'invitation_sent_at' => 'datetime',
+            'two_factor_last_step' => 'integer',
             'last_login_at' => 'datetime',
             'last_seen_at' => 'datetime',
             'preferences' => 'array',

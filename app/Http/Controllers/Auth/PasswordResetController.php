@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Models\WebauthnCredential;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -84,6 +85,9 @@ class PasswordResetController extends Controller
                  * reaguje přihlašovací obrazovkou.
                  */
                 $user->tokens()->delete();
+                // Otisky taky: otisk vydá nový token sám, takže kdo si k účtu
+                // připojil vlastní, byl by po obnově hesla hned zpátky.
+                WebauthnCredential::zrusKromeTokenu($user);
                 if (Schema::hasTable('sessions')) {
                     DB::table('sessions')->where('user_id', $user->id)->delete();
                 }
