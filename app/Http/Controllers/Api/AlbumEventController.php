@@ -149,8 +149,11 @@ class AlbumEventController extends Controller
             ->where('album_id', $album->id)
             ->pluck('media_item_id');
 
+        // Bez trezoru: nabídka posílá uuid i náhledy a sběr vkládá do sdíleného
+        // alba — fotka z trezoru by tím z trezoru odešla.
         $q = MediaItem::where('gallery_space_id', $spaceId)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereBetween('taken_at', [$album->event_start_at, $album->event_end_at])
             ->whereNotIn('id', $inAlbum);
 

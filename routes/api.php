@@ -115,8 +115,12 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'dvojice:klic'])->group(functio
     // Search
     Route::get('/search', [SearchController::class, 'search'])->name('api.search');
     Route::get('/search/suggestions', [SearchController::class, 'suggestions'])->name('api.search.suggestions');
-    Route::post('/assistant/preview', [WorkspaceAssistantController::class, 'preview']);
-    Route::post('/assistant/apply', [WorkspaceAssistantController::class, 'apply']);
+    // Náhled i uložení se ptají databáze filmů (až 20 titulů na zprávu) — strop
+    // počtu požadavků chrání klíč k API i server před zahlcením.
+    Route::middleware('throttle:30,1,pomocnik')->group(function () {
+        Route::post('/assistant/preview', [WorkspaceAssistantController::class, 'preview']);
+        Route::post('/assistant/apply', [WorkspaceAssistantController::class, 'apply']);
+    });
     Route::get('/travel-data/weather', [TravelDataController::class, 'weather'])->name('api.travel-data.weather');
     Route::get('/travel-data/exchange-rate', [TravelDataController::class, 'exchangeRate'])->name('api.travel-data.exchange-rate');
     Route::post('/travel-data/route', [TravelDataController::class, 'route'])->name('api.travel-data.route');

@@ -9,6 +9,7 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\Place;
 use App\Models\PlaceReview;
+use App\Services\Auth\PristupDoGalerie;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -239,7 +240,9 @@ class PlaceReviewController extends Controller
                 $album->rebuildPaths();
                 $locked->update(['review_album_id' => $album->id]);
                 DB::table('album_place')->insertOrIgnore(['album_id' => $album->id, 'place_id' => $place->id, 'is_primary' => true, 'created_at' => now()]);
-                $permissions = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
+                // Editorem alba je jen dvojice. Hosté galerie (viewer/contributor)
+                // dřív dostali `editor` taky — i s právem fotky mazat a přidávat.
+                $permissions = app(PristupDoGalerie::class)->dvojice($space)->pluck('id')->map(fn ($userId) => [
                     'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
                 ])->all();
                 if ($permissions) {
@@ -328,7 +331,8 @@ class PlaceReviewController extends Controller
     private function syncMedia(PlaceReview $review, Place $place, int $spaceId, array $uuids): void
     {
         $uuids = array_values(array_unique($uuids));
-        $media = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->whereIn('uuid', $uuids)->get(['id', 'uuid']);
+        // Hodnocení vidí celá dvojice i při zamčeném trezoru — fotka z trezoru sem nepatří.
+        $media = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->where('is_hidden', false)->whereIn('uuid', $uuids)->get(['id', 'uuid']);
         if ($media->count() !== count($uuids)) {
             throw ValidationException::withMessages(['media_uuids' => 'Některá fotografie není dostupná v této společné galerii.']);
         }

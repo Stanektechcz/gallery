@@ -25,6 +25,7 @@ use App\Services\Taxonomy\UniversalTagService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
@@ -47,6 +48,43 @@ class WorkspaceAssistantController extends Controller
     private const INGREDIENT_UNIT_MAX = 32;      // recipe_ingredients.unit
 
     private const STEP_TITLE_MAX = 180;          // recipe_steps.title
+
+    /*
+     * Další šířky a rozsahy, do kterých pomocník zapisuje (stejný důvod jako
+     * výše — na MySQL by přetečení bylo 500). Číselné meze odpovídají validaci
+     * ručního formuláře receptu (`RecipeController::validated`).
+     */
+    private const ENTERTAINMENT_TITLE_MAX = 255; // entertainment_titles.title
+
+    private const TITLES_MAX_COUNT = 20;         // jako `title_choices` — a strop dotazů do databáze filmů
+
+    private const WAYPOINT_MAX = 255;            // trip_waypoints.place_name
+
+    private const WAYPOINTS_MAX_COUNT = 50;
+
+    private const SOURCE_URL_MAX = 2048;         // recipes.source_url
+
+    private const SERVINGS_MIN = 0.25;           // recipes.base_servings decimal(8,2)
+
+    private const SERVINGS_MAX = 1000;
+
+    private const MINUTES_MAX = 10080;           // recipes.prep_minutes / cook_minutes (unsigned smallint)
+
+    private const QUANTITY_MAX = 99999999;       // recipe_ingredients.quantity decimal(12,4)
+
+    private const PLAIN_INGREDIENTS_MAX_COUNT = 120;
+
+    private const PLAIN_STEPS_MAX_COUNT = 60;
+
+    private const TODO_TITLE_MAX = 255;          // shared_todos.title
+
+    private const GIFT_TITLE_MAX = 255;          // gift_ideas.title
+
+    private const GIFT_OCCASION_MAX = 80;        // gift_ideas.occasion
+
+    private const MILESTONE_TITLE_MAX = 160;     // relationship_milestones.title
+
+    private const ITINERARY_TRIP_NAME_MAX = 245; // travel_inbox_items.title (255) bez předpony „Itinerář: "
 
     public function __construct(
         private readonly CalendarEventCreationService $calendarEvents,
@@ -161,6 +199,7 @@ class WorkspaceAssistantController extends Controller
             // "600 g polohrubé mouky", "3–5 g citronové kůry", "2 žloutky"
             if (preg_match('/^(?:přibližně\s+|cca\s+|asi\s+)?(\d+(?:[.,]\d+)?)(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?\s*([\p{L}]{1,12})?\s+(.*)$/u', $label, $parts)) {
                 $quantity = $this->numberFrom($parts[1]);
+                $quantity = $quantity !== null ? min(self::QUANTITY_MAX, $quantity) : null;
                 $unit = trim($parts[2] ?? '') !== '' ? mb_substr($parts[2], 0, self::INGREDIENT_UNIT_MAX) : null;
                 $name = trim($parts[3]);
             }
@@ -239,7 +278,7 @@ class WorkspaceAssistantController extends Controller
                     $externalId = $best['external_id'] ?? null;
                     $type = $best['media_type'] ?? $type;
                 } catch (\Throwable $exception) {
-                    report($exception);
+                    $this->reportMetadataFailure($exception);
                 }
             }
 
@@ -249,7 +288,7 @@ class WorkspaceAssistantController extends Controller
                     $details = collect($this->titleMetadata->details($type === 'series' ? 'tv' : 'movie', (int) $externalId))
                         ->except('community_rating')->all();
                 } catch (\Throwable $exception) {
-                    report($exception);
+                    $this->reportMetadataFailure($exception);
                     $externalId = null;   // fall back to a plain entry rather than losing the title
                 }
             }
@@ -276,7 +315,7 @@ class WorkspaceAssistantController extends Controller
             try {
                 $matches = $this->titleMetadata->search($title['title'], $title['type'] === 'series' ? 'tv' : 'movie');
             } catch (\Throwable $exception) {
-                report($exception);
+                $this->reportMetadataFailure($exception);
                 $matches = [];
             }
 
@@ -289,6 +328,26 @@ class WorkspaceAssistantController extends Controller
                 'overview' => $item['overview'] ?? null,
             ])->values()->all()];
         }, $titles);
+    }
+
+    /**
+     * Zapíše selhání databáze filmů do logu — bez adresy dotazu.
+     *
+     * `EntertainmentMetadataService` posílá klíč k API v dotazu adresy
+     * (`?api_key=…`) a zpráva `ConnectionException` celou adresu opakuje.
+     * Dřívější `report($exception)` tak klíč uložil do laravel.log. Loguje se
+     * proto jen druh chyby a zpráva bez dotazové části; výjimka samotná (ani
+     * její předchůdce s požadavkem) se nepředává.
+     */
+    private function reportMetadataFailure(\Throwable $exception): void
+    {
+        $message = preg_replace('/\?\S*/u', '?…', $exception->getMessage()) ?? '';
+        $message = preg_replace('/(api_key|apikey|key|token)=[^&\s]+/iu', '$1=…', $message) ?? '';
+
+        Log::warning('Databáze filmů pomocníkovi neodpověděla.', [
+            'druh' => $exception::class,
+            'zprava' => mb_substr($message, 0, 500),
+        ]);
     }
 
     public function apply(Request $request)
@@ -515,8 +574,10 @@ class WorkspaceAssistantController extends Controller
             }
 
             if ($mediaUuids) {
-                $media = MediaItem::where('gallery_space_id', $space->id)->whereIn('uuid', $mediaUuids)->whereNull('trashed_at')->get()->keyBy('uuid');
-                abort_unless($media->count() === count($mediaUuids), 422, 'Některé přiložené fotografie už nejsou dostupné v tomto prostoru.');
+                // Z příloh vzniká sdílené album s obalem — fotka z trezoru by z něj
+                // odešla i při odemčeném trezoru (album pak vidí i zamčené).
+                $media = MediaItem::where('gallery_space_id', $space->id)->whereIn('uuid', $mediaUuids)->whereNull('trashed_at')->where('is_hidden', false)->get()->keyBy('uuid');
+                abort_unless($media->count() === count($mediaUuids), 422, 'Některé přiložené fotografie už nejsou dostupné v tomto prostoru nebo jsou v trezoru.');
                 $orderedMedia = collect($mediaUuids)->map(fn ($uuid) => $media->get($uuid));
                 $event = $activityEventId ? CalendarEvent::find($activityEventId) : ($tripId ? CalendarEvent::where('gallery_space_id', $space->id)->where('trip_id', $tripId)->latest('id')->first() : null);
                 $date = $event?->starts_at ? Carbon::parse($event->starts_at) : Carbon::parse($plan['activity_date'], 'Europe/Prague');
@@ -628,15 +689,20 @@ class WorkspaceAssistantController extends Controller
         foreach ($lists as $list) {
             $type = str_starts_with(mb_strtolower($list[0]), 'seri') ? 'series' : 'movie';
             foreach (preg_split('/[,;]| a /u', $list[1]) as $title) {
-                $title = trim($title);
+                $title = mb_substr(trim($title), 0, self::ENTERTAINMENT_TITLE_MAX);
                 if ($title) {
                     $titles[] = ['title' => $title, 'type' => $type];
                 }
             }
         }
         if (in_array($command['name'], ['/film', '/filmy', '/seriál', '/serial', '/seriály', '/serialy'], true) && $command['body']) {
-            $titles[] = ['title' => $this->firstLine($command['body']), 'type' => in_array($command['name'], ['/seriál', '/serial', '/seriály', '/serialy'], true) ? 'series' : 'movie'];
+            $titles[] = ['title' => mb_substr($this->firstLine($command['body']), 0, self::ENTERTAINMENT_TITLE_MAX), 'type' => in_array($command['name'], ['/seriál', '/serial', '/seriály', '/serialy'], true) ? 'series' : 'movie'];
         }
+        // Každý titul je v náhledu i při uložení dotaz do databáze filmů; bez
+        // stropu stačila jedna zpráva se stovkou názvů na stovku požadavků.
+        $titles = array_values(array_unique($titles, SORT_REGULAR));
+        $titlesOverflow = count($titles) > self::TITLES_MAX_COUNT;
+        $titles = array_slice($titles, 0, self::TITLES_MAX_COUNT);
 
         preg_match('/recept\s*:\s*([^\n]+)/ui', $message, $recipeMatch);
         $recipe = in_array($command['name'], ['/recept', '/recepty'], true) ? trim($command['body']) : trim($recipeMatch[1] ?? '');
@@ -657,8 +723,12 @@ class WorkspaceAssistantController extends Controller
         preg_match('/(?:ingredience|suroviny)\s*:\s*([^\n]+)/ui', $message, $ingredientsMatch);
         preg_match('/(?:postup|kroky)\s*:\s*([^\n]+)/ui', $message, $stepsMatch);
         $recipeDetails = [
-            'ingredients' => $blocks['ingredients'] ?: array_values(array_filter(array_map('trim', preg_split('/[,;]/u', $ingredientsMatch[1] ?? '')))),
-            'steps' => $blocks['steps'] ?: array_values(array_filter(array_map('trim', preg_split('/[;]|→|->/u', $stepsMatch[1] ?? '')))),
+            // Jednořádková forma „suroviny: a, b" končí jako holý název suroviny (varchar 180).
+            'ingredients' => $blocks['ingredients'] ?: array_slice(array_values(array_filter(array_map(
+                static fn (string $item) => mb_substr(trim($item), 0, self::INGREDIENT_NAME_MAX),
+                preg_split('/[,;]/u', $ingredientsMatch[1] ?? '') ?: []
+            ), static fn (string $item) => $item !== '')), 0, self::PLAIN_INGREDIENTS_MAX_COUNT),
+            'steps' => $blocks['steps'] ?: array_slice(array_values(array_filter(array_map('trim', preg_split('/[;]|→|->/u', $stepsMatch[1] ?? '')))), 0, self::PLAIN_STEPS_MAX_COUNT),
             'ingredient_rows' => $blocks['ingredient_rows'],
             'step_rows' => $blocks['step_rows'],
             'servings' => null,
@@ -668,16 +738,20 @@ class WorkspaceAssistantController extends Controller
             'notes' => null,
         ];
         if (preg_match('/(?:porce|porcí|osoby)\s*:?\s*(\d+(?:[.,]\d+)?)/ui', $message, $servingsMatch)) {
-            $recipeDetails['servings'] = $this->numberFrom($servingsMatch[1]);
+            $servings = $this->numberFrom($servingsMatch[1]);
+            // Stejné meze jako ruční formulář receptu; decimal(8,2) by jinak přetekl.
+            $recipeDetails['servings'] = $servings !== null ? min(self::SERVINGS_MAX, max(self::SERVINGS_MIN, $servings)) : null;
         }
         if (preg_match('/(?:příprava|priprava|prep)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $prepMatch)) {
-            $recipeDetails['prep_minutes'] = (int) $prepMatch[1];
+            $recipeDetails['prep_minutes'] = min(self::MINUTES_MAX, (int) $prepMatch[1]);   // unsigned smallint
         }
         if (preg_match('/(?:vaření|vareni|pečení|peceni|cook)\s*:?\s*(\d+)\s*(?:min|minut)?/ui', $message, $cookMatch)) {
-            $recipeDetails['cook_minutes'] = (int) $cookMatch[1];
+            $recipeDetails['cook_minutes'] = min(self::MINUTES_MAX, (int) $cookMatch[1]);
         }
         if (preg_match('/https?:\/\/[^\s]+/ui', $message, $urlMatch)) {
-            $recipeDetails['source_url'] = rtrim($urlMatch[0], '.,;');
+            $url = rtrim($urlMatch[0], '.,;');
+            // Zkrácená adresa by nikam nevedla — delší než sloupec se raději vynechá.
+            $recipeDetails['source_url'] = mb_strlen($url) <= self::SOURCE_URL_MAX ? $url : null;
         }
         if (preg_match('/(?:poznámka|poznamka|tip)\s*:\s*([^\n]+)/ui', $message, $notesMatch)) {
             $recipeDetails['notes'] = trim($notesMatch[1]);
@@ -695,12 +769,12 @@ class WorkspaceAssistantController extends Controller
         if (in_array($command['name'], ['/dárek', '/darek'], true)) {
             $parts = $this->parts($command['body']);
             if ($parts[0] ?? null) {
-                $gift = ['title' => $parts[0], 'occasion' => $parts[1] ?? null, 'due_date' => $this->dateFrom($parts[2] ?? null), 'budget' => $this->numberFrom($parts[3] ?? null)];
+                $gift = ['title' => $this->cut($parts[0], self::GIFT_TITLE_MAX), 'occasion' => $this->cut($parts[1] ?? null, self::GIFT_OCCASION_MAX), 'due_date' => $this->dateFrom($parts[2] ?? null), 'budget' => $this->numberFrom($parts[3] ?? null)];
             }
         } elseif (preg_match('/(?:dárek|darek)\s*:\s*([^\n]+)/ui', $message, $giftMatch)) {
             $parts = $this->parts($giftMatch[1]);
             if ($parts[0] ?? null) {
-                $gift = ['title' => $parts[0], 'occasion' => $parts[1] ?? null, 'due_date' => $this->dateFrom($parts[2] ?? null) ?: ($dates[0] ?? null), 'budget' => $this->numberFrom($parts[3] ?? null)];
+                $gift = ['title' => $this->cut($parts[0], self::GIFT_TITLE_MAX), 'occasion' => $this->cut($parts[1] ?? null, self::GIFT_OCCASION_MAX), 'due_date' => $this->dateFrom($parts[2] ?? null) ?: ($dates[0] ?? null), 'budget' => $this->numberFrom($parts[3] ?? null)];
             }
         }
 
@@ -709,13 +783,13 @@ class WorkspaceAssistantController extends Controller
             $parts = $this->parts($command['body']);
             $occurredOn = $this->dateFrom($parts[1] ?? null);
             if (($parts[0] ?? null) && $occurredOn) {
-                $milestone = ['title' => $parts[0], 'occurred_on' => $occurredOn, 'description' => $parts[2] ?? null];
+                $milestone = ['title' => $this->cut($parts[0], self::MILESTONE_TITLE_MAX), 'occurred_on' => $occurredOn, 'description' => $parts[2] ?? null];
             }
         } elseif (preg_match('/(?:výročí|vyroci)\s*:\s*([^\n]+)/ui', $message, $milestoneMatch)) {
             $parts = $this->parts($milestoneMatch[1]);
             $occurredOn = $this->dateFrom($parts[1] ?? null) ?: ($dates[0] ?? null);
             if (($parts[0] ?? null) && $occurredOn) {
-                $milestone = ['title' => $parts[0], 'occurred_on' => $occurredOn, 'description' => $parts[2] ?? null];
+                $milestone = ['title' => $this->cut($parts[0], self::MILESTONE_TITLE_MAX), 'occurred_on' => $occurredOn, 'description' => $parts[2] ?? null];
             }
         }
 
@@ -755,12 +829,12 @@ class WorkspaceAssistantController extends Controller
             $parts = $this->parts($command['body']);
             $items = isset($parts[1]) ? array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $parts[1])))) : [];
             if (($parts[0] ?? null) && $items) {
-                $itinerary = ['trip_name' => $parts[0], 'items' => $items];
+                $itinerary = ['trip_name' => $this->cut($parts[0], self::ITINERARY_TRIP_NAME_MAX), 'items' => $items];
             }
         } elseif (preg_match('/(?:itinerář|itinerar)\s*(?:pro)?\s*([^:]+):\s*(.+)/ui', $message, $itineraryMatch)) {
             $items = array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $itineraryMatch[2]))));
             if ($items) {
-                $itinerary = ['trip_name' => trim($itineraryMatch[1]), 'items' => $items];
+                $itinerary = ['trip_name' => $this->cut(trim($itineraryMatch[1]), self::ITINERARY_TRIP_NAME_MAX), 'items' => $items];
             }
         }
 
@@ -801,12 +875,15 @@ class WorkspaceAssistantController extends Controller
         if (in_array($command['name'], ['/itinerář', '/itinerar'], true) && ! $itinerary) {
             $warnings[] = 'Pro itinerář napište: /itinerář Název cesty | bod 1, bod 2, bod 3';
         }
+        if ($titlesOverflow) {
+            $warnings[] = 'Najednou uložím nejvýš '.self::TITLES_MAX_COUNT.' filmů a seriálů. Zbytek pošlete v další zprávě.';
+        }
 
         return [
             'date' => $activityDate ?: now('Europe/Prague')->toDateString(),
             'activity_date' => $activityDate ?: now('Europe/Prague')->toDateString(),
             'activities' => array_values(array_unique($activities)),
-            'titles' => array_values(array_unique($titles, SORT_REGULAR)),
+            'titles' => $titles,
             'recipe' => $recipe,
             'recipe_details' => $recipeDetails,
             'expense' => $expense,
@@ -828,7 +905,19 @@ class WorkspaceAssistantController extends Controller
             ? preg_split('/[,;]/u', $title)
             : [$title];
 
-        return array_values(array_slice(array_unique(array_filter(array_map('trim', $items))), 0, 30));
+        $items = array_map(fn (string $item) => (string) $this->cut($item, self::TODO_TITLE_MAX), $items);
+
+        return array_values(array_slice(array_unique(array_filter($items)), 0, 30));
+    }
+
+    /** Oříznutý text zkrácený na šířku sloupce; `null` zůstane `null`. */
+    private function cut(?string $value, int $max): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return mb_substr(trim($value), 0, $max);
     }
 
     /**
@@ -867,9 +956,12 @@ class WorkspaceAssistantController extends Controller
         if (Carbon::parse($end, 'Europe/Prague')->lt(Carbon::parse($start, 'Europe/Prague'))) {
             return null;
         }
-        $waypoints = isset($parts[3]) ? array_values(array_filter(array_map('trim', preg_split('/[,;]|→|->/u', $parts[3])))) : [];
+        $waypoints = isset($parts[3])
+            ? array_slice(array_values(array_filter(array_map(fn (string $place) => (string) $this->cut($place, self::WAYPOINT_MAX), preg_split('/[,;]|→|->/u', $parts[3]) ?: []))), 0, self::WAYPOINTS_MAX_COUNT)
+            : [];
 
-        return ['name' => $parts[0], 'start_date' => $start, 'end_date' => $end, 'notes' => $parts[4] ?? null, 'waypoints' => $waypoints];
+        // Název cesty je zároveň názvem akce v kalendáři (varchar 160) a cesty.
+        return ['name' => $this->cut($parts[0], CalendarEventCreationService::TITLE_MAX), 'start_date' => $start, 'end_date' => $end, 'notes' => $parts[4] ?? null, 'waypoints' => $waypoints];
     }
 
     private function activityDateFrom(string $value, array $dates): ?string

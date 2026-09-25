@@ -152,7 +152,8 @@ class RecipeController extends Controller
         $this->write($request);
         $recipe = $this->recipe($request, $uuid);
         $data = $request->validate(['media_uuids' => 'required|array|min:1|max:50', 'media_uuids.*' => 'uuid|distinct', 'role' => 'nullable|in:gallery,cover,preparation,result']);
-        $media = MediaItem::where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->whereIn('uuid', $data['media_uuids'])->get();
+        // Recept a jeho album vidí dvojice i při zamčeném trezoru — fotka z trezoru sem nepatří.
+        $media = MediaItem::where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->where('is_hidden', false)->whereIn('uuid', $data['media_uuids'])->get();
         if ($media->count() !== count($data['media_uuids'])) {
             throw ValidationException::withMessages(['media_uuids' => 'Některé médium není dostupné v této společné galerii.']);
         }
@@ -220,7 +221,7 @@ class RecipeController extends Controller
         if (! $uuid) {
             return;
         }
-        $media = MediaItem::where('uuid', $uuid)->where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->firstOrFail();
+        $media = MediaItem::where('uuid', $uuid)->where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->where('is_hidden', false)->firstOrFail();
         $this->recipes->attachMedia($recipe, $user, collect([$media]), null, 'cover');
     }
 

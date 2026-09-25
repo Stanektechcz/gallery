@@ -76,10 +76,14 @@ class CurationBoardController extends Controller
     {
         $board = $this->board($request, $uuid);
         $data = $request->validate(['media_uuids' => 'required|array|min:1|max:100', 'media_uuids.*' => 'uuid']);
+        // Nástěnka je sdílená a ukazuje název souboru i datum pořízení — koš
+        // ani trezor na ni nepatří, ani při odemčeném trezoru (partner ho
+        // odemčený mít nemusí a výpis nástěnky trezor stejně vynechává).
         $media = MediaItem::query()->where('gallery_space_id', $board->gallery_space_id)
+            ->whereNull('trashed_at')->where('is_hidden', false)
             ->whereIn('uuid', array_values(array_unique($data['media_uuids'])))->get(['id', 'uuid']);
         if ($media->count() !== count(array_unique($data['media_uuids']))) {
-            abort(422, 'Některá média nepatří do této galerie nebo neexistují.');
+            abort(422, 'Některá média nepatří do této galerie, neexistují, jsou v koši nebo v trezoru.');
         }
 
         $order = (int) DB::table('curation_board_items')->where('curation_board_id', $board->id)->max('sort_order');
@@ -136,7 +140,8 @@ class CurationBoardController extends Controller
     {
         $result = (array) $board;
         $items = DB::table('curation_board_items as i')->join('media_items as m', 'm.id', '=', 'i.media_item_id')
-            ->where('i.curation_board_id', $board->id)->whereNull('m.trashed_at')
+            // Položka přidaná dřív, než fotka odešla do trezoru, se neukáže.
+            ->where('i.curation_board_id', $board->id)->whereNull('m.trashed_at')->where('m.is_hidden', false)
             ->orderBy('i.sort_order')->select('i.*', 'm.uuid as media_uuid', 'm.original_filename', 'm.display_title', 'm.media_type', 'm.taken_at')->get();
         $result['items_count'] = $items->count();
         $result['status_counts'] = $items->countBy('status');

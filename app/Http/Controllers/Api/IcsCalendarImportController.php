@@ -32,9 +32,12 @@ class IcsCalendarImportController extends Controller
         abort_if(empty($rows), 422, 'Soubor neobsahuje žádnou platnou událost VEVENT.');
 
         $share = (bool) ($data['share_with_space'] ?? false);
+        // „Sdílet s prostorem" znamená s dvojicí. Dřív tu byli všichni členové
+        // prostoru včetně hostů — ti pak dostali účast i připomínku s názvem
+        // a místem akce, ke které nemají přístup.
         $memberIds = $share
-            ? $space->members()->pluck('users.id')->map(fn ($id) => (int) $id)->push($request->user()->id)->unique()->values()
-            : collect([$request->user()->id]);
+            ? $this->calendarEvents->coupleMemberIds($space, $request->user())
+            : collect([(int) $request->user()->id]);
 
         $stats = DB::transaction(function () use ($rows, $space, $request, $data, $memberIds) {
             $created = 0;

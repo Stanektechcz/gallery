@@ -36,6 +36,9 @@ class RecipeCookingController extends Controller
             ]);
             if ($data['add_to_calendar'] ?? true) {
                 $duration = max(30, (int) $recipe->prep_minutes + (int) $recipe->cook_minutes + (int) $recipe->rest_minutes);
+                // Účastníky (dvojici bez hostů) přidá služba; připomínky dostanou
+                // jen oni. Dřív se obojí skládalo z celého `gallery_space_user`
+                // a host dostal připomínku na vaření dvojice.
                 $event = $this->calendarEvents->create(GallerySpace::findOrFail($recipe->gallery_space_id), $request->user(), [
                     'album_id' => $recipe->album_id, 'title' => 'Vaření · '.$recipe->title,
                     'description' => 'Společné vaření receptu pro '.$data['servings'].' porcí.'.(! empty($data['notes']) ? "\n\n".$data['notes'] : ''),
@@ -43,10 +46,8 @@ class RecipeCookingController extends Controller
                     'timezone' => 'Europe/Prague', 'color' => '#f59e0b', 'is_private' => false,
                     'metadata' => ['kind' => 'recipe_cooking', 'source' => 'recipe', 'recipe_uuid' => $recipe->uuid, 'cooking_session_uuid' => $session->uuid, 'href' => '/recipes/'.$recipe->uuid],
                 ]);
-                $members = DB::table('gallery_space_user')->where('gallery_space_id', $recipe->gallery_space_id)->pluck('user_id');
-                foreach ($members as $memberId) {
-                    DB::table('event_participants')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $memberId, 'role' => (int) $memberId === (int) $request->user()->id ? 'organizer' : 'guest', 'response' => (int) $memberId === (int) $request->user()->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
-                    if ($planned->isAfter(now()->addHours(2))) {
+                if ($planned->isAfter(now()->addHours(2))) {
+                    foreach ($event->participants()->pluck('users.id') as $memberId) {
                         DB::table('event_reminders')->insert(['event_id' => $event->id, 'user_id' => $memberId, 'channel' => 'database', 'remind_at' => $planned->copy()->subHours(2), 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
                     }
                 }
@@ -88,7 +89,8 @@ class RecipeCookingController extends Controller
             'would_cook_again' => 'nullable|boolean', 'leftovers_notes' => 'nullable|string|max:5000',
             'media_uuids' => 'nullable|array|max:50', 'media_uuids.*' => 'uuid|distinct',
         ]);
-        $media = MediaItem::where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->whereIn('uuid', $data['media_uuids'] ?? [])->get();
+        // Fotky výsledku jdou do sdíleného alba receptu — z trezoru ne.
+        $media = MediaItem::where('gallery_space_id', $recipe->gallery_space_id)->whereNull('trashed_at')->where('is_hidden', false)->whereIn('uuid', $data['media_uuids'] ?? [])->get();
         if ($media->count() !== count($data['media_uuids'] ?? [])) {
             throw ValidationException::withMessages(['media_uuids' => 'Některá fotografie není dostupná v této společné galerii.']);
         }
