@@ -804,6 +804,178 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ao. Čtyřicáté druhé kolo — dvojice se nedá obejít, hlavní měna CZK, sdílení a upozornění (25. 9.)
+
+Rozhodnutí dvojice k otevřeným bodům z 2an: **„Vlastník nemůže partnera
+přeřadit na hosta, zablokuj to."** a **„Hlavní měna je CZK, další měny
+jsou EUR, USD"**. K tomu audit veřejného sdílení, plánovaných úloh
+a upozornění a zbytku z „Zbývá" v 2an — čtyři `task-plan` naráz, opravy
+v dávkách na oddělených souborech, každý nález nejdřív potvrdil test,
+který bez opravy spadl.
+
+### Dvojice se nedá obejít
+
+* Člena dvojice (vlastník, správce) nejde přeřadit na hosta — ze správy
+  galerie (422 s důvodem), ze stavu (tiše, odpověď obrazovku srovná) ani
+  po předání vlastnictví (nový vlastník nesesadí předchozího).
+* Do úplné dvojice nepřibude nikdo další: povýšení hosta na správce,
+  pozvánka správce i předání vlastnictví hostovi se odmítnou, protože by
+  třetí člen schvaloval mazání místo partnera. Dokud je vlastník sám,
+  partnera přidat jde. Pravidlo je jedno (`AdministraceZasahy::
+  opoustiDvojici`, `pridavaDoUplneDvojice`), obrazovka tlačítka, která by
+  skončila odmítnutím, nekreslí.
+* „Správce" u správce už nepřepíše `admin` na `editor` (tiše tím ubíral
+  trvalé mazání z koše). Zrušení vlastního účtu partnera už neblokuje
+  `users.role` (každý zaregistrovaný účet má `owner`).
+
+### Hlavní měna CZK
+
+* `App\Support\Meny` (hlavní měna prostoru z předvoleb, nabízené CZK,
+  EUR, USD, jeden znak měny místo šesti kopií) a `ExchangeRateService::
+  doHlavni` — součet po měnách do korun kurzem ECB (Frankfurter) s datem
+  kurzu; **bez kurzu nikdy smíšené číslo**, jen součty po měnách
+  a „+X € nezapočteno" / „X € stranou". Kurz se při načítání obrazovky
+  čeká nejvýš 3 s, drží se den, výpadek 20 minut.
+* **Finance:** znak obrazovek je vždy Kč (dřív € celé aplikace, když byl
+  vidět eurový rozpočet). Účty nesou měnu a ekvivalent v korunách,
+  souhrn (dohromady, běžné, odložené, čeká) v CZK. Transakce nesou měnu
+  a částku v korunách; měsíční součty a procenta rozpočtu sčítají koruny.
+  **„Kdo co zaplatil" a dluhy zůstávají po měnách**, nepřepočítávají se.
+  Útrata v eurech se do korunového rozpočtu započte přepočtená
+  a označená; mezi běžícími rozpočty má přednost korunový, rozpočet
+  v jiné měně se píše svým znakem.
+* **Rozbory:** předpověď na 60 dní počítá každý účet v jeho měně (směna
+  CZK→EUR už nesnižuje zůstatek, zahrnutý poplatek se neodečítá dvakrát),
+  denní průměr, pravidelné platby, neobvyklé útraty, náklady cest
+  a inflace po měnách; obálka jen ze schválených útrat (koncept a příjem
+  se počítaly jako útrata).
+* **Přehledy:** zůstatek na účtech (dřív vyhrála měna s nejvíc účty),
+  zbytek rozpočtu, utraceno v týdnu a v roce, běžící cesta (ve své měně,
+  jiné měny zvlášť, celek v korunách), největší výdaj dne.
+* **Nabídky:** předvolby hlavní měny a měny cest jen CZK, EUR, USD;
+  účet a nová cesta na počítači i telefonu nabízí tytéž, výchozí CZK.
+  Účty, rozpočty a importy dál berou jakoukoli měnu (výpis v librách
+  se zapíše). Import rezervací četl „EUR 12.50" jako 1250.
+* Testy na síť nesmí (`Http::preventStrayRequests`), kurz v nich je
+  neznámý, dokud si ho test nepodvrhne.
+
+### Zabezpečení
+
+* **Sdílené odkazy:** heslo k odkazu šlo zkoušet z libovolně mnoha
+  adres — teď 20 omylů za hodinu na odkaz, nová hesla nejméně šest znaků.
+  Stránka odkazu posílala kopii videa s polohou a velké varianty i u
+  „bez data a místa" — teď jen náhledy, nové kopie videa bez metadat.
+  Hlasovky a vzkazy hostů mají strop na odkaz (disk nešel zaplnit).
+  Jednorázový odkaz spotřeboval každé načtení (i náhled v chatu) a
+  stažení pak nešlo. Podepsaná adresa fotky v koši platila bez
+  přihlášení. Host cizí galerie s vlastní galerií vystavil veřejný odkaz
+  na její recept.
+* **Upozornění:** hosté dostávali upozornění dvojice (nové fotky
+  s názvy souborů, import z banky). Po opravě pádu vzpomínek (níž) by
+  partnerovi šel název tvé soukromé akce — vzpomínky berou jen společné
+  a nezrušené akce. Úklid koše psal do protokolu názvy souborů z trezoru.
+* **Trezor:** zamčený trezor se sám otevřel, když pomalý požadavek
+  zapsal sezení až po zamčení — zamčení teď platí přes epochu na serveru
+  a **zavře trezor na všech zařízeních účtu**. Starý koš ukazoval
+  a vracel fotky z trezoru se zamčeným trezorem.
+* **Limity:** počítadla bez předpony se dělila podle adresy — deset
+  špatných přihlášení zablokovalo obnovu hesla i pozvánku, dvacet náhledů
+  fotek druhý faktor. Každá cesta má teď vlastní počítadlo, limity stejné.
+* Panel rizik zapsal „Obnova ověřena — zkušební stažení proběhlo", aniž
+  cokoli ověřil; odebrání přístupu hlásilo úspěch i u odmítnutí.
+
+### Co padalo nebo počítalo špatně
+
+* **`gallery:memories` na MySQL každé ráno padal** (`calendar_events`
+  nemá `deleted_at`, SQLite to spolkne) — žádná vzpomínka pro žádnou
+  galerii. Jiné `deleted_at` na tabulce bez sloupce v `app/` nejsou
+  (ověřeno proti schématu).
+* **Zamítnuté a čekající platby z banky** šly do knihy jako výdaje,
+  čekající karetní po zaúčtování podruhé; výpis Revolutu hlásil u každé
+  čekající „Řádek nemá platné datum".
+* **Připomínky o hodinu až dvě pozdě** (pražské hodiny uložené jako UTC)
+  v kalendáři prototypu a čtrnácti dalších místech; push a e-mail psaly
+  začátek akce o 1–2 h jinak; úkoly „brzy/po termínu" chodily dřív;
+  „25. 9. 000 16:00" v upozornění. Připomínka nastavená pozdě
+  („týden předem" tři dny před akcí) odejde hned a dialog ji nezapomene.
+* Večerní souhrn psal vždy „Ostatní (N)" a méně důležitá upozornění při
+  zapnutém souhrnu vůbec neukládal (teď tiše do schránky).
+* Opakovaně poslané nové přání nebo úkol Klidu se zdvojily.
+* Data mimo 1970–2038 (říhnutí, prdy, body trasy) 500 na MySQL, body
+  trasy se ukládaly jako surový řetězec s „Z".
+* `LIBSTATS` četl celou knihovnu při každém otevření aplikace — teď
+  souhrnné dotazy se stejným výsledkem (20 000 fotek: 146 ms místo 341).
+
+### Po nasazení
+
+* **Dvě nové migrace:** `2026_09_28_100000_client_id_prani_a_klidu`
+  (`client_id` s unikátním indexem v `gift_ideas`, `wellbeing_tasks`)
+  a `2026_09_28_110000_rows_pending_bank_imports` — **pustit spolu
+  s kódem**, import výpisu bez sloupce `rows_pending` spadne. Tři
+  migrace z 2an platí dál (`taken_at` v klidné chvíli).
+* Oba mají vědět: partnera nejde přeřadit na hosta ani přidat třetího
+  správce; zamčení trezoru na jednom zařízení ho zavře i na ostatních;
+  souhrny v Kč mají pod sebou datum kurzu ECB.
+* Vyčištění mezipaměti (`optimize:clear`) zamkne všechny odemčené
+  trezory — stačí znovu odemknout.
+* Čekající připomínky prototypu uložené v pražských hodinách se při
+  dalším uložení akce nahradí správnými; připomínky z ostatních míst
+  založené před nasazením dojdou jednou o 1–2 h později.
+* Platby, které už do knihy přišly ze zamítnutých nebo čekajících
+  řádků, v ní zůstaly — kdo chce, smaže je ručně.
+* Po nasazení obnovit stránku (nové rozhraní měn, klíč úkolu Klidu).
+
+### Zbývá (vědomě neřešené)
+
+* Partner s odebraným přístupem se počítá do dvojice a schvalovat
+  nemůže — mazání pak stojí; jediná cesta z dvojice je, že partner
+  zruší vlastní účet.
+* Připomínky: `EntertainmentController` (u návrhů mimo kino),
+  `SharedTodoService` (význam `shared_todos.remind_at`) a
+  `CalendarPlanningController::syncReminders` — staré React rozhraní
+  posílá `starts_at` jednou v pražských hodinách (založení), jednou
+  v UTC (editor); `ReminderActionController` pak u akcí z editoru
+  posune o 2 h. Akce z kina jsou jediné uložené v UTC.
+* Měny: `INCOMES` v měně rozpočtu se znakem Kč, součty záložek ATX
+  po měnách bez přepočtu, `DELAY` bez měny, staré API sčítá výdaje
+  cest napříč měnami (`CalendarPlanningController:965,1257`,
+  `DashboardController:72`, `TripController:516`); na telefonu se
+  pruhy eurového rozpočtu po přeřazení platby srovnají až s daty ze
+  serveru. `Finance.php` (1823 řádků), `FinanceRozbory.php` a `System.php`
+  jsou nad 800 řádků.
+* Existující kopie videí mohou nést polohu (stránka odkazu je už
+  nevydává); podepsaná adresa bez řádku v databázi se dál vydá; heslo
+  k odkazu po úspěchu neobnoví sezení; React přehled banky neukazuje
+  `rows_pending`.
+* Z předchozích kol: souběh vkladů mimo `FinanceAkce`, staré rozhraní
+  podle `users.role`.
+
+| Commit | Co |
+|---|---|
+| `a256502d` | Partnera nejde přeřadit na hosta ani obejít třetím správcem |
+| `3de16c32` | Hlavní měna CZK a přepočet součtů kurzem ECB |
+| `e7b06d13` | Měny v předvolbách jen CZK, EUR, USD; částky z rezervací |
+| `dfdf370d` | Finance a rozbory v korunách |
+| `af672255` | Přehledy, týden, cesty a Dnes v korunách |
+| `c069d7ef` | Společné součty po měnách (refaktor) |
+| `0cf3c956`, `c622251f` | Počítač — souhrny v korunách, dluhy po měnách, výběr měny, investice, rozpočet další cesty |
+| `bb752f14` | Telefon — částky v jejich měně, součty v korunách |
+| `5b277ce0` | Sdílené odkazy — heslo, hlasovky, poloha videa, koš, recepty |
+| `be9be748`, `1a3acc37` | Vlastní počítadla limitů |
+| `68404e50` | Vzpomínky na MySQL, soukromé akce a hosté v upozorněních, souhrn |
+| `deb445bf`, `567d2457` | Zamítnuté a čekající platby, epocha trezoru, koš a trezor |
+| `efa06224` | Panel rizik, data mimo rozsah MySQL |
+| `9dae7a08` | Přání a úkoly Klidu bez zdvojení |
+| `0b843d86` | Připomínky podle pražských hodin |
+| `bc4cd4d6` | Statistiky knihovny v databázi |
+| `f6d9e015` | Test kurzu pro `combine` i v letní noci |
+
+Testy: **2640 PHP testů** (205 nových), všechny prošly v běžném čase
+i v obou nočních (`TESTY_CAS` Silvestr 23:30 a 1. 7. 22:40). Prohlížeč:
+počítač i telefon se bez přihlášení načtou jen s 401, bez chyby serveru
+či skriptu a bez smyčky obnovování; přihlášený průchod obrazovek s měnami
+ověřen jen statickými testy a kontrolou syntaxe (`node --check`).
+
 ## 2an. Čtyřicáté první kolo — mazání po společném schválení, stav, obsah obrazovek (25. 9.)
 
 Rozhodnutí dvojice ke `can_delete` z minulého kola: **„Mazat fotky mohou
