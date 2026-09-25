@@ -804,6 +804,89 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2aj. Třicáté sedmé kolo — účty, nahrávky, cloud a přepnutí účtu (25. 9.)
+
+Sloučené obě větve samostatného úkolu (klient, který čeká JSON, dostane
+z webové cesty 422 místo přesměrování; staré rozhraní ukáže chybu místo
+falešného úspěchu)
+a přestavěný `public/build`. Pak audit oblastí, které dosud neprošly
+(`task-plan`), a opravy po třech dávkách (`task-deep`, `task-build`); každý
+nález nejdřív potvrdil test, který bez opravy spadl.
+
+### Zabezpečení
+
+* **Pozvánka převzala cizí účet.** Vlastník jiné galerie zadal e-mail
+  účtu, který „pozvánku nepřijal" — tak vypadají účty ze seedu i čekající
+  pozvaní jiných galerií —, dostal odkaz s novým tokenem a nastavil si
+  heslo. Teď 422; znovu pozvat jde jen účet, který tentýž vlastník sám
+  založil a nikdo ho nepřevzal. Pozvánka platí týden.
+* **Otisky prstu přežily obnovu hesla i „Odhlásit ostatní"** — a otisk
+  vydá nový token sám. Teď se ruší; „Odhlásit ostatní" nechá jen otisk
+  tohoto zařízení. Tytéž cesty zneplatní cookie „zapamatovat si mě".
+* **Registrace otisku přepsala klíč jiného účtu** (`updateOrCreate` podle
+  identifikátoru, který volby přihlášení vydají komukoli) — teď 422.
+* **2FA:** kód z aplikace platí jednou, obnovovací kód projde i malými
+  písmeny.
+* **Změna e-mailu** dá vědět na starou adresu a zapíše se do protokolu.
+* **Přihlášení jiným účtem na tomtéž zařízení** nechávalo v paměti, v
+  localStorage i v cache workeru data toho předchozího (offline je dostal
+  druhý). Teď se kopie zahodí a načte znovu.
+* Worker ukládal kopii **každé** odpovědi pod `/api/` (i ZIP celého alba);
+  teď jen povolený seznam.
+* `DEPLOYMENT_ISPCONFIG.md` radil `storage:link`, který vydává originály
+  i z trezoru bez přihlášení.
+
+### Nahrávky a cloud
+
+* Nahrávka z aplikace **neměla EXIF** (datum pořízení zůstalo z času změny
+  souboru), otisk hlásil chybu u každé fotky a náhledy se počítaly dvakrát.
+* Na Google Disk odcházely **dvě až tři kopie** každé fotky; smazání
+  odstranilo jednu. Teď jedna (jedinečná úloha, rozběhnuté nahrávání se
+  nezakládá znovu).
+* Noční `mirror-backlog` u Disku **každou noc dokola** řadil prvních 500
+  hotových a na zbytek nedošlo.
+* Fotka vyhozená do koše ve frontě se do cloudu nenahraje.
+* `gallery:clean-temp` hledal části nahrávek a sdílené soubory mimo disk,
+  kam se zapisují — ležely napořád.
+
+### Po nasazení
+
+* **Migrace `zabezpeceni_uctu`** — tři nullable sloupce; čekající pozvánky
+  dostanou týden ode dne nasazení.
+* Otisky z doby před migrací vazbu na zařízení nemají: **první „Odhlásit
+  ostatní" zruší i otisk tohoto zařízení** — přihlásit se heslem a otisk
+  zapnout znovu.
+* Kopie na Disku, které už vznikly dvakrát, se samy neuklidí.
+
+### Zbývá (vědomě neřešené)
+
+* Trezor se do cloudu kopíruje dál a přesun do trezoru kopii v cloudu
+  nesmaže; trvalé smazání maže kopii jen na Google Disku, ne na Dropboxu,
+  OneDrivu a WebDAV — rozhodnutí o zálohách.
+* Registrace otisku chce jen přihlášení, ne heslo.
+* Pojistka fronty (`queue:work` každých 5 minut, zámek na 10 minut) může
+  při dlouhých převodech videa pustit víc pracovníků naráz; úlohy se
+  nezdvojí (`retry_after`), jen se zvýší zátěž.
+* Přihlášení heslem na tomtéž zařízení odpojí otisk od tokenu; příští
+  „Odhlásit ostatní" ho pak zruší taky (bezpečná strana).
+
+| Commit | Co |
+|---|---|
+| `f4a8f39e`, `815ab40c` | Sloučení větví samostatného úkolu |
+| `40218fff` | Přestavěné assety starého rozhraní |
+| `68e3af11` | Návod pro ISPConfig neradí `storage:link` |
+| `bdc7d819` | Pozvánka nepřevezme cizí účet, otisky a „zapamatovat" končí s odhlášením, 2FA |
+| `fe6c0a03` | Nahrávka dostane EXIF, zpracuje se jednou, na Disk jedna kopie |
+| `88192245` | Úklid dočasných souborů hledá tam, kam se zapisují |
+| `18d0be60` | Přihlášení jiným účtem nezdědí kopii dat, worker jen povolené adresy |
+| `43c63aa0` | Registrace otisku nepřepíše klíč jiného účtu |
+| `1e32cefb` | Změna e-mailu dá vědět na starou adresu |
+
+Testy: **1761 PHP testů**, všechny prošly (nové i v noci a na Silvestra
+přes `TESTY_CAS`). **Jedna migrace.**
+
+---
+
 ## 2ai. Třicáté šesté kolo — odhlášení a čeština frameworku (25. 9.)
 
 * **„Odhlásit se" v aplikaci.** V nastavení (Zámek a přístup) na počítači
@@ -827,10 +910,9 @@ a obě nové funkce jsou k dispozici; průchod dialogem s přihlášenou dvojic�
 v prohlížeči neproběhl (přihlašovat se v relaci nesmím) — kontroluje ho
 statický test pravidel.
 
-**Nesloučeno:** větve `claude/kind-perlman-108d25` (webové cesty vracejí
-klientovi, který čeká JSON, 422 místo přesměrování) a `claude/elated-tesla-64fdeb` (staré
-rozhraní ukáže chybu místo falešného úspěchu; po sloučení přestavět
-`public/build`) — sloučení do `main` je na rozhodnutí vlastníka.
+~~**Nesloučeno:** větve `claude/kind-perlman-108d25` a
+`claude/elated-tesla-64fdeb`~~ — sloučeno v kole 2aj, `public/build`
+přestavěný.
 
 | Commit | Co |
 |---|---|
