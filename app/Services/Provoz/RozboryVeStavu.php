@@ -2,8 +2,11 @@
 
 namespace App\Services\Provoz;
 
+use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
+use App\Models\User;
 use App\Services\Obsah\FinanceRozbory;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -43,7 +46,7 @@ class RozboryVeStavu
      *
      * @return array<string, mixed>
      */
-    public function zpracuj(array $patch, GallerySpace $prostor): array
+    public function zpracuj(array $patch, GallerySpace $prostor, User $kdo): array
     {
         if (! Tabulky::je('budget_goals')) {
             return [];
@@ -52,24 +55,54 @@ class RozboryVeStavu
         $fondy = DB::table('budget_goals as c')
             ->join('budgets as r', 'r.id', '=', 'c.budget_id')
             ->where('r.gallery_space_id', $prostor->id)
-            ->get(['c.id', 'c.uuid', 'c.target_amount', 'c.saved_amount', 'c.target_on'])
+            ->get(['c.id', 'c.uuid', 'c.budget_id', 'r.owner_user_id', 'c.target_amount', 'c.saved_amount', 'c.target_on'])
             ->keyBy('uuid');
 
-        $dnes = CarbonImmutable::now();
+        // Pražský dnešek: termín „za dva měsíce" se počítá od dne dvojice,
+        // ne od UTC, které je po 22:00 ještě včera.
+        $dnes = Cas::dnes();
+
+        /*
+         * Jen fondy, které prohlížeč opravdu změnil.
+         *
+         * Posílá se celý seznam, jenže ten je opis z doby načtení: vklad, který
+         * mezitím udělal ten druhý v Rozpočtech, v něm chybí. Každé „+250"
+         * u jiné obálky pak vrátilo tuhle na starou částku. Bez seznamu změn
+         * (starší klient) se bere všechno, ale uspořenou částku hlídá níž
+         * pravidlo „jen nula".
+         */
+        $zmenene = OdebraneVStavu::zmenene($patch, 'season');
 
         foreach ((array) ($patch['season'] ?? []) as $f) {
             $f = (array) $f;
             $fond = $fondy[(string) ($f['id'] ?? '')] ?? null;
 
-            if ($fond === null) {
+            if ($fond === null || ! OdebraneVStavu::zmeneno($zmenene, $fond->uuid)) {
+                continue;
+            }
+
+            /*
+             * Soukromý rozpočet toho druhého se odsud měnit nedá.
+             *
+             * Vklad v Rozpočtech to hlídá (`FinanceAkceController::vklad`),
+             * stav to obcházel: kdokoli z prostoru vynuloval obálku v cizím
+             * rozpočtu, do kterého se smí jen dívat.
+             */
+            if (! FinanceAccess::smiUpravit('budget', (int) $fond->budget_id, $fond->owner_user_id !== null ? (int) $fond->owner_user_id : null, (int) $kdo->id)) {
                 continue;
             }
 
             $zmena = [];
 
-            // „Obálka utracena, spoří se znovu od nuly."
-            if (array_key_exists('saved', $f) && (int) $f['saved'] !== (int) $fond->saved_amount) {
-                $zmena['saved_amount'] = max(0, (int) $f['saved']);
+            /*
+             * „Obálka utracena, spoří se znovu od nuly." — nic jiného.
+             *
+             * Obrazovka uspořenou částku jinak než na nulu nemění; vklady a
+             * výběry chodí přes Rozpočty. Jiné číslo je tedy opis z doby
+             * načtení a zapsat ho by smazalo vklad, který mezitím přišel.
+             */
+            if (array_key_exists('saved', $f) && is_numeric($f['saved']) && (float) $f['saved'] == 0 && (float) $fond->saved_amount != 0) {
+                $zmena['saved_amount'] = 0;
             }
 
             $termin = $this->novyTermin($f, $fond, $zmena, $dnes);

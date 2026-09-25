@@ -107,6 +107,14 @@ class StateController extends Controller
     /** Horní mez jednoho zápisu stavu. Celý stav dvojice má desítky kilobajtů. */
     private const NEJVIC_BAJTU = 1_048_576;
 
+    /**
+     * Předpona dluhu srdíček; za ní je id autora.
+     *
+     * Srdíčka jsou každého vlastní a dluh leží ve sdíleném stavu — bez autora
+     * by je zaplatil ten, kdo zapisuje jako další (viz `zaplatDluh`).
+     */
+    private const DLUH_SRDICEK = 'favs:';
+
     public function update(Request $request): JsonResponse
     {
         /*
@@ -148,8 +156,9 @@ class StateController extends Controller
         }
 
         $coupleId = $this->parId($request);
+        $jenCteni = (bool) $uzivatel?->read_only_mode;
 
-        return DB::transaction(function () use ($validated, $coupleId, $uzivatel, $request) {
+        return DB::transaction(function () use ($validated, $coupleId, $uzivatel, $request, $jenCteni) {
             $state = CoupleState::where('couple_id', $coupleId)->lockForUpdate()->first()
                 ?? CoupleState::forCouple($coupleId);
 
@@ -185,6 +194,42 @@ class StateController extends Controller
                     'conflict' => true,
                     'strety' => $strety,
                 ], 409);
+            }
+
+            /*
+             * Účet jen pro čtení nezapíše přes stav žádnou tabulku.
+             *
+             * Vlastní adresy (deník, dělba práce, koš…) `read_only_mode`
+             * hlídají, jenže tahle cesta vede převodníky skoro do všech tabulek:
+             * popisky fotek, fondy, kalendář, pravidla, zprávy. Bez téhle
+             * kontroly šlo přes stav zapsat, co vlastní adresa odmítne.
+             *
+             * Klíče převodníků se proto zahodí **celé** — ani do stavu: uložené
+             * bez zápisu do tabulky by obrazovka kreslila něco, co v databázi
+             * neplatí, a u serverových klíčů by stav zastínil tabulku. Zbytek
+             * (vzhled, rozložení…) se uloží jako dřív.
+             *
+             * Neodmítá se celý zápis: `galerie-api.js` bere 403 u stavu jako
+             * odebraný přístup (zahodí token, ukáže přihlášení — účet by vyhodil
+             * při prvním kliknutí a po každém přihlášení znovu) a 422 rozdělí
+             * patch po klíčích a každý ohlásí jako odmítnutý. Co se zahodilo,
+             * řekne odpověď v `jen_cteni`.
+             */
+            $odmitnute = [];
+
+            if ($jenCteni) {
+                [$patch, $odmitnute] = $this->bezPrevodniku($patch);
+                $poslaneKlice = array_values(array_diff($poslaneKlice, $odmitnute));
+
+                if ($patch === []) {
+                    return response()->json([
+                        'data' => $state->toClientObject(),
+                        'updated_at' => $state->updated_at?->toIso8601String(),
+                        'rev' => $state->rev,
+                        'strety' => $strety,
+                        'jen_cteni' => $odmitnute,
+                    ]);
+                }
             }
 
             /*
@@ -268,13 +313,17 @@ class StateController extends Controller
              * opravené datum fotku přesunulo jen v jednom prohlížeči.
              */
             // Nejdřív se zopakuje, co se nepovedlo minule — teprve pak se
-            // zapisuje to nové. Jinak by dluh přebil právě poslanou úpravu.
-            $dluh = $this->zaplatDluh($state, $coupleId, $uzivatel);
+            // zapisuje to nové. Klíč, který přišel znovu, se ale z dluhu
+            // nepřehrává vůbec: nese novější hodnotu a zapíše se hned níž.
+            // Účet jen pro čtení dluh neplatí: přehrání je zápis do tabulek jako každý jiný.
+            $dluh = $jenCteni ? $state->dluh() : $this->zaplatDluh($state, $coupleId, $uzivatel, $patch);
 
             if ($this->media->tykaSe($patch)) {
-                $dluh += $this->zDluhu($patch, $this->media->zpracuj(
-                    $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $uzivatel,
-                ));
+                $klice = $this->klicePrevodniku($patch, ['favs', 'edits']);
+                $selhalo = $this->media->zpracuj(
+                    $patch, $this->predtimBezDluhu($state->toClientArray(), $dluh, ['edits']), GallerySpace::findOrFail($coupleId), $uzivatel,
+                );
+                $dluh = $this->prepisDluh($dluh, $patch, $klice, $selhalo, $uzivatel);
             }
 
             /*
@@ -288,9 +337,9 @@ class StateController extends Controller
                 $dluhFinance = [];
                 $puvodni = $patch;
                 $patch = $this->finance->zpracuj(
-                    $patch, $state->toClientArray(), GallerySpace::findOrFail($coupleId), $dluhFinance,
+                    $patch, $this->predtimBezDluhu($state->toClientArray(), $dluh, ['txCat']), GallerySpace::findOrFail($coupleId), $dluhFinance,
                 );
-                $dluh += $this->zDluhu($puvodni, $dluhFinance);
+                $dluh = $this->prepisDluh($dluh, $puvodni, ['txCat'], $dluhFinance, $uzivatel);
             }
 
             /*
@@ -345,7 +394,8 @@ class StateController extends Controller
              * obrazovce.
              */
             if ($this->rozbory->tykaSe($patch)) {
-                $skutecnost += $this->rozbory->zpracuj($patch, GallerySpace::findOrFail($coupleId));
+                // Kdo: soukromý rozpočet toho druhého se měnit nesmí (FinanceAccess).
+                $skutecnost += $this->rozbory->zpracuj($patch, GallerySpace::findOrFail($coupleId), $uzivatel);
                 $patch = $this->rozbory->bezRozboru($patch);
                 $state->zapomen(RozboryVeStavu::SERVEROVE);
             }
@@ -570,8 +620,51 @@ class StateController extends Controller
                 'strety' => $strety,
                 'updated_at' => $state->updated_at?->toIso8601String(),
                 'rev' => $state->rev,
-            ]);
+            ] + ($odmitnute !== [] ? ['jen_cteni' => $odmitnute] : []));
         });
+    }
+
+    /**
+     * Patch bez klíčů, které si berou převodníky do tabulek — pro účet jen pro čtení.
+     *
+     * Každý klíč se zkouší zvlášť proti `tykaSe()` všech převodníků, takže
+     * nový převodník se sem dostane sám, jakmile přibude do konstruktoru.
+     * Rozdíly pro převodníky (`__odebrane`, `__zmenene`) bez nich nemají smysl.
+     *
+     * @param  array<string, mixed>  $patch
+     * @return array{0: array<string, mixed>, 1: list<string>} zbytek patche a zahozené klíče
+     */
+    private function bezPrevodniku(array $patch): array
+    {
+        $prevodniky = [
+            $this->sprava, $this->domacnost, $this->vztah, $this->zdravi, $this->trezor,
+            $this->planovani, $this->uklid, $this->pravidla, $this->rozbory, $this->zpravy,
+            $this->darky, $this->kapsle, $this->nastaveni, $this->klid, $this->pribeh,
+            $this->mechanismy, $this->filmy, $this->inbox, $this->nakupy, $this->seznamy,
+            $this->media, $this->kucharka, $this->finance,
+        ];
+        $zbytek = [];
+        $zahozene = [];
+
+        foreach ($patch as $klic => $hodnota) {
+            if ($klic === OdebraneVStavu::KLIC || $klic === OdebraneVStavu::ZMENENE) {
+                continue;
+            }
+
+            $jeden = [$klic => $hodnota];
+
+            foreach ($prevodniky as $prevodnik) {
+                if ($prevodnik->tykaSe($jeden)) {
+                    $zahozene[] = (string) $klic;
+
+                    continue 2;
+                }
+            }
+
+            $zbytek[$klic] = $hodnota;
+        }
+
+        return [$zbytek, $zahozene];
     }
 
     /**
@@ -607,48 +700,128 @@ class StateController extends Controller
      * z toho klíče zapíše znovu. Oba zápisy jsou idempotentní (`insertOrIgnore`
      * a `update` na tutéž hodnotu), takže zopakování nic nerozbije.
      *
-     * @return list<string> co se nepovedlo ani teď
+     * Klíč, který přišel znovu v tomhle patchi, se nepřehrává: patch nese
+     * novější hodnotu a zapíše se hned po dluhu (viz `predtimBezDluhu`).
+     * Dřív se přehrál starý dluh a nový zápis se pak porovnal se stavem, ve
+     * kterém už nová hodnota ležela — nezapsal nic a v knihovně zůstal starý
+     * popisek.
+     *
+     * Srdíčka jsou každého vlastní, dluh ale leží ve **sdíleném** stavu. Nesou
+     * proto autora (`favs:<id>`) a zaplatí je jen on; srdíčka bez autora
+     * (dluh z doby před tímhle rozlišením) se zahodí — zapsat je pod tím, kdo
+     * zrovna zapisuje, by jejích srdíček udělalo jeho a jeho srdíčka podle
+     * jejího `false` odebralo.
+     *
+     * @param  array<string, mixed>  $patch
+     * @return array<string, mixed> dluh po zaplacení (i cizí srdíčka, nedotčená)
      */
-    private function zaplatDluh(CoupleState $state, int $coupleId, ?User $uzivatel): array
+    private function zaplatDluh(CoupleState $state, int $coupleId, ?User $uzivatel, array $patch): array
     {
-        $dluh = $state->dluh();
+        $dluh = array_filter(
+            $state->dluh(),
+            fn ($klic) => in_array($klic, ['edits', 'txCat'], true) || preg_match('/^'.self::DLUH_SRDICEK.'\d+$/', (string) $klic) === 1,
+            ARRAY_FILTER_USE_KEY,
+        );
 
         if ($dluh === [] || $uzivatel === null) {
             return $dluh;
         }
 
         $prostor = GallerySpace::findOrFail($coupleId);
-        $zbyva = [];
+        $moje = self::DLUH_SRDICEK.$uzivatel->id;
+        $media = [];
 
-        $media = array_intersect_key($dluh, array_flip(['favs', 'edits']));
+        if (array_key_exists($moje, $dluh) && ! array_key_exists('favs', $patch)) {
+            $media['favs'] = $dluh[$moje];
+        }
+
+        if (array_key_exists('edits', $dluh) && ! is_array($patch['edits'] ?? null)) {
+            $media['edits'] = $dluh['edits'];
+        }
 
         if ($media !== []) {
-            $zbyva += $this->zDluhu($media, $this->media->zpracuj($media, [], $prostor, $uzivatel));
+            $dluh = $this->prepisDluh($dluh, $media, array_keys($media), $this->media->zpracuj($media, [], $prostor, $uzivatel), $uzivatel);
         }
 
-        if ($this->finance->tykaSe($dluh)) {
+        $finance = array_intersect_key($dluh, ['txCat' => true]);
+
+        if ($this->finance->tykaSe($finance) && ! $this->finance->tykaSe($patch)) {
             $dluhFinance = [];
-            $this->finance->zpracuj($dluh, [], $prostor, $dluhFinance);
-            $zbyva += $this->zDluhu($dluh, $dluhFinance);
+            $this->finance->zpracuj($finance, [], $prostor, $dluhFinance);
+            $dluh = $this->prepisDluh($dluh, $finance, ['txCat'], $dluhFinance, $uzivatel);
         }
 
-        return $zbyva;
+        return $dluh;
     }
 
     /**
-     * Ze jmen klíčů udělá dluh i s hodnotami.
+     * Klíče převodníku, které tenhle patch opravdu nese.
+     *
+     * `favs` se zpracuje vždy, když přijde; `edits` jen jako mapa.
+     *
+     * @param  array<string, mixed>  $patch
+     * @param  list<string>  $klice
+     * @return list<string>
+     */
+    private function klicePrevodniku(array $patch, array $klice): array
+    {
+        return array_values(array_filter($klice, fn (string $klic) => $klic === 'favs'
+            ? array_key_exists($klic, $patch)
+            : is_array($patch[$klic] ?? null)));
+    }
+
+    /**
+     * Stav „předtím" bez klíčů, které čekají v dluhu.
+     *
+     * Převodník zapisuje jen rozdíl proti stavu před uložením. Ve stavu ale
+     * u dlužného klíče leží hodnota, která se do tabulek **nedostala** — rozdíl
+     * proti ní by ji vynechal. Bez ní se zapíše celá nová hodnota, a tím se
+     * dluh zaplatí tou novější verzí.
+     *
+     * @param  array<string, mixed>  $predtim
+     * @param  array<string, mixed>  $dluh
+     * @param  list<string>  $klice
+     * @return array<string, mixed>
+     */
+    private function predtimBezDluhu(array $predtim, array $dluh, array $klice): array
+    {
+        return array_diff_key($predtim, array_intersect_key(array_flip($klice), $dluh));
+    }
+
+    /**
+     * Dluh po zápisu: co prošlo, se vyškrtne, co selhalo, nese **novější** hodnotu.
+     *
+     * Dřív se slučovalo `+=`, a to drží nejstarší záznam: dluh, který padal
+     * pořád, se přehrával při každém zápisu a přepisoval novější popisky
+     * a štítky tím, co v nich bylo před týdnem.
      *
      * Dluh musí nést, **co** se má zapsat, ne jen který klíč selhal: `favs` se
      * do společného dokumentu schválně neukládá, takže by při dalším
      * požadavku nebylo odkud tu hodnotu vzít.
      *
-     * @param  array<string, mixed>  $patch
-     * @param  list<string>  $klice
+     * @param  array<string, mixed>  $dluh
+     * @param  array<string, mixed>  $patch  hodnoty, které se zapisovaly
+     * @param  list<string>  $klice  klíče, které se zapisovaly
+     * @param  list<string>  $selhalo  klíče, jejichž zápis spadl
      * @return array<string, mixed>
      */
-    private function zDluhu(array $patch, array $klice): array
+    private function prepisDluh(array $dluh, array $patch, array $klice, array $selhalo, ?User $uzivatel): array
     {
-        return array_intersect_key($patch, array_flip($klice));
+        foreach ($klice as $klic) {
+            if ($klic === 'favs' && $uzivatel === null) {
+                continue;
+            }
+
+            $vDluhu = $klic === 'favs' ? self::DLUH_SRDICEK.$uzivatel->id : $klic;
+
+            if (in_array($klic, $selhalo, true)) {
+                $dluh[$vDluhu] = $patch[$klic];
+            } else {
+                unset($dluh[$vDluhu]);
+            }
+        }
+
+        return $dluh;
     }
 
     /**

@@ -150,7 +150,8 @@ class MediaVeStavuTest extends TestCase
         $this->assertSame('big', $this->stav()->data['grid']);
         // Dluh nese i hodnotu: `favs` se do sdíleného stavu neukládá, takže by
         // se při dalším požadavku nebylo odkud dozvědět, co se mělo zapsat.
-        $this->assertSame([$foto->uuid => true], (array) $this->stav()->dluh()['favs']);
+        // A nese autora: srdíčka jsou každého vlastní, dluh leží ve sdíleném stavu.
+        $this->assertSame([$foto->uuid => true], (array) $this->stav()->dluh()['favs:'.$this->adri->id]);
 
         $this->obnovOblibene();
 

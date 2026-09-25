@@ -7,6 +7,7 @@ use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\Tag;
 use App\Models\User;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -204,10 +205,25 @@ class MediaVeStavu
         }
     }
 
-    /** Datum a čas z formuláře; co chybí, zůstává z původního data pořízení. */
+    /**
+     * Nejstarší datum pořízení, které se ještě bere vážně.
+     *
+     * Fotografie starší nejsou; rok 0001 nebo 1700 je překlep ve formuláři.
+     */
+    private const NEJDRIV = '1800-01-01';
+
+    /**
+     * Datum a čas z formuláře; co chybí, zůstává z původního data pořízení.
+     *
+     * Mimo rozumný rozsah (1800 až rok od dneška) se nezapíše nic — `null`
+     * nechá původní datum. Oříznout by znamenalo fotku posunout jinam, než
+     * kam patří, a rok 9999 by na MySQL shodil celý zápis stavu.
+     */
     private function datum(mixed $datum, mixed $cas, mixed $puvodni): ?CarbonImmutable
     {
-        $zaklad = $puvodni ? CarbonImmutable::parse($puvodni) : CarbonImmutable::now()->setTime(12, 0);
+        // Dnešek v Praze, ne v UTC: po 22:00 UTC je u dvojice už zítra.
+        // `taken_at` je čas podle hodin, takže se nepřevádí, jen se vezme den.
+        $zaklad = $puvodni ? CarbonImmutable::parse($puvodni) : Cas::dnes()->setTime(12, 0);
 
         if (is_string($datum) && preg_match('/^(\d{4})-(\d{2})-(\d{2})$/', $datum, $d) && checkdate((int) $d[2], (int) $d[3], (int) $d[1])) {
             $zaklad = $zaklad->setDate((int) $d[1], (int) $d[2], (int) $d[3]);
@@ -217,6 +233,12 @@ class MediaVeStavu
 
         if (is_string($cas) && preg_match('/^(\d{1,2}):(\d{2})$/', $cas, $c) && (int) $c[1] < 24 && (int) $c[2] < 60) {
             $zaklad = $zaklad->setTime((int) $c[1], (int) $c[2]);
+        }
+
+        $den = $zaklad->toDateString();
+
+        if ($den < self::NEJDRIV || $den > Cas::dnes()->addYear()->toDateString()) {
+            return null;
         }
 
         return $zaklad;

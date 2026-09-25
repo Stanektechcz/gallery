@@ -5,6 +5,7 @@ namespace Tests\Feature\Galerie;
 use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -31,6 +32,10 @@ class RozboryVeStavuTest extends TestCase
     {
         parent::setUp();
 
+        // Poledne UTC: termíny se počítají od pražského dneška, testy od `now()`.
+        // Mezi 22:00 a půlnocí UTC by se ty dva dny rozešly a testy by náhodně padaly.
+        Carbon::setTestNow(Carbon::parse('2026-09-15 12:00:00', 'UTC'));
+
         $this->adri = User::factory()->create(['name' => 'Adrian']);
         $this->prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
         $this->prostor->members()->syncWithoutDetaching([$this->adri->id => ['role' => 'owner']]);
@@ -50,6 +55,13 @@ class RozboryVeStavuTest extends TestCase
         ]);
 
         $this->transakce();
+    }
+
+    protected function tearDown(): void
+    {
+        Carbon::setTestNow();
+
+        parent::tearDown();
     }
 
     /** „Obálka utracena" vynuluje uspořené — v tabulce, ne v prohlížeči. */
@@ -128,6 +140,100 @@ class RozboryVeStavuTest extends TestCase
         $this->stav(['season' => [['id' => $uuid, 'saved' => 0, 'per' => 0]]])->assertOk();
 
         $this->assertSame(10000.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+    }
+
+    /**
+     * Starý opis v kartě nepřepíše vklad, který mezitím udělal ten druhý.
+     *
+     * Prohlížeč posílá celý seznam fondů; fond, který v něm nezměnil, se
+     * nesmí vrátit na hodnotu z doby načtení stránky.
+     */
+    public function test_nezmeneny_fond_ze_stare_karty_se_neprepise(): void
+    {
+        $termin = now()->addMonths(4)->toDateString();
+        $uuid = $this->fond(['saved_amount' => 1500, 'target_on' => $termin]);
+
+        $this->stav([
+            'season' => [['id' => $uuid, 'saved' => 1000, 'per' => 250]],
+            '__zmenene' => ['season' => []],
+        ])->assertOk();
+
+        $this->assertSame(1500.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+        $this->assertSame($termin, substr((string) DB::table('budget_goals')->where('uuid', $uuid)->value('target_on'), 0, 10));
+    }
+
+    /**
+     * Uspořenou částku obrazovka umí jen vynulovat („obálka utracena").
+     *
+     * Jiné číslo je opis z doby načtení — vklady chodí přes Rozpočty
+     * (`FinanceAkceController::vklad`). Bez tohohle starší klient, který
+     * `__zmenene` neposílá, vracel fond z 1 500 zpátky na 1 000.
+     */
+    public function test_nenulova_usporena_castka_se_nezapise(): void
+    {
+        $uuid = $this->fond(['saved_amount' => 1500]);
+
+        $this->stav(['season' => [['id' => $uuid, 'saved' => 1000, 'per' => 0]]])->assertOk();
+
+        $this->assertSame(1500.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+    }
+
+    /** Fond ve změněných položkách se zapíše jako dřív. */
+    public function test_zmeneny_fond_se_zapise(): void
+    {
+        $uuid = $this->fond(['saved_amount' => 1500]);
+
+        $this->stav([
+            'season' => [['id' => $uuid, 'saved' => 0, 'per' => 0]],
+            '__zmenene' => ['season' => [$uuid]],
+        ])->assertOk();
+
+        $this->assertSame(0.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+    }
+
+    /**
+     * Soukromý rozpočet partnera se přes stav změnit nedá.
+     *
+     * `FinanceAkceController::vklad` to hlídá přes `FinanceAccess::smiUpravit`,
+     * stav to obcházel: kdokoli z prostoru vynuloval obálku v cizím rozpočtu.
+     */
+    public function test_cizi_soukromy_rozpocet_se_nezmeni(): void
+    {
+        $maki = User::factory()->create(['name' => 'Makinka']);
+        $this->prostor->members()->syncWithoutDetaching([$maki->id => ['role' => 'editor']]);
+        DB::table('budgets')->where('id', $this->rozpocet)->update(['owner_user_id' => $this->adri->id, 'is_shared' => false]);
+        $termin = now()->addMonths(4)->toDateString();
+        $uuid = $this->fond(['saved_amount' => 1500, 'target_on' => $termin]);
+
+        Sanctum::actingAs($maki);
+        $this->stav(['season' => [['id' => $uuid, 'saved' => 0, 'per' => 5000]]])->assertOk();
+
+        $this->assertSame(1500.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+        $this->assertSame($termin, substr((string) DB::table('budget_goals')->where('uuid', $uuid)->value('target_on'), 0, 10));
+
+        // Vlastník svůj rozpočet mění dál.
+        Sanctum::actingAs($this->adri);
+        $this->stav(['season' => [['id' => $uuid, 'saved' => 0, 'per' => 0]]])->assertOk();
+
+        $this->assertSame(0.0, (float) DB::table('budget_goals')->where('uuid', $uuid)->value('saved_amount'));
+    }
+
+    /**
+     * Nový termín se počítá od dneška **v Praze**.
+     *
+     * 30. září ve 23:30 UTC je v Praze už 1. října. Od UTC dneška by dva
+     * měsíce vyšly na 30. listopadu, od pražského na 1. prosince.
+     */
+    public function test_termin_se_pocita_od_prazskeho_dneska(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-09-30 23:30:00', 'UTC'));
+
+        // Chybí 6 800; při 3 400 měsíčně dva měsíce.
+        $uuid = $this->fond(['target_amount' => 45000, 'saved_amount' => 38200, 'target_on' => '2027-06-01']);
+
+        $this->stav(['season' => [['id' => $uuid, 'saved' => 38200, 'per' => 3400]]])->assertOk();
+
+        $this->assertSame('2026-12-01', substr((string) DB::table('budget_goals')->where('uuid', $uuid)->value('target_on'), 0, 10));
     }
 
     // ——— pomůcky ———
