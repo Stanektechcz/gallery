@@ -6,6 +6,7 @@ use App\Support\SpaceContext;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -109,7 +110,57 @@ class SharedLink extends Model
 
     public function isAccessible(): bool
     {
-        return $this->is_active && ! $this->isExpired() && ! $this->isUsageLimitReached() && ! $this->isTargetGone();
+        return $this->isAccessibleFor(false);
+    }
+
+    /**
+     * Platí odkaz pro tohohle návštěvníka?
+     *
+     * Kdo byl už započtený (otevřel stránku v tomhle sezení), smí dál stahovat,
+     * nahrávat i psát, i když tím `max_uses` došlo — jinak by poslední povolený
+     * návštěvník nestáhl fotku, na kterou se právě dívá. Nový návštěvník
+     * za limit neprojde. Vypršení, vypnutí i smazané album platí pro všechny.
+     */
+    public function isAccessibleFor(bool $jizZapocteno): bool
+    {
+        return $this->is_active
+            && ! $this->isExpired()
+            && ($jizZapocteno || ! $this->isUsageLimitReached())
+            && ! $this->isTargetGone();
+    }
+
+    /** Klíč v sezení, že tahle návštěva už je v `use_count`. */
+    public function klicZapocteni(): string
+    {
+        return "share_counted_{$this->token}";
+    }
+
+    public function jeZapoctenoV(Request $request): bool
+    {
+        return $request->hasSession() && (bool) $request->session()->get($this->klicZapocteni());
+    }
+
+    /**
+     * Přičte návštěvu — ale jen pod limitem, v jednom dotazu.
+     *
+     * Čtení a zápis zvlášť by dva návštěvníky naráz pustily oba přes
+     * `max_uses = 1`. Vrací `false`, když na návštěvu už místo není.
+     */
+    public function zapoctiNavstevu(): bool
+    {
+        $pricteno = static::query()
+            ->whereKey($this->id)
+            ->where(fn ($q) => $q->whereNull('max_uses')->orWhereColumn('use_count', '<', 'max_uses'))
+            ->increment('use_count');
+
+        if ($pricteno === 0) {
+            return false;
+        }
+
+        $this->use_count = (int) $this->use_count + 1;
+        $this->syncOriginalAttribute('use_count');
+
+        return true;
     }
 
     /**

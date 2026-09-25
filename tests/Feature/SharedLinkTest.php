@@ -10,6 +10,8 @@ use App\Models\Recipe;
 use App\Models\SharedLink;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
@@ -201,6 +203,178 @@ class SharedLinkTest extends TestCase
             ->missing('content.data.next_time_note')
             ->missing('content.data.place.latitude')
             ->missing('content.data.place.longitude'));
+    }
+
+    // ——— heslo k odkazu ———
+
+    /**
+     * Heslo k odkazu má limit na odkaz, ne jen na adresu.
+     *
+     * Limit na adresu obejde každý, kdo má víc adres (mobilní síť, proxy).
+     * Odkaz sám přitom chrání fotky, které dvojice někomu poslala.
+     */
+    public function test_heslo_k_odkazu_ma_limit_na_odkaz(): void
+    {
+        $odkaz = $this->odkazSHeslem();
+
+        for ($i = 1; $i <= 20; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.0.{$i}"])
+                ->post("/s/{$odkaz->token}/verify", ['password' => 'spatne-'.$i])
+                ->assertRedirect();
+        }
+
+        // Stav přímo: `assertStatus` na přesměrování padá uvnitř vendoru.
+        $this->assertSame(429, $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.1'])
+            ->post("/s/{$odkaz->token}/verify", ['password' => 'spatne-21'])->status());
+
+        // Ani správné heslo po vyčerpání neprojde — jinak by odpověď prozradila,
+        // že se trefil.
+        $this->assertSame(429, $this->withServerVariables(['REMOTE_ADDR' => '10.0.1.2'])
+            ->post("/s/{$odkaz->token}/verify", ['password' => 'tajne-heslo'])->status());
+        $this->assertNull(session("share_verified_{$odkaz->token}"));
+    }
+
+    /** Správné heslo počítadlo vynuluje — host s překlepy si nezamkne příště. */
+    public function test_spravne_heslo_vynuluje_pocitadlo(): void
+    {
+        $odkaz = $this->odkazSHeslem();
+
+        // Každý pokus z jiné adresy: limit na adresu je užší a tady nejde o něj.
+        for ($i = 1; $i <= 19; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.1.{$i}"])
+                ->post("/s/{$odkaz->token}/verify", ['password' => 'spatne'])
+                ->assertRedirect();
+        }
+        $this->withServerVariables(['REMOTE_ADDR' => '10.0.3.1'])
+            ->post("/s/{$odkaz->token}/verify", ['password' => 'tajne-heslo'])
+            ->assertRedirect(route('share.show', $odkaz->token));
+
+        // Po úspěchu je k dispozici zase celých dvacet pokusů.
+        for ($i = 1; $i <= 20; $i++) {
+            $this->withServerVariables(['REMOTE_ADDR' => "10.0.2.{$i}"])
+                ->post("/s/{$odkaz->token}/verify", ['password' => 'spatne'])
+                ->assertRedirect();
+        }
+    }
+
+    public function test_heslo_k_odkazu_ma_aspon_sest_znaku(): void
+    {
+        $this->actingAs($this->adrian)
+            ->postJson('/shares', ['target_type' => 'selection', 'password' => '1234'])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('password');
+    }
+
+    /**
+     * Host, který nahrává fotky, si tím nezamkne heslo ani vzkaz.
+     *
+     * Limity bez předpony počítadla sdílí jeden klíč (adresa), bez ohledu
+     * na cestu: deset nahrání vyčerpalo i heslo a vzkazy.
+     */
+    public function test_nahravani_neubira_z_limitu_hesla_a_vzkazu(): void
+    {
+        $odkaz = $this->odkazSHeslem(['allow_comments' => true]);
+
+        for ($i = 1; $i <= 10; $i++) {
+            $this->post("/s/{$odkaz->token}/upload", []);
+        }
+
+        $this->assertNotSame(429, $this->post("/s/{$odkaz->token}/verify", ['password' => 'spatne'])->status());
+        $this->assertNotSame(429, $this->postJson("/s/{$odkaz->token}/vzkaz", ['jmeno' => 'Babička', 'text' => 'Ahoj'])->status());
+    }
+
+    // ——— počet použití ———
+
+    /**
+     * Odkaz „na jedno otevření" počítá návštěvu, ne každé načtení.
+     *
+     * `use_count` rostl s každým GET — obnovení stránky i náhled odkazu
+     * v chatu (robot, který si stránku stáhne). Kdo stránku otevřel jako
+     * poslední povolený, pak už nemohl stáhnout fotku, na kterou se díval.
+     */
+    public function test_jedno_pouziti_pusti_navstevnika_ke_stazeni(): void
+    {
+        Storage::fake('public');
+        $fotka = $this->fotkaSOriginalem();
+        $odkaz = SharedLink::create([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->adrian->id,
+            'target_type' => 'media', 'target_id' => $fotka->id,
+            'allow_download' => true, 'max_uses' => 1,
+        ]);
+
+        $this->get("/s/{$odkaz->token}")->assertOk()->assertInertia(fn (Assert $page) => $page->component('Shares/Show'));
+        $this->assertSame(1, (int) $odkaz->fresh()->use_count);
+
+        $this->get("/s/{$odkaz->token}/media/{$fotka->uuid}/download")->assertOk();
+
+        // Obnovení stránky v témž sezení nic nepřičte.
+        $this->get("/s/{$odkaz->token}")->assertOk()->assertInertia(fn (Assert $page) => $page->component('Shares/Show'));
+        $this->assertSame(1, (int) $odkaz->fresh()->use_count);
+
+        // Nový návštěvník za limit neprojde.
+        $this->flushSession();
+        $this->get("/s/{$odkaz->token}")->assertOk()->assertInertia(fn (Assert $page) => $page->component('Shares/Expired'));
+        $this->get("/s/{$odkaz->token}/media/{$fotka->uuid}/download")->assertForbidden();
+        $this->assertSame(1, (int) $odkaz->fresh()->use_count);
+    }
+
+    // ——— kdo smí sdílet ———
+
+    /**
+     * Host cizí galerie z ní nesdílí.
+     *
+     * Obsah ke sdílení se hledal ve všech prostorech účtu a oprávnění
+     * rozhodovalo i `users.role` — to má `owner` každý zaregistrovaný. Host
+     * galerie X, který má vlastní galerii, tak mohl vystavit veřejný odkaz
+     * na recept dvojice X.
+     */
+    public function test_host_cizi_galerie_z_ni_nesdili(): void
+    {
+        $recept = Recipe::create([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->adrian->id,
+            'title' => 'Tajný recept', 'category' => 'main_course', 'difficulty' => 'medium',
+            'status' => 'published', 'base_servings' => 2, 'currency' => 'CZK',
+        ]);
+
+        $host = User::factory()->create(['role' => 'owner', 'is_active' => true]);
+        // Vlastní galerie je u něj první (výchozí) — brána `dvojice` ho tak pustí
+        // do aplikace a o cizí galerii rozhoduje až sdílení samo.
+        $vlastni = GallerySpace::create(['uuid' => (string) Str::uuid(), 'name' => 'Host', 'slug' => 'host', 'owner_id' => $host->id, 'is_default' => true]);
+        $vlastni->members()->attach($host->id, ['role' => 'owner']);
+        $this->space->members()->attach($host->id, ['role' => 'viewer']);
+
+        $this->actingAs($host)->postJson('/api/v1/shares', [
+            'target_type' => 'recipe', 'target_uuid' => $recept->uuid,
+        ])->assertNotFound();
+
+        $this->assertDatabaseMissing('shared_links', ['target_type' => 'recipe', 'target_id' => $recept->id]);
+    }
+
+    private function odkazSHeslem(array $navic = []): SharedLink
+    {
+        return SharedLink::create(array_merge([
+            'gallery_space_id' => $this->space->id, 'created_by' => $this->adrian->id,
+            'target_type' => 'selection', 'password_hash' => bcrypt('tajne-heslo'),
+        ], $navic));
+    }
+
+    private function fotkaSOriginalem(): MediaItem
+    {
+        $m = MediaItem::create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id,
+            'owner_user_id' => $this->adrian->id, 'uploaded_by' => $this->adrian->id,
+            'original_filename' => 'IMG.jpg', 'safe_filename' => 'img.jpg', 'extension' => 'jpg',
+            'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 4,
+            'uploaded_at' => now(), 'status' => 'ready', 'storage_status' => 'local',
+        ]);
+        $cesta = 'media/'.$m->uuid.'/original.jpg';
+        Storage::disk('public')->put($cesta, 'jpeg');
+        DB::table('media_variants')->insert([
+            'media_item_id' => $m->id, 'type' => 'original', 'disk' => 'public', 'path' => $cesta,
+            'size_bytes' => 4, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        return $m;
     }
 
     /** @test */

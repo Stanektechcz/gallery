@@ -8,11 +8,14 @@ use App\Models\PlaceReview;
 use App\Models\Recipe;
 use App\Models\SharedLink;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\SpaceContext;
 
 class SharedContentService
 {
     public const CONTENT_TYPES = ['recipe', 'place_review'];
+
+    public function __construct(private readonly PristupDoGalerie $pristup) {}
 
     /**
      * Resolve a public-content target while checking both gallery membership and
@@ -23,7 +26,14 @@ class SharedContentService
      */
     public function resolveForSharing(User $user, string $type, string $uuid): array
     {
-        $spaceIds = $user->gallerySpaces()->pluck('gallery_spaces.id');
+        /*
+         * Jen prostory, kde účet patří do dvojice.
+         *
+         * Dřív každý prostor, kde je členem — i ten, kam je jen pozvaný jako
+         * host. Host galerie X, který má vlastní galerii (brána `dvojice` ho
+         * tak pustí), mohl vystavit veřejný odkaz na recept dvojice X.
+         */
+        $spaceIds = $this->pristup->idProstoruDvojice($user);
 
         if ($type === 'recipe') {
             $recipe = Recipe::query()
@@ -88,12 +98,18 @@ class SharedContentService
         };
     }
 
+    /**
+     * Smí sdílet obsah tohohle prostoru?
+     *
+     * Rozhoduje členství v prostoru, ne `users.role`: to má `owner` každý
+     * zaregistrovaný účet, takže podmínka dřív pouštěla úplně každého.
+     */
     private function ensureCanShare(User $user, int $spaceId): void
     {
         $space = $user->gallerySpaces()->whereKey($spaceId)->firstOrFail();
-        $canShare = in_array((string) $space->pivot?->role, ['owner'], true)
-            || (bool) $space->pivot?->can_share
-            || in_array((string) $user->role, ['admin', 'owner'], true);
+        $canShare = (int) $space->owner_id === (int) $user->id
+            || in_array((string) $space->pivot?->role, PristupDoGalerie::ROLE_DVOJICE, true)
+            || (bool) $space->pivot?->can_share;
         abort_unless($canShare, 403, 'Pro sdílení obsahu nemáte oprávnění.');
     }
 

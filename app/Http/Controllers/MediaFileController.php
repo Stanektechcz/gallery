@@ -148,14 +148,28 @@ class MediaFileController extends Controller
              * stránka) šla otevřít dál — i se zamčeným trezorem a bez přihlášení.
              */
             if (preg_match('#^(?:media|variants)/([0-9a-f-]{36})/#i', $path, $shoda)) {
-                $skryta = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                    ->withTrashed()
                     ->where('uuid', $shoda[1])
-                    ->value('is_hidden');
+                    ->first(['is_hidden', 'trashed_at', 'deleted_at']);
 
-                return ! $skryta || $this->trezorOdemceny($request);
+                /*
+                 * Fotka v koši (nebo smazaná) podpisem neprojde.
+                 *
+                 * Větev s podpisem hlídala jen trezor. Fotka vyhozená do koše
+                 * tak přes adresu vydanou dřív (sdílená stránka, notifikace,
+                 * historie prohlížeče) šla otevřít dál, bez přihlášení. O ní
+                 * rozhoduje členství níž — dvojice svůj koš vidí dál, host ne.
+                 *
+                 * Návrh na smazání (`trash_requested_at`) fotku nepřesouvá: dokud
+                 * ho druhý neschválí, je normálně v galerii a adresy platí.
+                 */
+                if ($media === null || ($media->trashed_at === null && $media->deleted_at === null)) {
+                    return ! $media?->is_hidden || $this->trezorOdemceny($request);
+                }
+            } else {
+                return true;
             }
-
-            return true;
         }
 
         $user = $request->user('sanctum') ?? $request->user();

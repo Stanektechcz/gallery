@@ -259,6 +259,58 @@ class HostVzkazTest extends TestCase
         );
     }
 
+    /**
+     * Hlasovky mají strop na odkaz.
+     *
+     * Každá nahrávka (až 10 MB) leží na disku serveru a poslat ji může kdokoli
+     * s odkazem. Hlídal to jen limit požadavků na adresu — z víc adres
+     * nebo pomalu přes noc se dal disk zaplnit.
+     */
+    public function test_hlasovky_maji_strop_na_odkaz(): void
+    {
+        config(['gallery.guest_voice_pending_mb' => 1]);
+        $odkaz = $this->odkaz(['allow_comments' => true]);
+
+        DB::table('guest_comments')->insert([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'shared_link_id' => $odkaz->id,
+            'guest_name' => 'Babička',
+            'kind' => 'voice',
+            'audio_path' => 'hlasovky/'.$this->prostor->id.'/stara.webm',
+            'audio_bytes' => 1024 * 1024,
+            'is_hidden' => false,
+            'is_pinned' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $odpoved = $this->post('/s/'.$odkaz->token.'/vzkaz', [
+            'jmeno' => 'Děda',
+            'vterin' => 5,
+            'nahravka' => UploadedFile::fake()->create('vzkaz.webm', 40, 'audio/webm'),
+        ]);
+
+        $this->assertSame(413, $odpoved->status());
+        $this->assertSame(1, DB::table('guest_comments')->count(), 'Nahrávka nad strop se nesmí uložit.');
+        $this->assertSame([], Storage::disk('public')->allFiles('hlasovky'));
+
+        // Psaný vzkaz disk nezatěžuje — ten projde dál.
+        $this->postJson('/s/'.$odkaz->token.'/vzkaz', ['jmeno' => 'Děda', 'text' => 'Ahoj'])->assertStatus(201);
+    }
+
+    /** Vzkazů za den k jednomu odkazu je taky strop — jinak by se jimi dala zaplavit stránka. */
+    public function test_vzkazy_maji_denni_strop_na_odkaz(): void
+    {
+        config(['gallery.guest_comments_per_day' => 2]);
+        $odkaz = $this->odkaz(['allow_comments' => true]);
+
+        $this->postJson('/s/'.$odkaz->token.'/vzkaz', ['jmeno' => 'A', 'text' => 'Jedna'])->assertStatus(201);
+        $this->postJson('/s/'.$odkaz->token.'/vzkaz', ['jmeno' => 'B', 'text' => 'Dva'])->assertStatus(201);
+        $this->postJson('/s/'.$odkaz->token.'/vzkaz', ['jmeno' => 'C', 'text' => 'Tři'])->assertStatus(429);
+
+        $this->assertSame(2, DB::table('guest_comments')->count());
+    }
+
     private function odkaz(array $navic = []): SharedLink
     {
         // Skutečné album: odkaz na album, které neexistuje, už neplatí.

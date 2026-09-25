@@ -15,6 +15,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -25,6 +26,20 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ShareController extends Controller
 {
+    /** Varianty, které sdílená stránka smí dostat — zmenšeniny bez metadat a plakát videa. */
+    private const NAHLEDY_STRANKY = ['thumbnail', 'small', 'medium', 'video_poster'];
+
+    /**
+     * Kolik špatných hesel k jednomu odkazu za hodinu, než se zamkne.
+     *
+     * Limit na adresu (`throttle` u cesty) obejde každý s víc adresami —
+     * mobilní síť, proxy. Dvacet je víc, než kolik udělá host s překlepy,
+     * a na slovník málo.
+     */
+    private const POKUSU_O_HESLO = 20;
+
+    private const ZAMEK_HESLA_VTERIN = 3600;
+
     public function __construct(private readonly SharedContentService $sharedContent) {}
 
     public function index(Request $request): Response
@@ -47,7 +62,9 @@ class ShareController extends Controller
             'target_id' => 'nullable|integer',
             'target_uuid' => 'nullable|uuid|required_if:target_type,recipe,place_review',
             'name' => 'nullable|string|max:200',
-            'password' => 'nullable|string|min:4',
+            // Šest znaků, ne čtyři: čtyřmístný kód je deset tisíc možností
+            // a odkaz se zkouší bez přihlášení (limit hesla viz `verify()`).
+            'password' => 'nullable|string|min:6',
             'expires_at' => 'nullable|date|after:now',
             'allow_download' => 'boolean',
             'allow_guest_upload' => 'boolean',
@@ -117,8 +134,9 @@ class ShareController extends Controller
     public function show(Request $request, string $token): Response|RedirectResponse
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
+        $zapocteno = $link->jeZapoctenoV($request);
 
-        if (! $link->isAccessible()) {
+        if (! $link->isAccessibleFor($zapocteno)) {
             return Inertia::render('Shares/Expired');
         }
 
@@ -126,8 +144,23 @@ class ShareController extends Controller
             return Inertia::render('Shares/PasswordGate', ['token' => $token]);
         }
 
-        // Increment use count
-        $link->increment('use_count');
+        /*
+         * Použití se počítá jednou za návštěvu, ne za každé načtení.
+         *
+         * `use_count` rostl s každým GET — obnovení stránky i robot, který
+         * si odkaz v chatu stáhne kvůli náhledu. Poslední povolený návštěvník
+         * pak už nemohl stáhnout fotku, na kterou se právě díval.
+         *
+         * Přičte se jen tehdy, když je pod limitem, v jednom dotazu: dva
+         * návštěvníci naráz by jinak oba prošli přes `max_uses = 1`.
+         */
+        if (! $zapocteno) {
+            if (! $link->zapoctiNavstevu()) {
+                return Inertia::render('Shares/Expired');
+            }
+            $request->session()->put($link->klicZapocteni(), true);
+        }
+
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'view', 'ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'user_agent_family' => Str::limit((string) $request->userAgent(), 80, ''), 'created_at' => now()]);
 
         if (in_array($link->target_type, SharedContentService::CONTENT_TYPES, true)) {
@@ -156,11 +189,20 @@ class ShareController extends Controller
                 'uuid' => $m->uuid,
                 'media_type' => $m->media_type,
                 'variants' => $m->variants
-                    // Originál jen tam, kde nic menšího není — stránka by jinak
-                    // neměla co ukázat. S vypnutým stahováním se jinak nevydává.
-                    // U odkazu bez data a místa nikdy: nese EXIF i se souřadnicemi.
-                    ->filter(fn ($v) => $v->type !== 'original'
-                        || (! $link->hide_gps && $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty()))
+                    /*
+                     * Jen náhledy, které stránka opravdu kreslí (`Shares/Show`
+                     * bere náhled, jinak originál). Filtr dřív hlídal jen originál,
+                     * takže kopie videa k přehrávání (`video_compat`) i `large`
+                     * odcházely s podepsanou adresou dál — a kopie videa nesla
+                     * metadata zdroje včetně polohy, i u odkazu bez data a místa.
+                     *
+                     * Originál jen tam, kde nic menšího není — stránka by jinak
+                     * neměla co ukázat. S vypnutým stahováním se jinak nevydává.
+                     * U odkazu bez data a místa nikdy: nese EXIF i se souřadnicemi.
+                     */
+                    ->filter(fn ($v) => in_array($v->type, self::NAHLEDY_STRANKY, true)
+                        || ($v->type === 'original' && ! $link->hide_gps
+                            && $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty()))
                     ->map(fn ($v) => ['type' => $v->type, 'url' => $v->url, 'width' => $v->width, 'height' => $v->height])
                     ->values(),
             ])
@@ -223,11 +265,30 @@ class ShareController extends Controller
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
 
+        /*
+         * Počítadlo na odkaz, ne na adresu.
+         *
+         * Limit u cesty je na adresu a obejde ho každý, kdo jich má víc.
+         * Zamčené je i správné heslo: jinak by odpověď prozradila, kdy se
+         * útočník trefil. Úspěch počítadlo vynuluje, ať si host s překlepy
+         * nezamkne příští návštěvu.
+         */
+        $klic = 'sdileni-heslo:'.$link->id;
+        if (RateLimiter::tooManyAttempts($klic, self::POKUSU_O_HESLO)) {
+            $minut = (int) ceil(RateLimiter::availableIn($klic) / 60);
+
+            abort(429, "K tomuhle odkazu přišlo moc špatných hesel. Zkuste to znovu za {$minut} min.",
+                ['Retry-After' => (string) RateLimiter::availableIn($klic)]);
+        }
+
         $password = (string) $request->input('password', '');
         if (! $link->verifyPassword($password)) {
+            RateLimiter::hit($klic, self::ZAMEK_HESLA_VTERIN);
+
             return back()->withErrors(['password' => 'Nesprávné heslo.']);
         }
 
+        RateLimiter::clear($klic);
         session(["share_verified_{$token}" => true]);
 
         return redirect()->route('share.show', $token);
@@ -237,7 +298,8 @@ class ShareController extends Controller
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
 
-        if (! $link->isAccessible() || ! $link->allow_guest_upload || ($link->password_hash && ! session("share_verified_{$token}"))) {
+        // Kdo stránku v tomhle sezení otevřel, nahrává i po vyčerpání `max_uses`.
+        if (! $link->isAccessibleFor($link->jeZapoctenoV($request)) || ! $link->allow_guest_upload || ($link->password_hash && ! session("share_verified_{$token}"))) {
             return response()->json(['error' => 'Upload not allowed'], 403);
         }
         $limitKb = (int) floor(min($link->upload_limit_bytes ?: 104857600, 104857600) / 1024);
@@ -277,7 +339,7 @@ class ShareController extends Controller
     public function download(Request $request, string $token, string $uuid): StreamedResponse
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
-        abort_unless($link->isAccessible() && $link->allow_download && (! $link->password_hash || session("share_verified_{$token}")), 403);
+        abort_unless($link->isAccessibleFor($link->jeZapoctenoV($request)) && $link->allow_download && (! $link->password_hash || session("share_verified_{$token}")), 403);
         $item = $this->mediaOdkazu($link)->where('uuid', $uuid)->firstOrFail();
         [$variant, $jmeno] = $link->hide_gps ? $this->kopieBezPolohy($item) : [$item->variants()->where('type', 'original')->firstOrFail(), $item->original_filename];
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'download', 'ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'media_item_id' => $item->id, 'created_at' => now()]);

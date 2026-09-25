@@ -36,6 +36,16 @@ return [
     // s odkazem, bez přihlášení — bez stropu to bylo bez konce.
     'guest_upload_pending_mb' => env('GALLERY_GUEST_UPLOAD_PENDING_MB', 2048),
 
+    // Kolik hlasových vzkazů od hostů (v MB) smí k jednomu odkazu ležet na
+    // disku. Nahrávka má až 10 MB a poslat ji může kdokoli s odkazem; limit
+    // požadavků je jen na adresu. Dvě stě megabajtů je přes dvacet plných
+    // nahrávek — víc, než k jedněm fotkám namluví celá rodina.
+    'guest_voice_pending_mb' => env('GALLERY_GUEST_VOICE_PENDING_MB', 200),
+
+    // Kolik vzkazů (psaných i hlasových) přijme jeden odkaz za 24 hodin.
+    // Brání zaplavení stránky odkazu i obrazovky dvojice z víc adres.
+    'guest_comments_per_day' => env('GALLERY_GUEST_COMMENTS_PER_DAY', 200),
+
     // Kolik nočních záloh databáze (`gallery:zaloha`) držet. Leží ve
     // `storage/app/private/zalohy`; starší se mažou.
     'backup_keep' => (int) env('GALLERY_BACKUP_KEEP', 14),

@@ -241,9 +241,16 @@ SVG;
         // seeking stall. The playback copy is capped at 1080p/5 Mb/s, uses a
         // universally decodable pixel format and moves MP4 metadata to the
         // beginning so the first frame can play before the full download.
+        //
+        // `-map_metadata -1 -map_chapters -1`: kopie nese jen obraz a zvuk,
+        // ne metadata zdroje. Telefon do nich zapisuje polohu (iPhone
+        // `com.apple.quicktime.location.ISO6709`, Android `location`) a ffmpeg
+        // je jinak do kopie přenese — kopii přitom dostává i sdílená stránka.
+        // Otočení z telefonu ffmpeg při překódování rovnou použije na snímky
+        // (autorotate je výchozí), takže o ně kopie bez metadat nepřijde.
         $filter = "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2";
         $cmd = sprintf(
-            '%s -y -i %s -map 0:v:0 -map 0:a? -vf %s -c:v %s -preset fast -b:v 4M -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
+            '%s -y -i %s -map 0:v:0 -map 0:a? -map_metadata -1 -map_chapters -1 -vf %s -c:v %s -preset fast -b:v 4M -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
             escapeshellcmd($this->ffmpegPath),
             escapeshellarg($sourcePath),
             escapeshellarg($filter),
@@ -260,7 +267,7 @@ SVG;
             // stuttering original.
             @unlink($tmpPath);
             $cmd = sprintf(
-                '%s -y -i %s -map 0:v:0 -map 0:a? -vf %s -c:v libx264 -preset veryfast -crf 24 -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
+                '%s -y -i %s -map 0:v:0 -map 0:a? -map_metadata -1 -map_chapters -1 -vf %s -c:v libx264 -preset veryfast -crf 24 -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
                 escapeshellcmd($this->ffmpegPath),
                 escapeshellarg($sourcePath),
                 escapeshellarg($filter),

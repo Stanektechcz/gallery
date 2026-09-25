@@ -40,7 +40,8 @@ class HostKomentarController extends Controller
     {
         $odkaz = SharedLink::where('token', $token)->first();
 
-        if ($odkaz === null || ! $odkaz->isAccessible()) {
+        // Kdo stránku v tomhle sezení otevřel, píše i po vyčerpání `max_uses`.
+        if ($odkaz === null || ! $odkaz->isAccessibleFor($odkaz->jeZapoctenoV($request))) {
             return response()->json(['ok' => false, 'zprava' => 'Tenhle odkaz už neplatí.'], 404);
         }
 
@@ -70,6 +71,11 @@ class HostKomentarController extends Controller
 
         if ($nahravka === null && $text === '') {
             return response()->json(['ok' => false, 'zprava' => 'Napište vzkaz, nebo nahrajte hlas.'], 422);
+        }
+
+        $odmitnuti = $this->nadStropem($odkaz, $nahravka !== null ? (int) $nahravka->getSize() : null);
+        if ($odmitnuti !== null) {
+            return $odmitnuti;
         }
 
         $cesta = null;
@@ -105,6 +111,49 @@ class HostKomentarController extends Controller
                 ? 'Hlas nahrán — dvojice si ho pustí u fotek.'
                 : 'Vzkaz odeslán.',
         ], 201);
+    }
+
+    /**
+     * Stropy na odkaz — odpověď s odmítnutím, nebo `null`, když se vejde.
+     *
+     * Hlasovky leží na disku serveru a poslat je může kdokoli s odkazem, bez
+     * přihlášení. Limit požadavků u cesty je na adresu: z víc adres, nebo
+     * pomalu přes noc, se disk plnil dál po deseti megabajtech. Počítá se
+     * všechno, co k odkazu leží — i schované, soubor je na disku pořád.
+     *
+     * Psané vzkazy disk nezatíží, ale zaplavit jimi jde stránku odkazu
+     * i obrazovku dvojice; proto denní strop na odkaz.
+     */
+    private function nadStropem(SharedLink $odkaz, ?int $bajtuNahravky): ?JsonResponse
+    {
+        $zaDen = (int) config('gallery.guest_comments_per_day', 200);
+        $dnes = DB::table('guest_comments')
+            ->where('shared_link_id', $odkaz->id)
+            ->where('created_at', '>=', now()->subDay())
+            ->count();
+
+        if ($dnes >= $zaDen) {
+            return response()->json([
+                'ok' => false,
+                'zprava' => 'K tomuhle odkazu dnes přišlo vzkazů, kolik se vejde. Zkuste to zase zítra.',
+            ], 429);
+        }
+
+        if ($bajtuNahravky === null) {
+            return null;
+        }
+
+        $strop = (int) config('gallery.guest_voice_pending_mb', 200) * 1024 * 1024;
+        $lezi = (int) DB::table('guest_comments')->where('shared_link_id', $odkaz->id)->sum('audio_bytes');
+
+        if ($lezi + $bajtuNahravky > $strop) {
+            return response()->json([
+                'ok' => false,
+                'zprava' => 'K tomuhle odkazu už leží tolik hlasových vzkazů, kolik se vejde. Napište prosím vzkaz textem.',
+            ], 413);
+        }
+
+        return null;
     }
 
     /**

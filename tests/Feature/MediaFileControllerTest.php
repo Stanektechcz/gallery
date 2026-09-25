@@ -190,6 +190,34 @@ class MediaFileControllerTest extends TestCase
         $this->get($podepsana)->assertOk();
     }
 
+    /**
+     * Podepsaná adresa fotky, která mezitím odešla do koše, bez přihlášení neotevře.
+     *
+     * Podpis platí do konce zítřka a větev s podpisem hlídala jen trezor.
+     * Fotka vyhozená do koše tak přes adresu ze sdílené stránky, notifikace
+     * nebo historie prohlížeče šla otevřít dál. Dvojice svůj koš vidí dál —
+     * rozhoduje pak členství, ne podpis.
+     */
+    public function test_podepsana_adresa_fotky_v_kosi_jen_pro_dvojici(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+        $podepsana = MediaVariant::proxyUrl('media/'.$media->uuid.'/thumbnail.jpg');
+
+        $media->forceFill(['trashed_at' => now()])->save();
+
+        $this->get($podepsana)->assertNotFound();
+
+        $host = User::factory()->create(['is_active' => true]);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+        Sanctum::actingAs($host);
+        $this->get($podepsana)->assertNotFound();
+
+        $this->app['auth']->forgetGuards();
+        Sanctum::actingAs($this->adri);
+        $this->get($podepsana)->assertOk();
+    }
+
     public function test_podepsana_adresa_neplati_pro_jiny_soubor(): void
     {
         $media = $this->fotka();

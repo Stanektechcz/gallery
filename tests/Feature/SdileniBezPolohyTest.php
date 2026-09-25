@@ -105,6 +105,61 @@ class SdileniBezPolohyTest extends TestCase
                 ->where('media.0.variants.0.type', 'original'));
     }
 
+    /**
+     * Stránka dostane jen náhledy, které opravdu kreslí.
+     *
+     * Filtr hlídal jen originál. Kopie videa k přehrávání (`video_compat`)
+     * i `large` šly do stránky s podepsanou adresou dál — a kopie videa nesla
+     * metadata zdroje včetně polohy. Stránka přitom kreslí jen náhled.
+     */
+    public function test_bez_polohy_stranka_nevyda_kopii_videa(): void
+    {
+        $video = $this->fotka([
+            'original' => 'VIDEO-S-POLOHOU',
+            'video_poster' => 'PLAKAT',
+            'video_compat' => 'KOPIE-S-POLOHOU',
+        ], 'video');
+        $odkaz = $this->odkaz($video, bezPolohy: true);
+
+        $this->get("/s/{$odkaz->token}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $stranka) => $stranka
+                ->component('Shares/Show')
+                ->where('media.0.variants', fn ($varianty) => collect($varianty)->pluck('type')->all() === ['video_poster']));
+    }
+
+    /** Ani velká kopie fotky na stránku nepatří — stránka kreslí náhled. */
+    public function test_stranka_vyda_jen_nahledy(): void
+    {
+        $fotka = $this->fotka(['original' => 'ORIGINAL-S-GPS', 'thumbnail' => 'NAHLED', 'large' => 'VELKA']);
+        $odkaz = $this->odkaz($fotka, bezPolohy: false);
+
+        $this->get("/s/{$odkaz->token}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $stranka) => $stranka
+                ->where('media.0.variants', fn ($varianty) => collect($varianty)->pluck('type')->all() === ['thumbnail']));
+    }
+
+    /**
+     * Kopie videa se kóduje bez metadat zdroje.
+     *
+     * Telefon zapisuje polohu do metadat souboru (u iPhonu `ISO6709`) a ffmpeg
+     * je do kopie bez `-map_metadata -1` přenáší. Spustit ffmpeg v testu nejde
+     * (na stroji nemusí být), takže se kontroluje samotný příkaz — obě větve,
+     * hardwarová i softwarová.
+     */
+    public function test_kopie_videa_se_koduje_bez_metadat(): void
+    {
+        $zdroj = (string) file_get_contents(app_path('Services/Media/VideoProcessingService.php'));
+        preg_match_all("/'%s -y -i %s[^']*-movflags \\+faststart[^']*'/", $zdroj, $prikazy);
+
+        $this->assertCount(2, $prikazy[0], 'Čekal jsem dva příkazy pro kopii videa (hardwarový a náhradní).');
+        foreach ($prikazy[0] as $prikaz) {
+            $this->assertStringContainsString('-map_metadata -1', $prikaz);
+            $this->assertStringContainsString('-map_chapters -1', $prikaz);
+        }
+    }
+
     // ——— pomocné ———
 
     /** @param  array<string, string>  $varianty  typ => obsah souboru */

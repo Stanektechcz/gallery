@@ -93,9 +93,11 @@ Route::post('/platby/comgate/notifikace', [CheckoutController::class, 'notify'])
 Route::get('/platby/comgate/navrat', [CheckoutController::class, 'return'])->name('billing.comgate.return');
 
 // Public sign-up, gated by config('gallery.registration_open').
+// Vlastní předpona počítadla: bez ní se dělí o jedno s obnovou hesla
+// a s každou další cestou bez předpony (viz sdílené odkazy níž).
 Route::get('/registrace', [RegistrationController::class, 'show'])->name('register');
 Route::post('/registrace', [RegistrationController::class, 'store'])
-    ->middleware('throttle:5,1')->name('register.store');
+    ->middleware('throttle:5,1,registrace')->name('register.store');
 
 // Public mobile application centre and stable direct Android download link.
 Route::get('/app', [MobileAppController::class, 'index'])->name('mobile-app.index');
@@ -109,14 +111,20 @@ Route::get('/s/{token}', [ShareController::class, 'show'])->name('share.show');
  * Heslo ke sdílenému odkazu se taky zkoušelo bez omezení.
  *
  * Je kratší než heslo k účtu a chrání fotky, které dvojice někomu
- * poslala — tedy přesně to, co má cizí člověk chuť otevřít.
+ * poslala — tedy přesně to, co má cizí člověk chuť otevřít. Tohle je limit
+ * na adresu; limit na odkaz (přes víc adres) hlídá `ShareController::verify`.
+ *
+ * Třetí parametr je **předpona počítadla** a u sdílených cest je nutná (viz
+ * `routes/galerie.php`, přihlášení). Bez ní `ThrottleRequests` klíčuje jen
+ * podle adresy a všechny cesty bez předpony sdílí jedno počítadlo — host,
+ * který nahrál deset fotek, pak dostal 429 u hesla i u vzkazu.
  */
 Route::post('/s/{token}/verify', [ShareController::class, 'verify'])
-    ->middleware('throttle:10,1')->name('share.verify');
+    ->middleware('throttle:10,1,sdileni-heslo')->name('share.verify');
 // Host nahrává po jednom souboru; třicet za minutu je víc, než stihne
 // vybrat, a málo na zaplnění disku.
 Route::post('/s/{token}/upload', [ShareController::class, 'guestUpload'])
-    ->middleware('throttle:30,1')->name('share.guest-upload');
+    ->middleware('throttle:30,1,sdileni-nahrani')->name('share.guest-upload');
 // Stahování originálů bez přihlášení: limit, aby jeden odkaz nešel použít jako
 // bezplatné CDN na plné rozlišení (každý požadavek čte celý soubor z disku).
 Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'download'])
@@ -131,7 +139,7 @@ Route::get('/s/{token}/media/{uuid}/download', [ShareController::class, 'downloa
  * Tvrdší limit než u zbytku: je to jediná cesta, která přijímá zápis bez
  * přihlášení.
  */
-Route::middleware('throttle:10,1')
+Route::middleware('throttle:10,1,sdileni-vzkaz')
     ->post('/s/{token}/vzkaz', HostKomentarController::class)
     ->name('share.guest-comment');
 
