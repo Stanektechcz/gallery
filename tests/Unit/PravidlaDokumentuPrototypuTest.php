@@ -967,4 +967,76 @@ class PravidlaDokumentuPrototypuTest extends TestCase
             );
         }
     }
+
+    /**
+     * Otisk neodemkne bez kódu zámku.
+     *
+     * Bez uloženého klíče `lockBio()` otisk zaregistrovala a hned odemkla —
+     * stačilo projít ověřením samotného zařízení (Windows Hello na společném
+     * počítači, PIN telefonu, který partner zná), a to i ve chvíli, kdy server
+     * pokusy o kód blokoval. Když selhaly volby přihlášení, odemklo se na
+     * podpis, který nikdo neověřil (`let ok = !!got`).
+     *
+     * Teď se otisk zapíná až po správném kódu (`lockTry` → `lockBioZapni`),
+     * server u voleb registrace chce týž kód a odemyká jen token ze serveru.
+     */
+    public function test_otisk_neodemkne_bez_kodu_zamku(): void
+    {
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            preg_match('/\n  async lockBio\(\) \{\n(.*?)\n  \}\n/s', $dokument, $bio);
+            $this->assertNotEmpty($bio, $nazev.': lockBio() se nenašla.');
+            $bio = $bio[1];
+
+            // Registrace v obsluze otisku není; odemyká jediné místo, a to na token.
+            $this->assertStringNotContainsString('navigator.credentials.create', $bio, $nazev);
+            $this->assertStringNotContainsString('let ok = !!got', $bio, $nazev);
+            $this->assertStringNotContainsString('bioRandom(', $bio, $nazev.': challenge si klient vymýšlet nesmí.');
+            $this->assertStringContainsString('const ok = !!(res && res.token);', $bio, $nazev);
+            $this->assertSame(1, substr_count($bio, 'this.lockOpen('), $nazev.': lockBio() odemyká jinde než po tokenu.');
+            $this->assertLessThan(strpos($bio, 'if (ok) this.lockOpen('), strpos($bio, 'const ok = !!(res && res.token);'), $nazev);
+            // Klíč, který server už nezná, se zahodí a příště se otisk zapne znovu.
+            $this->assertStringContainsString('localStorage.removeItem(this.bioKey())', $bio, $nazev);
+
+            preg_match('/\n  async lockBioZapni\(pin\) \{\n(.*?)\n  \}\n/s', $dokument, $zapni);
+            $this->assertNotEmpty($zapni, $nazev.': lockBioZapni(pin) se nenašla.');
+            $zapni = $zapni[1];
+            $this->assertStringContainsString("'webauthn/register/options', { kod: pin }", $zapni, $nazev);
+            $this->assertStringNotContainsString('lockOpen(', $zapni, $nazev.': zapnutí otisku samo neodemyká.');
+            $this->assertStringNotContainsString('bioRandom(', $zapni, $nazev);
+            // Klíč se v zařízení poznamená, až když ho server opravdu uložil.
+            $this->assertStringContainsString('localStorage.setItem(klic,', $zapni, $nazev);
+            $this->assertStringContainsString('if (!(res && res.registered === true)) return false;', $zapni, $nazev);
+            $this->assertLessThan(
+                strpos($zapni, 'localStorage.setItem(klic,'),
+                strpos($zapni, 'res.registered === true'),
+                $nazev,
+            );
+
+            // Volby registrace jdou ven jen s kódem — nikde jinde bez něj.
+            $this->assertSame(
+                substr_count($dokument, "'webauthn/register/options'"),
+                substr_count($dokument, "'webauthn/register/options', { kod: pin }"),
+                $nazev,
+            );
+
+            // Zapíná se až po kódu, který server přijal.
+            preg_match('/\n  lockTry\(pin\) \{\n(.*?)\n  \}\n/s', $dokument, $try);
+            $this->assertNotEmpty($try, $nazev.': lockTry(pin) se nenašla.');
+            $this->assertStringContainsString('if (this.state.lockBioEnroll) {', $try[1], $nazev);
+            $this->assertStringContainsString('this.lockBioZapni(pin)', $try[1], $nazev);
+            $this->assertLessThan(strpos($try[1], 'this.lockBioZapni(pin)'), strpos($try[1], 'if (!chyba) {'), $nazev);
+
+            // Režim zapínání neodchází se stavem a odemčením končí.
+            preg_match('/\n  lockOpen\(note\) \{\n(.*?)\n  \}\n/s', $dokument, $open);
+            $this->assertNotEmpty($open, $nazev.': lockOpen(note) se nenašla.');
+            $this->assertStringContainsString('lockBioEnroll: false', $open[1], $nazev);
+        }
+
+        $this->assertStringContainsString('lockBioEnroll: 1,', self::dokument('galerie-desktop.dc.html'));
+        preg_match('/\n  persistKey\(k\) \{\n(.*?)\n  \}\n/s', self::dokument('galerie-mobil.dc.html'), $telefon);
+        $this->assertNotEmpty($telefon);
+        $this->assertStringNotContainsString('lockBioEnroll', $telefon[1]);
+    }
 }

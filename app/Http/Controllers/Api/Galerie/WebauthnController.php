@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Models\WebauthnCredential;
+use App\Services\Auth\PotvrzeniZamkem;
 use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -47,10 +48,37 @@ use Webauthn\TrustPath\EmptyTrustPath;
  */
 class WebauthnController extends Controller
 {
-    /** Krok 1 — parametry pro `navigator.credentials.create()`. */
+    /**
+     * Krok 1 — parametry pro `navigator.credentials.create()`.
+     *
+     * Chce týž důkaz jako nastavení kódu zámku: kód, a kdo ho nemá, heslo.
+     * Otisk kód nahrazuje — s pouhým tokenem by si ho připojil kdokoli, kdo
+     * drží odemčené zařízení nebo ukradený token, a zamčenou aplikaci pak
+     * otevřel bez kódu, i když server pokusy o kód zrovna blokuje.
+     *
+     * Při neúspěchu se challenge neuloží, takže `register()` bez ní neprojde;
+     * sám už žádný další důkaz nepotřebuje.
+     */
     public function registerOptions(Request $request): JsonResponse
     {
+        $data = $request->validate([
+            'kod' => ['nullable', 'string'],
+            'heslo' => ['nullable', 'string'],
+        ]);
+
         $user = $request->user();
+
+        $odmitnuti = PotvrzeniZamkem::over(
+            $user,
+            $data['kod'] ?? null,
+            $data['heslo'] ?? null,
+            'webauthn.register.failed',
+            'Kód zámku nesouhlasí.',
+        );
+
+        if ($odmitnuti !== null) {
+            return $odmitnuti;
+        }
 
         $options = PublicKeyCredentialCreationOptions::create(
             rp: new PublicKeyCredentialRpEntity(config('galerie.rp_name'), config('galerie.rp_id')),

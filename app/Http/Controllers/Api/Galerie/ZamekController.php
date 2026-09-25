@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Models\WebauthnCredential;
+use App\Services\Auth\PotvrzeniZamkem;
 use App\Services\Notifications\OdberyPush;
 use App\Services\Provoz\PokusyOvereni;
 use App\Support\Tabulky;
@@ -40,7 +41,7 @@ class ZamekController extends Controller
      * V sezení je vynulovalo smazání cookies — a šest číslic je milion
      * možností, tedy s novým sezením po každých třech chybách otázka dnů.
      */
-    private const DRUH = 'zamek';
+    private const DRUH = PotvrzeniZamkem::DRUH;
 
     /** @return array{nastaveno: bool, delka: int, blok: int, zmeneno: ?string} */
     private function odpoved(Request $request): array
@@ -88,29 +89,19 @@ class ZamekController extends Controller
          * neměla nic z toho, jen plochý limit požadavků. Přitom se tu hádá
          * buď starý kód, nebo rovnou **heslo do galerie** — kdo zvedl
          * odemčený telefon, mohl zkoušet donekonečna a v protokolu, který
-         * obrazovka zámku slibuje, po tom nezbyla stopa.
+         * obrazovka zámku slibuje, po tom nezbyla stopa. Totéž se ptá
+         * zapnutí otisku, viz `PotvrzeniZamkem`.
          */
-        if (($blok = PokusyOvereni::blokDo($clovek, self::DRUH)) > 0) {
-            return response()->json(['chyba' => 'Přístup je uzavřený. Zkuste to za '.$blok.' s.'], 429);
-        }
+        $odmitnuti = PotvrzeniZamkem::over(
+            $clovek,
+            $data['stary'] ?? null,
+            $data['heslo'] ?? null,
+            'app_lock.set.failed',
+            'Starý kód nesouhlasí.',
+        );
 
-        $sedi = $clovek->app_lock_pin
-            ? Hash::check((string) ($data['stary'] ?? ''), $clovek->app_lock_pin)
-            : Hash::check((string) ($data['heslo'] ?? ''), (string) $clovek->password);
-
-        if (! $sedi) {
-            $chyba = PokusyOvereni::chyba($clovek, self::DRUH);
-            AuditLog::record('app_lock.set.failed', null, ['pokus' => $chyba['pokusu']]);
-
-            if ($chyba['blok'] > 0) {
-                return response()->json([
-                    'chyba' => 'Třikrát to nesedělo. Zkuste to za '.$chyba['blok'].' s.',
-                ], 429);
-            }
-
-            return response()->json([
-                'chyba' => $clovek->app_lock_pin ? 'Starý kód nesouhlasí.' : 'Heslo do galerie nesouhlasí.',
-            ], 422);
+        if ($odmitnuti !== null) {
+            return $odmitnuti;
         }
 
         // Obnovovací kód se čte nahlas do telefonu a opisuje z papíru, takže
@@ -125,7 +116,7 @@ class ZamekController extends Controller
             'app_lock_set_at' => now(),
         ])->save();
 
-        PokusyOvereni::uspech($clovek, self::DRUH);
+        // Počítadlo pokusů vynulovalo už `PotvrzeniZamkem` — důkaz seděl.
         AuditLog::record('app_lock.set');
 
         return response()->json($this->odpoved($request) + ['obnovovaci' => $obnovovaci]);

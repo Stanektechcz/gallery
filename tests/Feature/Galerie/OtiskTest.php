@@ -6,6 +6,8 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WebauthnCredential;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Tests\Fixtures\Galerie\FalesnyAutentikator;
 use Tests\TestCase;
@@ -62,7 +64,7 @@ class OtiskTest extends TestCase
     public function test_volby_registrace_nesou_challenge_a_ucet(): void
     {
         $odpoved = $this->prihlasenyTokenem()
-            ->postJson('/api/webauthn/register/options')
+            ->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])
             ->assertOk()
             ->assertJsonPath('rp.id', 'localhost')
             ->assertJsonPath('user.name', 'adrian@vzpominky.test');
@@ -82,12 +84,115 @@ class OtiskTest extends TestCase
         $this->postJson('/api/webauthn/register', [])->assertUnauthorized();
     }
 
+    /**
+     * Otisk nahrazuje kód zámku, takže se zapíná tímtéž kódem.
+     *
+     * Registrace chtěla jen token. Obrazovka zámku pak po úspěšném
+     * `navigator.credentials.create()` sama odemkla — a to projde každý, kdo
+     * zná PIN zařízení (Windows Hello na společném počítači, PIN telefonu),
+     * i když kód zámku nezná a server jeho pokusy zrovna blokuje.
+     */
+    public function test_s_kodem_zamku_chce_registrace_ten_kod(): void
+    {
+        $this->nastavKod('240613');
+        $klient = $this->prihlasenyTokenem();
+
+        $klient->postJson('/api/webauthn/register/options')
+            ->assertStatus(422)
+            ->assertJsonStructure(['chyba']);
+        $this->assertFalse(Cache::has('galerie:webauthn:reg:'.$this->adri->id),
+            'Bez důkazu nesmí vzniknout challenge — s ní by registrace prošla.');
+
+        // Heslo nestačí, když kód existuje: byl by to druhý, slabší zámek.
+        $klient->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])->assertStatus(422);
+
+        $odpoved = $klient->postJson('/api/webauthn/register/options', ['kod' => '240613'])->assertOk();
+        $this->assertNotEmpty($odpoved->json('challenge'));
+    }
+
+    /** Bez challenge z úspěšných voleb registrace neprojde ani s podepsanou odpovědí. */
+    public function test_bez_dukazu_registrace_neulozi_klic(): void
+    {
+        $this->nastavKod('240613');
+        $autentikator = new FalesnyAutentikator('localhost', 'http://localhost');
+
+        $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options', ['kod' => '999999'])
+            ->assertStatus(422)
+            ->assertJsonMissingPath('challenge');
+
+        // Challenge, kterou si klient vymyslí sám — jako dřív `bioAsk` při selhání voleb.
+        $vlastni = rtrim(strtr(base64_encode(random_bytes(32)), '+/', '-_'), '=');
+
+        $this->postJson('/api/webauthn/register', $autentikator->registrace($vlastni, 'podvrh'))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('challenge');
+
+        $this->assertSame(0, WebauthnCredential::count());
+    }
+
+    /**
+     * Hádání kódu přes registraci otisku počítá týž `PokusyOvereni` jako odemykání.
+     *
+     * Jinak by se tudy dal hádat kód zámku bez omezení, a to i ve chvíli,
+     * kdy ho obrazovka zámku kvůli třem chybám blokuje.
+     */
+    public function test_hadani_kodu_pri_registraci_otisku_se_zablokuje(): void
+    {
+        $this->nastavKod('240613');
+        $klient = $this->prihlasenyTokenem();
+
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '111111'])->assertStatus(422);
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '222222'])->assertStatus(422);
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '333333'])->assertStatus(429);
+
+        // Ani se správným kódem to během uzavření neprojde…
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '240613'])
+            ->assertStatus(429)
+            ->assertJsonPath('chyba', fn (string $chyba) => str_starts_with($chyba, 'Přístup je uzavřený.'));
+        $this->assertFalse(Cache::has('galerie:webauthn:reg:'.$this->adri->id));
+
+        // …a uzavření platí i pro obrazovku zámku — je to jedno počítadlo.
+        $klient->postJson('/api/zamek/overit', ['kod' => '240613'])->assertStatus(429);
+
+        $this->assertSame(3, DB::table('audit_logs')->where('action', 'webauthn.register.failed')->count(),
+            'Každý neúspěšný pokus musí být v protokolu.');
+    }
+
+    /** Správný kód vynuluje počítadlo, stejně jako u odemykání. */
+    public function test_spravny_kod_pri_registraci_vynuluje_pokusy(): void
+    {
+        $this->nastavKod('240613');
+        $klient = $this->prihlasenyTokenem();
+
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '111111'])->assertStatus(422);
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '222222'])->assertStatus(422);
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '240613'])->assertOk();
+
+        // Po vynulování zase tři pokusy, ne jeden.
+        $klient->postJson('/api/webauthn/register/options', ['kod' => '111111'])->assertStatus(422);
+    }
+
+    /** Kdo kód zámku ještě nemá, prokáže se heslem — stejně jako při jeho nastavení. */
+    public function test_bez_kodu_zamku_chce_registrace_heslo(): void
+    {
+        $klient = $this->prihlasenyTokenem();
+
+        $klient->postJson('/api/webauthn/register/options')->assertStatus(422);
+        $klient->postJson('/api/webauthn/register/options', ['heslo' => 'spatne-heslo'])
+            ->assertStatus(422)
+            ->assertJsonPath('chyba', 'Heslo do galerie nesouhlasí.');
+        $this->assertFalse(Cache::has('galerie:webauthn:reg:'.$this->adri->id));
+
+        $klient->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])->assertOk();
+        $this->assertTrue(Cache::has('galerie:webauthn:reg:'.$this->adri->id));
+    }
+
     /** Klíč, který zařízení už jednou poslalo, nezaloží druhý řádek. */
     public function test_opakovana_registrace_tehoz_klice_neprida_radek(): void
     {
         $autentikator = $this->zaregistruj('iPhone Adrian');
 
-        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options')->assertOk();
+        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])->assertOk();
         $this->postJson('/api/webauthn/register', $autentikator->registrace($volby->json('challenge'), 'iPhone Adrian'))
             ->assertOk();
 
@@ -275,7 +380,7 @@ class OtiskTest extends TestCase
      */
     public function test_odpoved_z_ciziho_originu_neprojde(): void
     {
-        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options')->assertOk();
+        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])->assertOk();
         $podvrh = new FalesnyAutentikator('localhost', 'https://vzpominky.podvod.test');
 
         $this->postJson('/api/webauthn/register', $podvrh->registrace($volby->json('challenge')))
@@ -325,7 +430,7 @@ class OtiskTest extends TestCase
         ])->json('token');
 
         $volby = $this->withHeader('Authorization', 'Bearer '.$token)
-            ->postJson('/api/webauthn/register/options')->assertOk();
+            ->postJson('/api/webauthn/register/options', ['heslo' => 'jinde2026'])->assertOk();
         $this->postJson('/api/webauthn/register', $autentikator->registrace($volby->json('challenge'), 'podvrh'))
             ->assertStatus(422);
 
@@ -354,13 +459,20 @@ class OtiskTest extends TestCase
     {
         $autentikator = new FalesnyAutentikator('localhost', 'http://localhost');
 
-        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options')->assertOk();
+        // Adri kód zámku nemá, takže se prokazuje heslem (`PotvrzeniZamkem`).
+        $volby = $this->prihlasenyTokenem()->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026'])->assertOk();
 
         $this->postJson('/api/webauthn/register', $autentikator->registrace($volby->json('challenge'), $label))
             ->assertOk()
             ->assertJsonPath('registered', true);
 
         return $autentikator;
+    }
+
+    /** Kód zámku rovnou do účtu — průchod `/api/zamek` tu netestujeme. */
+    private function nastavKod(string $kod): void
+    {
+        $this->adri->forceFill(['app_lock_pin' => $kod, 'app_lock_set_at' => now()])->save();
     }
 
     private function prihlas(FalesnyAutentikator $autentikator, ?int $pocitadlo = null)

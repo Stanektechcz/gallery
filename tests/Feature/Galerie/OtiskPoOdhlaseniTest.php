@@ -136,7 +136,7 @@ class OtiskPoOdhlaseniTest extends TestCase
             'device_name' => 'telefon',
         ])->assertOk()->json('token');
 
-        $volby = $this->withHeader('Authorization', 'Bearer '.$telefon)->postJson('/api/webauthn/register/options')->assertOk();
+        $volby = $this->withHeader('Authorization', 'Bearer '.$telefon)->postJson('/api/webauthn/register/options', ['heslo' => 'zadar2026-heslo'])->assertOk();
         $this->postJson('/api/webauthn/register', $autentikator->registrace($volby->json('challenge'), 'iPhone Adrian'))->assertOk();
 
         $idTelefonu = $this->adri->tokens()->where('name', 'telefon')->sole()->id;

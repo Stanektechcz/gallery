@@ -14937,7 +14937,7 @@ class Component extends DCLogic {
     // (`adrian@example.com`) a člověk ji poslušně odeslal. Skutečnou
     // adresu dodá server v `LOCKMAIL` a doplní ji `lockVals`.
     lockStep: 'pwd', lockMail: '', lockPwd: '', lockTrusted: false, lockTrust: true,
-    lockIdle: '5 min', lockSecs: 'Deník a Finance', lockBio: true, lockStart: true, lockBioBusy: false,
+    lockIdle: '5 min', lockSecs: 'Deník a Finance', lockBio: true, lockStart: true, lockBioBusy: false, lockBioEnroll: false,
     lockAt: 0, secUntil: 0, gatePin: '', gateErr: null,
     curVotes: {}, curIdx: 0, curWho: 'A', curSets: [], annPick: {}, annFmt: 'čtverec 21 cm',
     annLayout: 'jedna na stranu', geoWantDone: {},
@@ -25791,7 +25791,7 @@ class Component extends DCLogic {
           // U dvojice je „kdo" dané přihlášením (první v UCTY jsem já) — za druhého se aplikace nastavit nedá.
           go: () => {
             if (!this.ukazka() && w[0] !== 'A') { this.toast('Jste přihlášení jako ' + this.krestni((((window.GalerieData || {}).UCTY || [])[0] || [''])[0]) + ' — druhý z vás se přihlašuje na svém zařízení', { icon: 'ph-info', local: true }); return; }
-            this.setState({ obWho: w[0], lockWho: w[0] });
+            this.setState({ obWho: w[0], lockWho: w[0], lockBioEnroll: false });
           }
         };
       }),
@@ -32123,7 +32123,7 @@ class Component extends DCLogic {
       const z = (window.GalerieData || {}).ZAMEK;
       if (z) z.prihlasen = false;
       this.setState({
-        appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '',
+        appLocked: true, lockStep: 'pwd', lockPwd: '', lockPin: '', lockTrusted: false, lockSignBusy: false, lockNeeds2fa: false, lockCode: '', lockBioEnroll: false,
         lb: null, show: null, searchOpen: false, keysOpen: false, notifOpen: false, confirm: null,
         // Výslovné „Odhlásit se" (`signOut`) není „přihlášení skončilo" — řekne, že se povedlo.
         lockInfo: d.vyslovne ? 'Odhlášeno z tohoto zařízení.' : this.state.lockInfo,
@@ -32333,7 +32333,9 @@ class Component extends DCLogic {
       gv: 1, gvPwd: 1, gvPwdErr: 1, gvTries: 1, gvC: 1,
       appLocked: 1, lockPin: 1, lockPwd: 1, lockTries: 1, lockRec: 1, lockRecCode: 1, lockStep: 1, lockAt: 1, secUntil: 1, gatePin: 1, lockInfo: 1,
       // Kód druhého ověření při přihlášení — jednorázový a jen tohohle okna.
-      lockCode: 1, lockNeeds2fa: 1,
+      // `lockBioEnroll` (otisk se zapne s příštím kódem) taky: patří téhle
+      // zamčené obrazovce, ne druhému zařízení.
+      lockCode: 1, lockNeeds2fa: 1, lockBioEnroll: 1,
       // Nastavení upozornění ze serveru je každého zvlášť (viz tichoNaServeru). Dialog účtu
       // drží hesla — vyřazuje ho už přípona `Dlg` v persistKey, tohle je výslovná pojistka.
       klSrv: 1, acDlg: 1,
@@ -33072,7 +33074,7 @@ class Component extends DCLogic {
       return;
     }
     this.setState({
-      appLocked: true, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '',
+      appLocked: true, lockPin: '', lockErr: null, lockTries: 0, lockRec: false, lockRecCode: '', lockBioEnroll: false,
       secUntil: 0, gatePin: '', gateErr: null, lb: null, show: null, searchOpen: false, keysOpen: false, notifOpen: false,
       lockStep: this.state.lockTrusted ? 'pin' : 'pwd', lockPwd: ''
     });
@@ -33146,7 +33148,7 @@ class Component extends DCLogic {
         const email = String((res.user || {}).email || mail).toLowerCase();
         const urci = () => Object.keys(LOCKMAIL).find(x => (LOCKMAIL[x] || '').toLowerCase() === email) || who || 'A';
         const k = urci();
-        this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockInfo: null, lockTries: 0, lockTrusted: s.lockTrust !== false });
+        this.setState({ lockWho: k, lockStep: 'pin', lockPwd: '', lockErr: null, lockInfo: null, lockTries: 0, lockTrusted: s.lockTrust !== false, lockBioEnroll: false });
         this.toast('Přihlášeno · ' + ((res.user || {}).name || LOCKWHO[k] || '') + (s.lockTrust !== false ? ' · zařízení zapamatováno' : ''), { icon: 'ph-envelope-simple-open' });
         /*
          * Kdo kód nemá, nemá po přihlášení co zadávat.
@@ -33159,7 +33161,7 @@ class Component extends DCLogic {
         const dal = () => {
           // Teď už jsou v `LOCKMAIL` adresy od serveru — strana se určí znovu.
           const spravne = urci();
-          if (spravne !== this.state.lockWho) this.setState({ lockWho: spravne });
+          if (spravne !== this.state.lockWho) this.setState({ lockWho: spravne, lockBioEnroll: false });
           if (!this.zamek().nastaveno) this.lockOpen('Přihlášeno · kód zámku si můžete nastavit v Nastavení → Zámek');
         };
         if (window.GalerieObnovit) GalerieObnovit('system').then(dal, dal); else dal();
@@ -33220,7 +33222,7 @@ class Component extends DCLogic {
   }
   lockOpen(note) {
     this._act = Date.now();
-    this.setState({ appLocked: false, lockPin: '', lockErr: null, lockInfo: null, lockTries: 0, lockRec: false, lockRecCode: '', lockAt: Date.now(), lockBioBusy: false });
+    this.setState({ appLocked: false, lockPin: '', lockErr: null, lockInfo: null, lockTries: 0, lockRec: false, lockRecCode: '', lockAt: Date.now(), lockBioBusy: false, lockBioEnroll: false });
     this.toast(note || 'Odemčeno · ' + LOCKWHO[this.state.lockWho || 'A'], { icon: 'ph-lock-key-open' });
   }
   // Co server říká o mém zámku: `{ nastaveno, delka, zmeneno }`.
@@ -33277,7 +33279,19 @@ class Component extends DCLogic {
     if (!this.zamek().nastaveno) { this.lockOpen('Odemčeno · kód zámku si nastavte v Nastavení → Zámek'); return; }
     this.setState({ lockBusy: true });
     this.lockOver(pin, (chyba, blok) => {
-      if (!chyba) { this.setState({ lockBusy: false }); this.lockOpen(); return; }
+      if (!chyba) {
+        // Otisk čekal na kód (`lockBioPriprav`) — zapne se jím teď, kdy ho
+        // server přijal. Nepovedené zapnutí neodemčení nezdrží: kód seděl.
+        if (this.state.lockBioEnroll) {
+          const konec = zapnuto => {
+            this.setState({ lockBusy: false, lockBioEnroll: false });
+            this.lockOpen(zapnuto ? 'Odemčeno · otisk zapnutý' : 'Odemčeno · otisk se zapnout nepodařilo');
+          };
+          this.lockBioZapni(pin).then(konec, () => konec(false));
+          return;
+        }
+        this.setState({ lockBusy: false }); this.lockOpen(); return;
+      }
       // Uzavření drží server; klávesnice se po něm zase otevře, ne až po obnovení stránky.
       this.setState({ lockBusy: false, lockTries: blok ? Math.max(3, (this.state.lockTries || 0) + 1) : (this.state.lockTries || 0) + 1, lockPin: '', lockErr: chyba });
       if (blok) {
@@ -33610,17 +33624,13 @@ class Component extends DCLogic {
   }
   // ——— Přihlášení otiskem prstu / obličejem ———
   // Platformní autentikátor zařízení (WebAuthn) — Touch ID, Face ID nebo čtečka.
-  // Challenge i `allowCredentials` bere ze serveru (/api/webauthn/…), a když
-  // backend není, generuje je lokálně. Táž implementace v obou rozvrženích.
+  // Challenge i `allowCredentials` bere ze serveru (/api/webauthn/…); bez něj
+  // otisk neodemyká — podpis, který nikdo neověřil, nedokazuje nic.
+  // Táž implementace v obou rozvrženích.
   bioSupported() {
     return !!(window.PublicKeyCredential && navigator.credentials && navigator.credentials.get);
   }
   bioKey() { return 'galerie.bio.' + (this.state.lockWho || 'A'); }
-  bioRandom(n) {
-    const a = new Uint8Array(n);
-    (window.crypto || {}).getRandomValues ? window.crypto.getRandomValues(a) : a.fill(7);
-    return a;
-  }
   bioB64u(buf) {
     const b = btoa(String.fromCharCode.apply(null, new Uint8Array(buf)));
     return b.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
@@ -33645,58 +33655,63 @@ class Component extends DCLogic {
     if (r.userHandle) out.response.userHandle = this.bioB64u(r.userHandle);
     return out;
   }
+  /*
+   * Odemknout otiskem — jen když ho server ověří.
+   *
+   * Bez uloženého klíče se otisk dřív rovnou zaregistroval a obrazovka se
+   * odemkla. Stačilo tak projít ověřením samotného zařízení (Windows Hello
+   * na společném počítači, PIN telefonu, který zná partner) — kód zámku
+   * nebyl potřeba, ani když server jeho pokusy zrovna blokoval. A když
+   * volby přihlášení selhaly, odemklo se na podpis s challenge vymyšlenou
+   * v prohlížeči, kterou nikdo neověřil.
+   *
+   * Teď se otisk zapíná kódem (`lockBioPriprav` → `lockTry` → `lockBioZapni`)
+   * a odemyká jen token, který vydal server.
+   */
   async lockBio() {
     const who = this.state.lockWho || 'A';
+    if (this.state.lockBioBusy) return;
     if (!this.bioSupported()) {
       this.toast('Tohle zařízení otisk nenabízí — zadejte kód', { icon: 'ph-fingerprint' });
       return;
     }
+    let credId = null;
+    try { credId = localStorage.getItem(this.bioKey()); } catch (e) {}
+    if (!credId) { this.lockBioPriprav(); return; }
     this.setState({ lockBioBusy: true, lockErr: null });
     try {
-      let credId = null;
-      try { credId = localStorage.getItem(this.bioKey()); } catch (e) {}
-      if (!credId) {
-        const so = await this.bioAsk('webauthn/register/options');
-        const cred = await navigator.credentials.create({
-          publicKey: {
-            challenge: so && so.challenge ? this.bioBytes(so.challenge) : this.bioRandom(32),
-            rp: so && so.rp ? so.rp : { name: 'Naše vzpomínky' },
-            user: so && so.user
-              ? { id: this.bioBytes(so.user.id), name: so.user.name, displayName: so.user.displayName || so.user.name }
-              : { id: new TextEncoder().encode('galerie-' + who), name: LOCKMAIL[who] || who, displayName: LOCKWHO[who] || who },
-            pubKeyCredParams: (so && so.pubKeyCredParams) || [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
-            authenticatorSelection: (so && so.authenticatorSelection) || { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
-            timeout: 60000, attestation: 'none'
-          }
-        });
-        if (!cred) throw new Error('bez klíče');
-        if (so) await this.bioAsk('webauthn/register', Object.assign(this.bioCredJson(cred), { label: LOCKWHO[who] || who }));
-        credId = btoa(String.fromCharCode.apply(null, new Uint8Array(cred.rawId)));
-        try { localStorage.setItem(this.bioKey(), credId); } catch (e) {}
-        this.setState({ lockBioBusy: false });
-        this.lockOpen('Otisk zaregistrován a odemčeno · ' + (LOCKWHO[who] || ''));
+      const so = await this.bioAsk('webauthn/login/options', { email: LOCKMAIL[who] || who });
+      if (!so || !so.challenge) {
+        this.setState({ lockBioBusy: false, lockErr: 'Otisk se nepodařilo ověřit — zadejte kód.' });
         return;
       }
-      const bytes = Uint8Array.from(atob(credId), c => c.charCodeAt(0));
-      const so = await this.bioAsk('webauthn/login/options', { email: LOCKMAIL[who] || who });
-      const allow = so && so.allowCredentials && so.allowCredentials.length
-        ? so.allowCredentials.map(c => ({ type: 'public-key', id: this.bioBytes(c.id), transports: c.transports || ['internal'] }))
-        : [{ type: 'public-key', id: bytes, transports: ['internal'] }];
+      /*
+       * Server k účtu žádný klíč nemá — zrušila ho obnova hesla nebo
+       * „Odhlásit ostatní". Klíč v zařízení je pak mrtvý: zahodí se,
+       * a příští ťuknutí otisk zapne znovu (s kódem).
+       */
+      if (!so.allowCredentials || !so.allowCredentials.length) {
+        try { localStorage.removeItem(this.bioKey()); } catch (e) {}
+        const kod = !!this.zamek().nastaveno;
+        this.setState({
+          lockBioBusy: false, lockBioEnroll: kod,
+          lockErr: kod ? 'Otisk už na serveru neplatí — zadejte kód, zapne se znovu.'
+            : 'Otisk už na serveru neplatí. Otisk nahrazuje kód zámku — nejdřív si kód nastavte v Nastavení → Zámek.'
+        });
+        return;
+      }
       const got = await navigator.credentials.get({
         publicKey: {
-          challenge: so && so.challenge ? this.bioBytes(so.challenge) : this.bioRandom(32),
-          allowCredentials: allow,
+          challenge: this.bioBytes(so.challenge),
+          allowCredentials: so.allowCredentials.map(c => ({ type: 'public-key', id: this.bioBytes(c.id), transports: c.transports || ['internal'] })),
           userVerification: 'required', timeout: 60000
         }
       });
-      let ok = !!got;
-      if (got && so) {
-        const res = await this.bioAsk('webauthn/login', this.bioCredJson(got));
-        ok = !!(res && res.token);
-        // Otisk mění token mimo `signIn` — `load()` si od serveru řekne, čí
-        // je, a datová vrstva sama pozná přepnutí účtu (`prevezmiUcet`).
-        if (ok) { window.GALERIE_API_TOKEN = res.token; if (window.GalerieApi) window.GalerieApi.load(); }
-      }
+      const res = got ? await this.bioAsk('webauthn/login', this.bioCredJson(got)) : null;
+      const ok = !!(res && res.token);
+      // Otisk mění token mimo `signIn` — `load()` si od serveru řekne, čí
+      // je, a datová vrstva sama pozná přepnutí účtu (`prevezmiUcet`).
+      if (ok) { window.GALERIE_API_TOKEN = res.token; if (window.GalerieApi) window.GalerieApi.load(); }
       this.setState({ lockBioBusy: false });
       if (ok) this.lockOpen('Odemčeno otiskem · ' + (LOCKWHO[who] || ''));
       else this.setState({ lockErr: 'Otisk se nepodařilo ověřit — zadejte kód.' });
@@ -33707,6 +33722,56 @@ class Component extends DCLogic {
         lockErr: msg === 'NotAllowedError' ? 'Otisk zrušen nebo nerozpoznán — zkuste to znovu, nebo zadejte kód.'
           : 'Otisk tady není k dispozici — zadejte kód.'
       });
+    }
+  }
+  /*
+   * Otisk nahrazuje kód, takže se zapíná tím kódem.
+   *
+   * Ťuknutí na otisk bez klíče v zařízení nic neregistruje a neodemyká —
+   * jen řekne, že se otisk zapne s příštím správným kódem (`lockTry`).
+   * Server u voleb registrace chce týž kód (`PotvrzeniZamkem`).
+   */
+  lockBioPriprav() {
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http') { this.setState({ lockErr: 'Otisk se zapíná přes server a ten teď neodpovídá — zadejte kód.' }); return; }
+    if (!this.zamek().nastaveno) { this.setState({ lockErr: 'Otisk nahrazuje kód zámku — nejdřív si kód nastavte v Nastavení → Zámek.' }); return; }
+    this.setState({ lockBioEnroll: true, lockErr: 'Zadejte kód — otisk se zapne s ním.' });
+  }
+  /*
+   * Zapnutí otisku kódem, který server právě přijal. Vrací, jestli se povedlo;
+   * neodemyká — to udělá `lockTry`, ať to dopadne jakkoli.
+   *
+   * Klíč se v zařízení poznamená, jen když ho server opravdu uložil
+   * (`registered: true`). Jinak by příští ťuknutí zkoušelo přihlášení
+   * klíčem, o kterém server neví.
+   */
+  async lockBioZapni(pin) {
+    const who = this.state.lockWho || 'A';
+    // Klíč patří tomu, kdo kód zadal — i kdyby se mezitím vybral jiný účet.
+    const klic = this.bioKey();
+    const api = window.GalerieApi;
+    if (!api || api.mode !== 'http' || !this.bioSupported()) return false;
+    try {
+      const so = await api.post('webauthn/register/options', { kod: pin }).catch(() => null);
+      if (!so || !so.challenge || !so.user) return false;
+      const cred = await navigator.credentials.create({
+        publicKey: {
+          challenge: this.bioBytes(so.challenge),
+          rp: so.rp,
+          user: { id: this.bioBytes(so.user.id), name: so.user.name, displayName: so.user.displayName || so.user.name },
+          pubKeyCredParams: so.pubKeyCredParams || [{ type: 'public-key', alg: -7 }, { type: 'public-key', alg: -257 }],
+          authenticatorSelection: so.authenticatorSelection || { authenticatorAttachment: 'platform', userVerification: 'required', residentKey: 'preferred' },
+          timeout: 60000, attestation: 'none'
+        }
+      });
+      if (!cred) return false;
+      const res = await api.post('webauthn/register', Object.assign(this.bioCredJson(cred), { label: LOCKWHO[who] || who })).catch(() => null);
+      if (!(res && res.registered === true)) return false;
+      try { localStorage.setItem(klic, btoa(String.fromCharCode.apply(null, new Uint8Array(cred.rawId)))); } catch (e) {}
+      return true;
+    } catch (e) {
+      // Zrušené nebo nedostupné ověření v zařízení — kód seděl, jen bez otisku.
+      return false;
     }
   }
   lockVals() {
@@ -33740,7 +33805,7 @@ class Component extends DCLogic {
       lockTrustToggle: () => this.setState({ lockTrust: s.lockTrust === false }),
       lockTrustBg: s.lockTrust !== false ? 'var(--g-acc)' : 'transparent',
       lockTrustMark: s.lockTrust !== false ? '#fff' : 'transparent',
-      lockOtherAcct: () => this.setState({ lockStep: 'pwd', lockPwd: '', lockPin: '', lockErr: null, lockTries: 0, lockTrusted: false }),
+      lockOtherAcct: () => this.setState({ lockStep: 'pwd', lockPwd: '', lockPin: '', lockErr: null, lockTries: 0, lockTrusted: false, lockBioEnroll: false }),
       /*
        * Nápověda pod heslem už heslo neříká.
        *
@@ -33770,7 +33835,7 @@ class Component extends DCLogic {
         : 'Kód zamyká aplikaci na tomhle zařízení. K datům se bez přihlášení nedostane nikdo.',
       lockWhos: Object.keys(LOCKWHO).map(k => ({
         name: LOCKWHO[k], ini: LOCKWHO[k][0],
-        pick: () => this.setState({ lockWho: k, lockPin: '', lockErr: null, lockTries: 0, lockMail: this.zamekMail(k), lockPwd: '' }),
+        pick: () => this.setState({ lockWho: k, lockPin: '', lockErr: null, lockTries: 0, lockMail: this.zamekMail(k), lockPwd: '', lockBioEnroll: false }),
         bg: who === k ? 'var(--g-ink)' : 'var(--g-raise)',
         fg: who === k ? 'var(--g-bg)' : 'var(--g-ink)',
         bd: who === k ? 'var(--g-ink)' : 'var(--g-line)',
@@ -33792,7 +33857,8 @@ class Component extends DCLogic {
       lockBlocked: blocked,
       lockReset: () => this.setState({ lockTries: 0, lockPin: '', lockErr: null }),
       lockBioOn: s.lockBio !== false,
-      lockBioLabel: s.lockBioBusy ? 'Ověřuji…' : 'Odemknout dotykem',
+      // Hláška o zapnutí otisku zmizí s první číslicí; tlačítko ji drží dál.
+      lockBioLabel: s.lockBioBusy ? 'Ověřuji…' : s.lockBioEnroll ? 'Otisk se zapne s kódem' : 'Odemknout dotykem',
       lockBioGo: () => { if (!s.lockBioBusy) this.lockBio(); },
       lockRecOn: !!s.lockRec,
       lockForgot: () => this.setState({ lockRec: !s.lockRec, lockErr: null }),
