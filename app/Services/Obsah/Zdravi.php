@@ -4,9 +4,13 @@ namespace App\Services\Obsah;
 
 use App\Models\CycleDay;
 use App\Models\CycleSetting;
+use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
+use App\Models\Transaction;
 use App\Models\WellbeingMood;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
+use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -374,8 +378,13 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
         $udalosti = [];
 
         if (Tabulky::je('calendar_events')) {
+            $ja = auth()->id();
+            // Soukromý termín druhého se nepočítá: „Večer mimo domov" by
+            // prozradil, že ten den něco měl, i když kalendář ho skrývá.
             $kalendar = DB::table('calendar_events')
                 ->where('gallery_space_id', $prostor->id)
+                ->where(fn ($q) => $q->where('is_private', false)
+                    ->when($ja !== null, fn ($v) => $v->orWhere('created_by', $ja)))
                 ->where('starts_at', '>=', $od)
                 ->get(['starts_at', 'ends_at', 'type']);
 
@@ -438,37 +447,51 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        /*
+         * Limity jen z rozpočtů, které přihlášený vidí, a v měně rozpočtu.
+         *
+         * Partnerův soukromý rozpočet sem nepatří (prozradil by, na co si
+         * limit dal). A limit 500 Kč se nedá překročit útratou 800 €: klíčem
+         * je kategorie i měna, ne jen kategorie.
+         */
+        $ja = auth()->id();
         $limity = DB::table('budget_category_limits as l')
             ->join('budgets as r', 'r.id', '=', 'l.budget_id')
-            ->where('r.gallery_space_id', $prostor->id)
-            ->pluck('l.amount', 'l.finance_category_id');
+            ->whereIn('r.id', FinanceAccess::viditelneRozpocty((int) $prostor->id, $ja !== null ? (int) $ja : null))
+            ->orderBy('r.id')
+            ->get(['l.amount', 'l.finance_category_id', 'r.currency'])
+            ->mapWithKeys(fn (object $l) => [$l->finance_category_id.'|'.strtoupper((string) ($l->currency ?: 'CZK')) => (float) $l->amount]);
 
         if ($limity->isEmpty()) {
             return [];
         }
 
-        $pohyby = DB::table('transactions')
+        // Skutečné útraty, jak je počítá rozpočet: `type != 'income'` bralo i
+        // převody, směny a rozepsané koncepty, a „přes limit" hlásilo den,
+        // kdy se nic neutratilo.
+        $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
-            ->whereNull('deleted_at')
+            ->utraty()
+            ->where('excluded_from_budget', false)
             ->whereNotNull('category_id')
             ->where('occurred_at', '>=', $od->startOfMonth())
             ->orderBy('occurred_at')
-            ->get(['occurred_at', 'amount_from', 'category_id']);
+            ->get(['occurred_at', 'amount_from', 'currency_from', 'category_id']);
 
         $nasbirano = [];
         $dny = [];
 
         foreach ($pohyby as $t) {
-            $limit = (float) ($limity[$t->category_id] ?? 0);
+            $klic = $t->category_id.'|'.strtoupper((string) ($t->currency_from ?: 'CZK'));
+            $limit = (float) ($limity[$klic] ?? 0);
 
             if ($limit <= 0) {
                 continue;
             }
 
-            $pred = $nasbirano[$t->category_id] ?? 0.0;
+            $pred = $nasbirano[$klic] ?? 0.0;
             $po = $pred + abs((float) $t->amount_from);
-            $nasbirano[$t->category_id] = $po;
+            $nasbirano[$klic] = $po;
 
             // Zajímá jen ten pohyb, který hranici překročil — ne každý další.
             if ($pred < $limit && $po >= $limit) {
@@ -508,7 +531,11 @@ class Zdravi implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
+        // Křivky jen dvojice, divák první — host do nálad páru nepatří
+        // (a obrazovka kreslí první dvě řady jako „já" a „partner").
+        $jmena = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->mapWithKeys(fn ($clen) => [(int) $clen->id => (string) $clen->name])
+            ->all();
         $vysledek = [];
 
         foreach ($jmena as $id => $jmeno) {

@@ -4,6 +4,7 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -156,10 +157,11 @@ class Formulare
     private function trezor(GallerySpace $prostor, ?User $uzivatel): array
     {
         // Vlastník první — je to jeho archiv a v seznamu se to má poznat.
-        $lide = $prostor->members()
-            ->orderByRaw('users.id = ? desc', [$prostor->owner_id])
-            ->orderBy('users.id')
-            ->get(['users.id', 'users.name']);
+        // Jen dvojice: host k trezoru přístup nemá, a tady by stál jako
+        // „člen páru" se zapnutým přepínačem.
+        $lide = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->sortBy(fn (User $u) => [(int) $u->id === (int) $prostor->owner_id ? 0 : 1, (int) $u->id])
+            ->values();
 
         if ($lide->isEmpty()) {
             return [];

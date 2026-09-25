@@ -69,8 +69,37 @@ class PristupDoGalerie
             $dvojice = (int) $prostor->owner_id === (int) $clen->id
                 || in_array((string) $clen->pivot->role, self::ROLE_DVOJICE, true);
 
-            return $dvojice && $this->proc($clen) === null;
+            // Role se posuzuje v TOMHLE prostoru (řádek výš), ne přes `proc()`:
+            // ten člena soudí podle jeho PRVNÍHO prostoru, takže partner, který
+            // je navíc hostem v cizí galerii (a ta je u něj první), z vlastní
+            // dvojice vypadl. Z brány tu zbývá jen odebraný přístup.
+            return $dvojice && $clen->is_active !== false;
         })->values();
+    }
+
+    /**
+     * Dvojice s divákem na prvním místě, pak pevně podle vstupu do prostoru.
+     *
+     * Obrazovky kreslí „já" a „partner" podle pozice. `members` je bez pořadí
+     * (databáze vrací řádky, jak se jí hodí) a hosty obsahuje taky — host tak
+     * občas seděl na místě partnera. Bez diváka (konzole, fronta) rozhoduje
+     * jen `joined_at` a pak id, ať je výsledek pokaždé stejný.
+     *
+     * @return Collection<int, User>
+     */
+    public function dvojiceOdDivaka(GallerySpace $prostor, ?User $divak): Collection
+    {
+        $divakId = $divak !== null ? (int) $divak->id : null;
+
+        return $this->dvojice($prostor)
+            ->sortBy([
+                fn (User $a, User $b) => ((int) $b->id === $divakId) <=> ((int) $a->id === $divakId),
+                // Chybějící `joined_at` (staré členství) až za ostatní.
+                fn (User $a, User $b) => [$a->pivot->joined_at === null, (string) $a->pivot->joined_at]
+                    <=> [$b->pivot->joined_at === null, (string) $b->pivot->joined_at],
+                fn (User $a, User $b) => (int) $a->id <=> (int) $b->id,
+            ])
+            ->values();
     }
 
     /**

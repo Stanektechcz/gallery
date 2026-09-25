@@ -569,6 +569,9 @@ class Kucharka implements MaPrazdneKolekce, PoskytovatelObsahu
     {
         return DB::table('recipes')
             ->where('gallery_space_id', $prostor->id)
+            // Dotazovač nezná `SoftDeletes` modelu — smazaný recept by jinak
+            // zůstal v kuchařce i v menu na týden.
+            ->whereNull('deleted_at')
             ->where('status', '!=', 'archived')
             ->orderBy('title')
             ->orderBy('id')

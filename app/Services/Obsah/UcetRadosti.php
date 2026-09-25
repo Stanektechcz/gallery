@@ -209,8 +209,11 @@ class UcetRadosti
             return [];
         }
 
+        // Dotazovač obchází měkké mazání modelu: smazaná útrata by jinak
+        // zdražovala činnost, u které se nic neutratilo.
         $radky = DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
             ->where('type', 'expense')
             ->where('occurred_at', '>=', $od)
             ->limit(5000)

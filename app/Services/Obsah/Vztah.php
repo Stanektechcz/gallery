@@ -10,6 +10,7 @@ use App\Models\CouplePromise;
 use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -86,8 +87,18 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
         $rozhodnuti = $this->rozhodnuti($prostor);
         $body = $this->body($prostor);
 
+        /*
+         * „Rozhodli jsme spolu" jsou jména dvojice, ne všech členů.
+         *
+         * Mapa `$jmena` zůstává i s hosty: slouží k dohledání autora a zápis
+         * (`VztahVeStavu`) páruje jména zpátky na id — autor-host by se jinak
+         * vrátil jako „—" a zápis by ho smazal.
+         */
+        $spolecne = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->pluck('name')->map(fn ($jmeno) => (string) $jmeno)->all();
+
         return array_filter([
-            'DEC_LIST' => $this->pamet($rozhodnuti, $jmena),
+            'DEC_LIST' => $this->pamet($rozhodnuti, $jmena, $spolecne),
             'ARB' => $this->arbitraz($rozhodnuti, $jmena),
             'VERSIONS' => $this->verze($rozhodnuti, $jmena),
             'DEC_COOL' => $this->rozvahy($prostor, $jmena),
@@ -141,15 +152,16 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
      *
      * @param  Collection<int, CoupleDecision>  $rozhodnuti
      * @param  array<int, string>  $jmena
+     * @param  list<string>  $spolecne  jména dvojice, divák první
      * @return list<array<string, mixed>>
      */
-    private function pamet(Collection $rozhodnuti, array $jmena): array
+    private function pamet(Collection $rozhodnuti, array $jmena, array $spolecne): array
     {
         return $rozhodnuti->map(fn (CoupleDecision $r) => array_filter([
             'id' => $r->uuid,
             'title' => $r->title,
             'date' => CarbonImmutable::parse($r->decided_on)->format('j. n. Y'),
-            'by' => $r->together ? implode(' a ', array_values($jmena)) : ($jmena[$r->decided_by] ?? 'oba'),
+            'by' => $r->together ? implode(' a ', $spolecne) : ($jmena[$r->decided_by] ?? 'oba'),
             'status' => $r->status,
             /*
              * Co není zapsané, se nedoplňuje.
@@ -303,7 +315,8 @@ class Vztah implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNotNull('due_at')
                 ->where('due_at', '<', $ted)
-                ->where('status', '!=', 'completed')
+                // Zrušený úkol někdo zavřel — „nikdo ho nezavřel" by o něm lhalo.
+                ->whereNotIn('status', ['completed', 'cancelled'])
                 ->orderBy('due_at')
                 ->limit(20)
                 ->get(['title', 'due_at']) as $u) {

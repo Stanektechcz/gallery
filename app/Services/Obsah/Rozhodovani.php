@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Tabulky;
 use Illuminate\Support\Facades\DB;
 
@@ -349,13 +350,12 @@ class Rozhodovani implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function jmena(GallerySpace $prostor): array
     {
-        $lide = $prostor->members()->pluck('users.name', 'users.id')->all();
-        $ja = auth()->id();
-
-        if ($ja !== null && array_key_exists($ja, $lide)) {
-            $lide = [$ja => $lide[$ja]] + $lide;
-        }
-
-        return $lide;
+        // Jen dvojice a pevné pořadí: s hostem v prostoru byl „ten druhý"
+        // podle toho, v jakém pořadí databáze zrovna vrátila členy — a sloupec
+        // partnera ukazoval hostovy obavy. Obavy se zapisují s autorem
+        // (`author_user_id`), ne s pozicí, takže zápis to neovlivní.
+        return app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->mapWithKeys(fn ($clen) => [(int) $clen->id => (string) $clen->name])
+            ->all();
     }
 }

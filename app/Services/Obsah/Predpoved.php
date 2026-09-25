@@ -38,6 +38,12 @@ class Predpoved
     /** Jak dlouho platí stažená předpověď. */
     private const CERSTVOST_MINUT = 180;
 
+    /** Jak dlouho se po výpadku služby nezkouší znovu. */
+    private const PO_NEZDARU_MINUT = 10;
+
+    /** Značka nezdaru v paměti — `null` by `Cache` neodlišila od „nic tu není". */
+    private const NEDOSTUPNA = 'nedostupna';
+
     /** Kolik měsíců zpátky se hledá, kde dvojice bývá. */
     private const MESICU_POLOHY = 6;
 
@@ -60,21 +66,30 @@ class Predpoved
 
         [$sirka, $delka] = $kde;
 
-        $data = Cache::remember(
-            'galerie.pocasi.'.$prostor->id.'.'.$sirka.'.'.$delka,
-            now()->addMinutes(self::CERSTVOST_MINUT),
-            function () use ($sirka, $delka) {
-                try {
-                    return $this->sluzba->weather($sirka, $delka);
-                } catch (\Throwable $e) {
-                    // Nedostupná předpověď není chyba aplikace. Obrazovka si
-                    // nechá, co má, a zkusí se to za tři hodiny znovu.
-                    return null;
-                }
-            },
-        );
+        $klic = 'galerie.pocasi.'.$prostor->id.'.'.$sirka.'.'.$delka;
+        $data = Cache::get($klic);
 
-        return $data === null ? [] : $this->radky($data);
+        /*
+         * I nezdar se pamatuje — krátce.
+         *
+         * `Cache::remember` hodnotu `null` neuloží, takže při výpadku
+         * Open-Meteo se služba volala při každém načtení kuchařky znovu a každé
+         * načtení čekalo na vypršení spojení (kolem šestnácti vteřin). Nezdar
+         * se proto uloží jako značka na deset minut; pak se to zkusí znovu.
+         */
+        if ($data === null) {
+            try {
+                $data = $this->sluzba->weather($sirka, $delka);
+                Cache::put($klic, $data, now()->addMinutes(self::CERSTVOST_MINUT));
+            } catch (\Throwable $e) {
+                // Nedostupná předpověď není chyba aplikace. Obrazovka si
+                // nechá, co má.
+                $data = self::NEDOSTUPNA;
+                Cache::put($klic, $data, now()->addMinutes(self::PO_NEZDARU_MINUT));
+            }
+        }
+
+        return is_array($data) ? $this->radky($data) : [];
     }
 
     /**

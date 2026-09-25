@@ -60,6 +60,22 @@ class HraniceVeStavuTest extends TestCase
         $this->assertSame($this->maki->id, (int) $kapacita[0]->user_id);
     }
 
+    /**
+     * Obrazovka čte opravu tam, kam ji zápis dal.
+     *
+     * Zápis bere jen dvojici, obrazovka brala všechny členy: host s nižším
+     * id seděl na místě „m" a partnerova oprava se na obrazovce neukázala.
+     */
+    public function test_oprava_partnera_se_ukaze_na_jeho_miste(): void
+    {
+        $this->stav(['capWeek' => [['key' => 'po', 'fixM' => true, 'm' => 3]]])->assertOk();
+
+        $tyden = collect($this->actingAs($this->adri)->getJson('/api/data/domacnost')->assertOk()->json('data.HOUSE_WEEK'))->keyBy('key');
+
+        $this->assertTrue($tyden['po']['fixM']);
+        $this->assertEquals(3.0, $tyden['po']['m']);
+    }
+
     /** Druhá verze „dvou pravd" je partnerova, ne hostova. */
     public function test_host_neni_druha_strana_dvou_pravd(): void
     {

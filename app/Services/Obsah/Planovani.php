@@ -500,7 +500,22 @@ class Planovani implements MaPrazdneKolekce, PoskytovatelObsahu
          * tedy budoucnost. Seznam „Co se změnilo" je ale kronika toho, co se
          * stalo, takže by jinak hlásil, že se zítra něco už změnilo.
          */
+        $ja = auth()->id();
+
         return LifeEvent::where('gallery_space_id', $prostor->id)
+            /*
+             * Soukromá událost druhého se do stopy nedostane.
+             *
+             * `CalendarEvent` zapisuje do stopy každou novou událost i s názvem —
+             * i tu soukromou. Kalendář ji druhému skryje, ale „Co se změnilo"
+             * pak hlásilo „Přidal/a do kalendáře Tajná schůzka". Vlastní
+             * soukromá zůstává: tomu, kdo ji založil, nic neprozrazuje.
+             */
+            ->whereNot(fn ($q) => $q->where('kind', 'like', 'calendar.event%')
+                ->whereExists(fn ($e) => $e->from('calendar_events')
+                    ->whereColumn('calendar_events.id', 'life_events.subject_id')
+                    ->where('calendar_events.is_private', true)
+                    ->when($ja !== null, fn ($m) => $m->where('calendar_events.created_by', '!=', $ja))))
             ->orderByDesc('created_at')
             ->limit(self::UDALOSTI)
             ->get()

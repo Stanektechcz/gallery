@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -490,19 +491,15 @@ class Klid implements MaPrazdneKolekce, PoskytovatelObsahu
      * shodným jménem by se tím do sebe složili a jeden by druhého přepsal;
      * druhý proto dostane číslo, stejně jako dvě Kláry v „Lidech".
      *
-     * Řadí se tady, ne v SQL: `orderByRaw` přes `belongsToMany` pořadí
-     * nedrží a první pak skončil uprostřed.
+     * Jen dvojice (`dvojiceOdDivaka`), ne hosté: host s nižším id seděl na
+     * místě partnera v čase pro sebe i u otázky dne a měl vlastní řádek
+     * energie. `KlidVeStavu` čte jména odsud, takže zápis jde stejnou cestou.
      *
      * @return array<int, string>
      */
     public function jmena(GallerySpace $prostor): array
     {
-        $prvni = (int) (auth()->id() ?? $prostor->owner_id);
-
-        $lide = $prostor->members()
-            ->get(['users.id', 'users.name'])
-            ->sortBy(fn (object $u) => [(int) $u->id === $prvni ? 0 : 1, (int) $u->id])
-            ->values();
+        $lide = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user());
 
         $jmena = [];
         $videno = [];

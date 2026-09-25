@@ -768,7 +768,10 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             'budget', $ja,
         )
             // Běžící rozpočet má přednost před tím, co skončilo nebo teprve začne.
-            ->orderByRaw('CASE WHEN starts_on <= ? AND (ends_on IS NULL OR ends_on >= ?) THEN 0 ELSE 1 END', [now(), now()])
+            // Dnešek dvojice jako datum: s okamžikem v UTC (`now()`) poslední den
+            // rozpočtu odpoledne „neběžel" (`'2026-09-30' >= '2026-09-30 12:00'`
+            // neplatí) a obrazovka skočila na rozpočet, který teprve začne.
+            ->orderByRaw('CASE WHEN starts_on <= ? AND (ends_on IS NULL OR ends_on >= ?) THEN 0 ELSE 1 END', [$dnes = Cas::dnes()->toDateString(), $dnes])
             ->orderByDesc('starts_on')
             ->first();
     }
@@ -1048,9 +1051,11 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         $od = $dnes->startOfMonth();
 
         if (Tabulky::je('budget_settlements')) {
+            // Jen vyrovnání z rozpočtů, které divák vidí: srovnání v partnerově
+            // soukromém rozpočtu by jinak posunulo začátek a z „kdo co
+            // zaplatil" by zmizely společné platby.
             $posledni = DB::table('budget_settlements as v')
-                ->join('budgets as r', 'r.id', '=', 'v.budget_id')
-                ->where('r.gallery_space_id', $prostor->id)
+                ->whereIn('v.budget_id', $this->viditelneRozpocty($prostor))
                 ->max('v.settled_through');
 
             if ($posledni && CarbonImmutable::parse($posledni)->addDay()->greaterThan($od)) {
@@ -1239,8 +1244,9 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('t.gallery_space_id', $prostor->id)
             ->where('t.type', 'income')
             ->whereNull('t.deleted_at')
-            // Návrh ani zamítnutý příjem na účet nepřišel.
-            ->whereNotIn('t.state', ['draft', 'rejected'])
+            // Jen zapsané jako v knize: návrh, zamítnutý ani čekající
+            // (`pending`) příjem na účet ještě nepřišel.
+            ->whereIn('t.state', Transaction::ZAPSANE)
             ->where('t.occurred_at', '>=', Cas::dnes()->startOfMonth()->subMonths(2)->toDateString())
             // Příjem v jiné měně by se k výplatě v korunách přičetl jako koruny.
             ->where(fn ($q) => $q->whereNull('t.currency_to')->orWhere('t.currency_to', $mena))
@@ -1358,9 +1364,10 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
 
+        // Název i částky partnerova soukromého rozpočtu sem nepatří.
         return DB::table('budget_settlements as v')
             ->join('budgets as r', 'r.id', '=', 'v.budget_id')
-            ->where('r.gallery_space_id', $prostor->id)
+            ->whereIn('r.id', $this->viditelneRozpocty($prostor))
             ->orderByDesc('v.settled_through')
             ->limit(30)
             ->get(['v.amount', 'v.currency', 'v.settled_through', 'v.note', 'v.from_user_id', 'v.to_user_id', 'v.created_by', 'r.name as rozpocet'])
@@ -1382,6 +1389,18 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             })
             ->values()
             ->all();
+    }
+
+    /**
+     * Rozpočty, které přihlášený vidí — viz `FinanceAccess::viditelneRozpocty()`.
+     *
+     * @return list<int>
+     */
+    private function viditelneRozpocty(GallerySpace $prostor): array
+    {
+        $ja = auth()->id();
+
+        return FinanceAccess::viditelneRozpocty((int) $prostor->id, $ja !== null ? (int) $ja : null);
     }
 
     private function castka(float $castka, string $mena): string

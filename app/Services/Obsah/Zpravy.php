@@ -3,7 +3,9 @@
 namespace App\Services\Obsah;
 
 use App\Models\ChatMessage;
+use App\Models\Conversation;
 use App\Models\GallerySpace;
+use App\Models\User;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
@@ -107,8 +109,25 @@ class Zpravy implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function zpravy(GallerySpace $prostor): Collection
     {
+        $ja = auth()->user();
+
         return ChatMessage::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
+            /*
+             * Jen hovory, ve kterých divák je (`Conversation::forUser`).
+             *
+             * Bralo se všechno z prostoru — i kanál jen na pozvánku nebo přímý
+             * hovor partnera s hostem. Zpráva bez hovoru je z doby před hovory
+             * a patří celému prostoru, jako dřív. Bez diváka (konzole) jen ta.
+             */
+            ->where(fn ($q) => $q->whereNull('conversation_id')
+                ->when($ja instanceof User, fn ($v) => $v->orWhereIn(
+                    'conversation_id',
+                    Conversation::withoutGlobalScope(SpaceContext::SCOPE)
+                        ->where('gallery_space_id', $prostor->id)
+                        ->forUser($ja)
+                        ->select('id'),
+                )))
             ->orderByDesc('created_at')
             ->limit(self::ZPRAV)
             ->get()

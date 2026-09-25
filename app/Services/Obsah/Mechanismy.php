@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -275,7 +276,8 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $poradi = array_keys($jmena);
+        // Pozice jen z dvojice — viz `poradiDvojice()`.
+        $poradi = $this->poradiDvojice($prostor);
         $prvni = $poradi[0] ?? null;
         $druhy = $poradi[1] ?? null;
 
@@ -682,5 +684,22 @@ class Mechanismy implements MaPrazdneKolekce, PoskytovatelObsahu
         uksort($lide, fn ($x, $y) => [(int) $x !== $ja, (int) $x] <=> [(int) $y !== $ja, (int) $y]);
 
         return $lide;
+    }
+
+    /**
+     * Kdo je `a` a kdo `k` — jen dvojice, divák první.
+     *
+     * `jmena()` zůstává i s hosty, protože slouží k dohledání autora a zápis
+     * (`MechanismyVeStavu`) páruje jména zpátky na id: autor-host by se jinak
+     * vrátil jako „—". Pro pozice ale host nepatří: s nižším id dostal
+     * v „kdo mluví za nás" místo partnera.
+     *
+     * @return list<int>
+     */
+    private function poradiDvojice(GallerySpace $prostor): array
+    {
+        return app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->map(fn ($clen) => (int) $clen->id)
+            ->all();
     }
 }

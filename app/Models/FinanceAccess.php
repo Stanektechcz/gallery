@@ -48,6 +48,27 @@ class FinanceAccess extends Model
     }
 
     /**
+     * Id rozpočtů prostoru, které divák smí vidět — bez smazaných.
+     *
+     * Obsah obrazovek četl `budgets` napřímo a partnerův soukromý rozpočet tak
+     * prosakoval do fondů, limitů i vyrovnání. Jedno místo, které pravidlo
+     * `viditelne()` použije se správným prostorem. Bez diváka (konzole, fronta)
+     * jen společné — soukromý rozpočet nemá komu patřit.
+     *
+     * @return list<int>
+     */
+    public static function viditelneRozpocty(int $spaceId, ?int $userId): array
+    {
+        $dotaz = Budget::query()->where('gallery_space_id', $spaceId);
+
+        $dotaz = $userId === null
+            ? $dotaz->whereNull('owner_user_id')
+            : static::viditelne($dotaz, 'budget', $userId);
+
+        return $dotaz->orderBy('id')->pluck('id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
      * Smí uživatel do téhle věci zapisovat?
      *
      * Kromě vlastníka a toho, komu se právo dalo, smí vždycky i **majitel prostoru.**

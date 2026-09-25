@@ -3,6 +3,7 @@
 namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Models\SharedTodo;
 use App\Models\User;
 use App\Services\Planning\SharedTodoService;
@@ -190,6 +191,16 @@ class ObsahPravidlaTest extends TestCase
     /** Vzpomínka nese, jak je to dávno, kolik má fotek a odkud je. */
     public function test_vzpominka_ma_tvar_ktery_prototyp_kresli(): void
     {
+        // Generátor ukládá uuid fotek; vzpomínka ukazuje jen ty, které jsou pořád
+        // vidět (viz Obsah41\VzpominkyFotkyTest), takže fotky musí existovat.
+        $fotky = array_map(fn (int $i) => MediaItem::create([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->prostor->id,
+            'owner_user_id' => $this->adri->id, 'uploaded_by' => $this->adri->id,
+            'original_filename' => 'IMG_'.$i.'.jpg', 'safe_filename' => 'img-'.$i.'.jpg',
+            'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 2048,
+            'uploaded_at' => now(), 'status' => 'ready', 'storage_status' => 'local', 'is_hidden' => false,
+        ])->uuid, [1, 2, 3]);
+
         DB::table('generated_memories')->insert([
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $this->prostor->id,
@@ -198,7 +209,7 @@ class ObsahPravidlaTest extends TestCase
             'subtitle' => 'Krka, Chorvatsko',
             'occurs_on' => '2021-08-16',
             'years_ago' => 5,
-            'media_ids' => json_encode([1, 2, 3]),
+            'media_ids' => json_encode($fotky),
             'score' => 10,
             'created_at' => now(),
             'updated_at' => now(),
@@ -216,7 +227,7 @@ class ObsahPravidlaTest extends TestCase
         $this->assertSame('Krka, Chorvatsko', $v[7], 'Poznámka je ta, která ze `subtitle` vychází.');
         $this->assertSame(3, $v[6]);
         // Fotky vzpomínky pro dlaždice — dřív karta brala náhodné fotky knihovny.
-        $this->assertSame(['1', '2', '3'], $v[9]);
+        $this->assertSame($fotky, $v[9]);
         $this->assertSame('2021-08-16', $v[10]);
     }
 

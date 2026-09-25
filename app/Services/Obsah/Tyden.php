@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Models\Transaction;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -211,20 +212,37 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->pluck('location_country_code', 'location_country')
             : collect();
 
-        // Bez trezoru: země ze skryté fotky by prozradila, kde vznikla.
-        $zeme = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+        /*
+         * Bez trezoru: země ze skryté fotky by prozradila, kde vznikla.
+         *
+         * Sčítá databáze. Dřív se kvůli pár řádkům zemí natáhla při každém
+         * načtení týdne celá knihovna s polohou.
+         */
+        $fotkyZemi = fn () => DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
             ->where('is_hidden', false)
-            ->whereNotNull('location_country')->where('location_country', '!=', '')
-            ->get(['location_country', 'location_name', 'taken_at', 'uploaded_at'])
+            ->whereNotNull('location_country')->where('location_country', '!=', '');
+
+        $mista = $fotkyZemi()
+            ->whereNotNull('location_name')->where('location_name', '!=', '')
+            ->selectRaw('location_country, location_name, COUNT(*) AS pocet')
+            ->groupBy('location_country', 'location_name')
+            ->get()
+            ->groupBy('location_country');
+
+        $zeme = $fotkyZemi()
+            ->selectRaw('location_country, COUNT(*) AS pocet, MIN(taken_at) AS prvni_porizena, MIN(uploaded_at) AS prvni_nahrana')
             ->groupBy('location_country')
-            ->map(fn (Collection $f, string $nazev) => [
-                $nazev,
-                (string) ($kody[$nazev] ?? ''),
-                $this->prvniRok($f),
-                $f->count(),
-                $f->pluck('location_name')->filter()->countBy()->sortDesc()->keys()->take(5)->values()->all(),
+            ->get()
+            ->map(fn (object $z) => [
+                (string) $z->location_country,
+                (string) ($kody[$z->location_country] ?? ''),
+                $this->prvniRok($z->prvni_porizena, $z->prvni_nahrana),
+                (int) $z->pocet,
+                ($mista[$z->location_country] ?? collect())
+                    ->sortBy([['pocet', 'desc'], ['location_name', 'asc']])
+                    ->pluck('location_name')->take(5)->values()->all(),
             ])
-            ->sortByDesc(fn (array $z) => $z[3])
+            ->sortBy([[3, 'desc'], [0, 'asc']])
             ->values()
             ->all();
 
@@ -257,21 +275,20 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
      * Datum nahrání se bere až tehdy, když v celé zemi není ani jedna fotka
      * s časem pořízení.
      *
-     * @param  Collection<int, object>  $fotky
+     * Dostává rovnou `MIN(taken_at)` a `MIN(uploaded_at)` z databáze — `MIN`
+     * prázdné hodnoty přeskočí, takže pravidlo zůstává stejné.
      */
-    private function prvniRok(Collection $fotky): int
+    private function prvniRok(mixed $prvniPorizena, mixed $prvniNahrana): int
     {
-        $poridene = $fotky->pluck('taken_at')->filter()
-            ->map(fn ($d) => (int) CarbonImmutable::parse($d)->year);
-
-        if ($poridene->isNotEmpty()) {
-            return (int) $poridene->min();
+        if ($prvniPorizena !== null && $prvniPorizena !== '') {
+            return (int) CarbonImmutable::parse($prvniPorizena)->year;
         }
 
-        $nahrane = $fotky->pluck('uploaded_at')->filter()
-            ->map(fn ($d) => (int) CarbonImmutable::parse($d)->year);
+        if ($prvniNahrana !== null && $prvniNahrana !== '') {
+            return (int) CarbonImmutable::parse($prvniNahrana)->year;
+        }
 
-        return $nahrane->isNotEmpty() ? (int) $nahrane->min() : Cas::ted()->year;
+        return Cas::ted()->year;
     }
 
     /**
@@ -291,23 +308,38 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
         $do = $od->endOfYear();
         $kapitoly = [];
 
-        // Týž počet jako v knihovně — fotky v trezoru se nepočítají.
-        $media = DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
+        /*
+         * Týž počet jako v knihovně — fotky v trezoru se nepočítají.
+         *
+         * Součty dělá databáze: dřív se každým načtením týdne natáhly dva
+         * celé roky knihovny, jen aby se spočítaly. Měsíc je `SUBSTR(DATE(…))`
+         * — platí v MySQL i SQLite (na rozdíl od `strftime`).
+         */
+        $rokMedii = fn () => DB::table('media_items')->where('gallery_space_id', $prostor->id)->whereNull('trashed_at')->whereNull('deleted_at')
             ->where('is_hidden', false)
-            ->whereRaw('COALESCE(taken_at, uploaded_at, created_at) BETWEEN ? AND ?', [$od->toDateTimeString(), $do->toDateTimeString()])
-            ->get(['media_type', 'duration_ms', 'taken_at', 'uploaded_at', 'created_at']);
+            ->whereRaw('COALESCE(taken_at, uploaded_at, created_at) BETWEEN ? AND ?', [$od->toDateTimeString(), $do->toDateTimeString()]);
 
-        if ($media->isNotEmpty()) {
-            $videa = $media->where('media_type', 'video');
-            $minut = (int) round($videa->sum('duration_ms') / 60000);
-            $mesice = $media->countBy(fn ($m) => CarbonImmutable::parse($m->taken_at ?? $m->uploaded_at ?? $m->created_at)->month)->sortDesc();
+        $souhrn = $rokMedii()
+            ->selectRaw("COUNT(*) AS celkem, SUM(CASE WHEN media_type = 'video' THEN 1 ELSE 0 END) AS videi, SUM(CASE WHEN media_type = 'video' THEN COALESCE(duration_ms, 0) ELSE 0 END) AS ms")
+            ->first();
+
+        if ((int) ($souhrn->celkem ?? 0) > 0) {
+            $videi = (int) $souhrn->videi;
+            $minut = (int) round((float) $souhrn->ms / 60000);
+            // Nejplodnější měsíc; při shodě ten dřívější.
+            $mesic = $rokMedii()
+                ->selectRaw('SUBSTR(DATE(COALESCE(taken_at, uploaded_at, created_at)), 6, 2) AS mesic, COUNT(*) AS pocet')
+                ->groupBy('mesic')
+                ->orderByDesc('pocet')
+                ->orderBy('mesic')
+                ->first();
             $alb = DB::table('albums')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')->whereBetween('created_at', [$od, $do])->count();
 
             $kapitoly[] = ['fotky', 'Fotky a videa', 4, 'Kolik jsme toho nafotili.', array_values(array_filter([
-                ['Fotek', $this->cislo($media->count() - $videa->count()), 'za rok '.$rok],
-                $videa->count() ? ['Videí', $this->cislo($videa->count()), intdiv($minut, 60).' h '.($minut % 60).' min záznamu'] : null,
+                ['Fotek', $this->cislo((int) $souhrn->celkem - $videi), 'za rok '.$rok],
+                $videi ? ['Videí', $this->cislo($videi), intdiv($minut, 60).' h '.($minut % 60).' min záznamu'] : null,
                 ['Albumů', $this->cislo($alb), 'založených v roce '.$rok],
-                ['Nejplodnější měsíc', self::MESICE_1[$mesice->keys()->first()], $this->cislo($mesice->first()).' snímků'],
+                ['Nejplodnější měsíc', self::MESICE_1[(int) $mesic->mesic], $this->cislo((int) $mesic->pocet).' snímků'],
             ]))];
         }
 
@@ -342,18 +374,35 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('transactions')) {
-            $pohyby = DB::table('transactions')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
-                ->whereNotIn('state', ['draft', 'rejected'])->whereBetween('occurred_at', [$od->toDateString(), $do->toDateString()])
-                ->selectRaw('type, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka')->groupBy('type')->pluck('castka', 'type');
+            /*
+             * Po měnách, jen zapsané pohyby.
+             *
+             * Eura a koruny se sčítaly dohromady a psaly jako „Kč"; a
+             * `NOT IN (draft, rejected)` bralo i čekající (`pending`), které
+             * kniha (`Transaction::ZAPSANE`) ještě nepočítá. Ukazuje se měna
+             * s nejvíc pohyby — stejně jako u útraty týdne — a že jiné měny
+             * v souhrnu nejsou, se řekne.
+             */
+            $poMenach = DB::table('transactions')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
+                ->whereIn('state', Transaction::ZAPSANE)->whereIn('type', Transaction::VYSLEDKOVE)
+                ->whereBetween('occurred_at', [$od->toDateString(), $do->toDateString()])
+                ->selectRaw('type, COALESCE(currency_from, currency_to, ?) AS mena, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka, COUNT(*) AS n', ['CZK'])
+                ->groupBy('type', 'mena')
+                ->get();
 
-            if ($pohyby->isNotEmpty()) {
+            if ($poMenach->isNotEmpty()) {
+                $meny = $poMenach->groupBy(fn (object $r) => strtoupper((string) $r->mena));
+                $mena = $meny->sortByDesc(fn (Collection $r) => $r->sum('n'))->keys()->first();
+                $pohyby = $meny[$mena]->pluck('castka', 'type');
                 $vydaje = (float) ($pohyby['expense'] ?? 0);
                 $prijmy = (float) ($pohyby['income'] ?? 0);
+                $popisek = $meny->count() > 1 ? 'zapsané v knize · jen v '.$mena : 'zapsané v knize';
+                $castka = fn (float $c) => number_format($c, 0, ',', "\u{00A0}").' '.$this->znak($mena);
 
                 $kapitoly[] = ['finance', 'Finance', 3, 'Roční souhrn bez detailů transakcí.', [
-                    ['Výdaje', $this->kc($vydaje), 'zapsané v knize'],
-                    ['Příjmy', $this->kc($prijmy), 'zapsané v knize'],
-                    ['Rozdíl', $this->kc($prijmy - $vydaje), $prijmy >= $vydaje ? 'zbylo' : 'chybělo'],
+                    ['Výdaje', $castka($vydaje), $popisek],
+                    ['Příjmy', $castka($prijmy), $popisek],
+                    ['Rozdíl', $castka($prijmy - $vydaje), $prijmy >= $vydaje ? 'zbylo' : 'chybělo'],
                 ]];
             }
         }
@@ -415,11 +464,6 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
     private function cislo(int $n): string
     {
         return number_format($n, 0, ',', "\u{00A0}");
-    }
-
-    private function kc(float $castka): string
-    {
-        return number_format($castka, 0, ',', "\u{00A0}").' Kč';
     }
 
     // ——— tento týden ———
@@ -583,7 +627,8 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->where('type', 'expense')
             ->whereNull('deleted_at')
-            ->whereNotIn('state', ['draft', 'rejected'])
+            // Jako kniha: čekající (`pending`) ještě není utracené.
+            ->whereIn('state', Transaction::ZAPSANE)
             ->where('occurred_at', '>=', $od->toDateString())
             ->where('occurred_at', '<', $do->toDateString())
             ->selectRaw('COALESCE(currency_from, ?) AS mena, SUM(amount_from) AS soucet, COUNT(*) AS n', ['CZK'])

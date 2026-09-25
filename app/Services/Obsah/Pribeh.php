@@ -6,11 +6,14 @@ use App\Http\Controllers\Api\Galerie\TiskController;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
+use App\Models\Transaction;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use App\Support\Trezor;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -282,12 +285,12 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function dvojiceId(GallerySpace $prostor): array
     {
-        $lide = $prostor->members()->pluck('users.id')->all();
-        $ja = auth()->id();
-
-        if ($ja !== null && in_array($ja, $lide, false)) {
-            $lide = array_merge([$ja], array_values(array_filter($lide, fn ($id) => (int) $id !== (int) $ja)));
-        }
+        // Jen dvojice: host, který přišel dřív než partner, měl na obrazovce
+        // partnerovy hvězdičky. `FilmyVeStavu` zapisuje jen `a` (divák), takže
+        // pořadí druhého místa zápis neovlivní.
+        $lide = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->map(fn ($clen) => (int) $clen->id)
+            ->all();
 
         return [$lide[0] ?? null, $lide[1] ?? null];
     }
@@ -385,13 +388,10 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function dnySDaty(GallerySpace $prostor): array
     {
-        $dny = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereNotNull('taken_at')
-            ->get(['taken_at'])
-            ->countBy(fn (MediaItem $m) => CarbonImmutable::parse($m->taken_at)->format('Y-m-d'))
+        // Denní součty z databáze, ne celá knihovna v paměti. Při shodě
+        // vyhrává novější den — „od nejnovějšího".
+        $dny = collect($this->fotekPoDnech($prostor))
+            ->sortKeysDesc()
             ->sortDesc()
             ->take(3)
             ->keys();
@@ -434,8 +434,13 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('transactions')) {
+            // Jen skutečné platby: smazaný řádek ani směna či převod mezi
+            // vlastními peněženkami nejsou krok dne („Směna na eura, 8 000 Kč").
             $platby = DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)
+                ->whereNull('deleted_at')
+                ->whereIn('type', Transaction::VYSLEDKOVE)
+                ->whereIn('state', Transaction::ZAPSANE)
                 ->whereBetween('occurred_at', [$od, $do])
                 ->orderBy('occurred_at')
                 ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'currency_from', 'place']);
@@ -456,8 +461,9 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('journal_entries')) {
-            $zapisy = DB::table('journal_entries')
-                ->where('gallery_space_id', $prostor->id)
+            // Stejné pravidlo jako Dnes: soukromý zápis druhého ani smazaný
+            // zápis do rekonstrukce nepatří — jeho název je obsah deníku.
+            $zapisy = $this->viditelneZapisy($prostor)
                 ->whereDate('entry_date', $den->toDateString())
                 ->get(['title', 'created_at']);
 
@@ -925,14 +931,47 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
     /** @return array<string, int> */
     private function poRocich(GallerySpace $prostor): array
     {
+        // Z denních součtů, ne z celé knihovny: dřív se při každém načtení
+        // příběhu natáhly do paměti všechny fotky, jen aby se spočítaly.
+        $roky = [];
+
+        foreach ($this->fotekPoDnech($prostor) as $den => $pocet) {
+            $rok = substr($den, 0, 4);
+            $roky[$rok] = ($roky[$rok] ?? 0) + $pocet;
+        }
+
+        return $roky;
+    }
+
+    /**
+     * Kolik fotek je z kterého dne: `{ 'Y-m-d': počet }`, sečtené v databázi.
+     *
+     * Viditelné fotky s časem pořízení — bez koše a bez trezoru. `DATE()` platí
+     * v MySQL i SQLite a bere uložený čas stejně jako dřívější
+     * `CarbonImmutable::parse($m->taken_at)`.
+     *
+     * @return array<string, int>
+     */
+    private function fotekPoDnech(GallerySpace $prostor): array
+    {
+        return $this->viditelneFotky($prostor)
+            ->selectRaw('DATE(taken_at) as den, COUNT(*) as pocet')
+            ->groupBy('den')
+            ->orderBy('den')
+            ->pluck('pocet', 'den')
+            ->mapWithKeys(fn ($pocet, $den) => [substr((string) $den, 0, 10) => (int) $pocet])
+            ->all();
+    }
+
+    /** Fotky, ze kterých příběh počítá — základ dotazu bez sloupců. */
+    private function viditelneFotky(GallerySpace $prostor): Builder
+    {
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
             ->where('is_hidden', false)
             ->whereNotNull('taken_at')
-            ->get(['taken_at'])
-            ->countBy(fn (MediaItem $m) => (string) CarbonImmutable::parse($m->taken_at)->year)
-            ->all();
+            ->toBase();
     }
 
     /**
@@ -947,40 +986,45 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function rokyPribehu(GallerySpace $prostor): array
     {
-        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
-            ->where('is_hidden', false)
-            ->whereNotNull('taken_at')
-            ->toBase()
-            ->get(['taken_at', 'location_name']);
+        /*
+         * Počty sčítá databáze, ne PHP.
+         *
+         * Dřív se při každém načtení příběhu natáhla celá knihovna (čas
+         * a místo každé fotky) jen proto, aby se spočítala. Teď chodí jeden
+         * řádek za den a jeden za dvojici rok–místo.
+         */
+        $dny = collect($this->fotekPoDnech($prostor));
 
-        if ($media->isEmpty()) {
+        if ($dny->isEmpty()) {
             return [];
         }
+
+        $mista = $this->viditelneFotky($prostor)
+            ->whereNotNull('location_name')
+            ->whereRaw("TRIM(location_name) <> ''")
+            ->selectRaw('SUBSTR(DATE(taken_at), 1, 4) as rok, location_name, COUNT(*) as pocet')
+            ->groupBy('rok', 'location_name')
+            ->get()
+            ->groupBy(fn (object $r) => (string) (int) $r->rok);
 
         $zapisy = $this->zapisyPoRocich($prostor);
         $cesty = Tabulky::je('trips')
             ? DB::table('trips')->where('gallery_space_id', $prostor->id)->get(['start_date', 'end_date'])
             : collect();
 
-        return $media
-            ->groupBy(fn (object $m) => (string) CarbonImmutable::parse($m->taken_at)->year)
+        return $dny
+            ->groupBy(fn (int $pocet, string $den) => (string) (int) substr($den, 0, 4), true)
             ->sortKeys()
-            ->map(function (Collection $fotky, string $rok) use ($zapisy, $cesty) {
-                $den = $fotky->countBy(fn (object $m) => CarbonImmutable::parse($m->taken_at)->toDateString())
-                    ->sortDesc()
-                    ->keys()
-                    ->first();
+            ->map(function (Collection $dnyRoku, string $rok) use ($mista, $zapisy, $cesty) {
+                // Nejplodnější den; při shodě ten dřívější, ať je výsledek pevný.
+                $den = $dnyRoku->sortKeys()->sortDesc()->keys()->first();
                 $kdy = CarbonImmutable::parse($den);
 
                 return [
-                    'fotek' => $fotky->count(),
-                    'mista' => $fotky->pluck('location_name')
-                        ->filter(fn ($misto) => trim((string) $misto) !== '')
-                        ->countBy()
-                        ->sortDesc()
-                        ->keys()
+                    'fotek' => (int) $dnyRoku->sum(),
+                    'mista' => ($mista[$rok] ?? collect())
+                        ->sortBy([['pocet', 'desc'], ['location_name', 'asc']])
+                        ->pluck('location_name')
                         ->take(3)
                         ->values()
                         ->all(),
@@ -1001,12 +1045,34 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        // Jen zápisy, které divák smí číst — soukromý zápis druhého ani smazaný
+        // se do „kolik jsme toho roku napsali" nepočítá. Sečte to databáze:
+        // `SUBSTR(DATE(…))` platí v MySQL i SQLite (na rozdíl od `strftime`).
+        return $this->viditelneZapisy($prostor)
+            ->whereNotNull('entry_date')
+            ->selectRaw('SUBSTR(DATE(entry_date), 1, 4) as rok, COUNT(*) as pocet')
+            ->groupBy('rok')
+            ->pluck('pocet', 'rok')
+            ->map(fn ($pocet) => (int) $pocet)
+            ->mapWithKeys(fn (int $pocet, $rok) => [(string) (int) $rok => $pocet])
+            ->all();
+    }
+
+    /**
+     * Zápisy deníku, které přihlášený smí vidět — stejné pravidlo jako Dnes.
+     *
+     * Sdílené všech, soukromé jen vlastní; smazané nikdy. Bez přihlášeného
+     * (konzole) jen sdílené.
+     */
+    private function viditelneZapisy(GallerySpace $prostor): Builder
+    {
+        $ja = auth()->id();
+
         return DB::table('journal_entries')
             ->where('gallery_space_id', $prostor->id)
-            ->whereNotNull('entry_date')
-            ->get(['entry_date'])
-            ->countBy(fn (object $z) => (string) CarbonImmutable::parse($z->entry_date)->year)
-            ->all();
+            ->whereNull('deleted_at')
+            ->where(fn ($q) => $q->where('visibility', '!=', 'private')
+                ->when($ja !== null, fn ($v) => $v->orWhere('created_by', $ja)));
     }
 
     private function stavKapitoly(string $stav): string

@@ -3,8 +3,11 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Models\MediaItem;
 use App\Support\Cas;
+use App\Support\SpaceContext;
 use App\Support\Tabulky;
+use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
@@ -175,18 +178,37 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        return DB::table('generated_memories')
+        $radky = DB::table('generated_memories')
             ->where('gallery_space_id', $prostor->id)
             // Zamítnuté („už nezobrazovat" ve starém rozhraní) se nevracejí.
             ->whereNull('dismissed_at')
             ->orderByDesc('occurs_on')
             ->limit(40)
-            ->get()
-            ->map(function (object $v) {
+            ->get();
+
+        // `?: []` propustí skalár a `count()` nad řetězcem je pád.
+        $fotkyVzpominek = $radky->mapWithKeys(function (object $v) {
+            $fotky = json_decode((string) ($v->media_ids ?? '[]'), true);
+
+            return [$v->id => is_array($fotky) ? array_map('strval', array_filter($fotky, 'is_scalar')) : []];
+        });
+
+        $videt = $this->viditelneFotky($prostor, $fotkyVzpominek->flatten()->unique()->values()->all());
+
+        return $radky
+            ->map(function (object $v) use ($fotkyVzpominek, $videt) {
                 $kdy = CarbonImmutable::parse($v->occurs_on);
-                // `?: []` propustí skalár a `count()` nad řetězcem je pád.
-                $fotky = json_decode((string) ($v->media_ids ?? '[]'), true);
-                $fotky = is_array($fotky) ? $fotky : [];
+                /*
+                 * `media_ids` jsou zamrzlé z okamžiku, kdy vzpomínka vznikla.
+                 *
+                 * Fotka, která mezitím odešla do trezoru, koše nebo byla
+                 * smazaná, v nich zůstává — a karta ji ukazovala v dlaždicích
+                 * i v počtu. Počítá se jen to, co je vidět teď; pořadí zůstává.
+                 */
+                $fotky = array_values(array_filter(
+                    $fotkyVzpominek[$v->id] ?? [],
+                    fn (string $uuid) => isset($videt[$uuid]),
+                ));
 
                 return [
                     $v->uuid,
@@ -211,6 +233,33 @@ class Pravidla implements MaPrazdneKolekce, PoskytovatelObsahu
                 ];
             })
             ->values()
+            ->all();
+    }
+
+    /**
+     * Které z těch fotek jsou teď vidět — jedním dotazem za všechny vzpomínky.
+     *
+     * Ne v koši, ne smazané (`SoftDeletes` modelu), z tohoto prostoru;
+     * skryté jen s odemčeným trezorem.
+     *
+     * @param  list<string>  $uuids
+     * @return array<string, true>
+     */
+    private function viditelneFotky(GallerySpace $prostor, array $uuids): array
+    {
+        if ($uuids === []) {
+            return [];
+        }
+
+        $trezor = Trezor::odemcen();
+
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('uuid', $uuids)
+            ->whereNull('trashed_at')
+            ->when(! $trezor, fn ($q) => $q->where('is_hidden', false))
+            ->pluck('uuid')
+            ->mapWithKeys(fn ($uuid) => [(string) $uuid => true])
             ->all();
     }
 

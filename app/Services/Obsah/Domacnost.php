@@ -8,6 +8,7 @@ use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
 use App\Models\HousePantryItem;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -532,7 +533,10 @@ class Domacnost implements MaPrazdneKolekce, PoskytovatelObsahu
         $prvni = (int) (auth()->id() ?? $prostor->owner_id);
 
         // Řadí se v PHP: `orderByRaw` přes `belongsToMany` pořadí nedrží (viz `Klid::jmena`).
-        $lide = $prostor->members()->pluck('users.id')
+        // Jen dvojice, stejně jako zápis v `DomacnostVeStavu::zapisTyden` — host
+        // s nižším id by jinak na obrazovce seděl na místě partnera a oprava
+        // partnera by se četla z jiného řádku, než kam se zapsala.
+        $lide = app(PristupDoGalerie::class)->dvojice($prostor)->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->sortBy(fn (int $id) => [$id === $prvni ? 0 : 1, $id])
             ->values()

@@ -210,8 +210,11 @@ class TichaPravidla
             return [];
         }
 
+        // Bez smazaných: dotazovač měkké mazání modelu nezná a smazaný zápis
+        // by „vyvracel" zvyk, který dvojice drží.
         $casy = DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
             ->where('created_at', '>=', $od)
             ->limit(3000)
             ->pluck('created_at');
@@ -258,6 +261,7 @@ class TichaPravidla
 
         $vydaje = DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
+            ->whereNull('deleted_at')
             ->where('type', 'expense')
             ->where('occurred_at', '>=', $od)
             ->whereNotNull('amount_from')

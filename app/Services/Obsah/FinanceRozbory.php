@@ -2,8 +2,10 @@
 
 namespace App\Services\Obsah;
 
+use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
@@ -181,7 +183,7 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereNull('deleted_at')
             ->where(fn ($q) => $q->whereNull('ends_on')->orWhere('ends_on', '>=', $dnes->toDateString()))
             ->whereNotNull('day_of_month')
-            ->get(['name', 'type', 'amount', 'day_of_month']);
+            ->get(['name', 'type', 'amount', 'day_of_month', 'starts_on']);
 
         if ($platby->isEmpty()) {
             return [];
@@ -221,6 +223,13 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
                 $poradi = (int) $dnes->diffInDays($splatnost, false);
 
                 if ($poradi < 1 || $poradi > 60) {
+                    continue;
+                }
+
+                // Platba, která teprve začne (nový nájem od listopadu), se
+                // před svým začátkem neplatí — jinak by čára klesala o splátky,
+                // které nikdo nepošle.
+                if ($p->starts_on !== null && $splatnost->toDateString() < substr((string) $p->starts_on, 0, 10)) {
                     continue;
                 }
 
@@ -445,10 +454,11 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        // Jen limity z rozpočtů, které divák vidí — partnerův soukromý limit
+        // by z „nečekaného" výdaje udělal plánovaný, a prozradil by, na co ho má.
         $sLimitem = Tabulky::je('budget_category_limits')
             ? DB::table('budget_category_limits as l')
-                ->join('budgets as r', 'r.id', '=', 'l.budget_id')
-                ->where('r.gallery_space_id', $prostor->id)
+                ->whereIn('l.budget_id', $this->viditelneRozpocty($prostor))
                 ->pluck('finance_category_id')
             : collect();
 
@@ -518,10 +528,12 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
 
+        // Soukromý rozpočet druhého (jména i limity) sem nepatří — a smazaný
+        // rozpočet už žádný odhad nenese.
         $limity = DB::table('budget_category_limits as l')
             ->join('budgets as r', 'r.id', '=', 'l.budget_id')
             ->join('finance_categories as k', 'k.id', '=', 'l.finance_category_id')
-            ->where('r.gallery_space_id', $prostor->id)
+            ->whereIn('r.id', $this->viditelneRozpocty($prostor))
             ->get(['l.finance_category_id', 'l.amount', 'k.name', 'r.created_by']);
 
         if ($limity->isEmpty()) {
@@ -756,9 +768,10 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $dnes = CarbonImmutable::now();
 
+        // Fondy jen z viditelných a nesmazaných rozpočtů: „Její překvapení"
+        // z partnerova soukromého rozpočtu by jinak viděl ten, pro koho je.
         return DB::table('budget_goals as c')
-            ->join('budgets as r', 'r.id', '=', 'c.budget_id')
-            ->where('r.gallery_space_id', $prostor->id)
+            ->whereIn('c.budget_id', $this->viditelneRozpocty($prostor))
             ->orderBy('c.sort_order')
             ->get(['c.uuid', 'c.name', 'c.target_amount', 'c.saved_amount', 'c.target_on', 'c.note'])
             ->map(function (object $c) use ($dnes) {
@@ -819,7 +832,8 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
         // Kolik lidí na cestě doopravdy bylo. `max(2, …)` vymyslel druhého
         // člověka i v prostoru, kde je jeden — a každé „na osobu a den"
         // tím spadlo na polovinu.
-        $lidi = max(1, $prostor->members()->count());
+        // Host galerie na cestě nebyl — „na osobu" se dělí jen dvojicí.
+        $lidi = max(1, app(PristupDoGalerie::class)->dvojice($prostor)->count());
         $vysledek = [];
         $predchozi = null;
 
@@ -891,11 +905,25 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         return (float) DB::table('budget_category_limits as l')
-            ->join('budgets as r', 'r.id', '=', 'l.budget_id')
-            ->where('r.gallery_space_id', $prostor->id)
+            ->whereIn('l.budget_id', $this->viditelneRozpocty($prostor))
             ->where('l.finance_category_id', $kategorie)
-            ->orderByDesc('r.id')
+            ->orderByDesc('l.budget_id')
             ->value('l.amount');
+    }
+
+    /**
+     * Rozpočty, ze kterých se smí počítat — viz `FinanceAccess::viditelneRozpocty()`.
+     *
+     * Bez paměti mezi voláními: poskytovatel může v kontejneru žít déle než
+     * jeden požadavek, a seznam uložený pro jednoho diváka by dostal druhý.
+     *
+     * @return list<int>
+     */
+    private function viditelneRozpocty(GallerySpace $prostor): array
+    {
+        $ja = auth()->id();
+
+        return FinanceAccess::viditelneRozpocty((int) $prostor->id, $ja !== null ? (int) $ja : null);
     }
 
     /**
@@ -913,10 +941,10 @@ class FinanceRozbory implements MaPrazdneKolekce, PoskytovatelObsahu
             return [null, null];
         }
 
-        $ja = (int) (auth()->id() ?? $prostor->owner_id);
-        $lide = $prostor->members()->pluck('users.id')
-            ->map(fn ($id) => (int) $id)
-            ->sortBy(fn (int $id) => [$id === $ja ? 0 : 1, $id])
+        // Jen dvojice, ne hosté: host s nižším id seděl na místě `k`
+        // a partnerovo čerpání z obálky zmizelo.
+        $lide = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->map(fn ($clen) => (int) $clen->id)
             ->values();
 
         $partneri = DB::table('partners')

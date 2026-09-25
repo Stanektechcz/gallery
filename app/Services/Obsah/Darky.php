@@ -3,6 +3,7 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -58,8 +59,13 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $jmena = $prostor->members()->pluck('users.name', 'users.id')->all();
+        // Jen dvojice, jako zápis (`DarkyVeStavu`): dárek bez určené osoby je
+        // pro „toho druhého", a tím byl host, když přišel do prostoru dřív.
+        $jmena = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user())
+            ->mapWithKeys(fn ($clen) => [(int) $clen->id => (string) $clen->name])
+            ->all();
         $polozky = $this->polozky($prostor);
+        $this->lide = $this->lidePolozek($prostor, $polozky);
 
         $prilezitosti = $this->prilezitosti($prostor);
 
@@ -308,9 +314,32 @@ class Darky implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function lide(): Collection
     {
-        return $this->lide ??= Tabulky::je('people')
-            ? DB::table('people')->pluck('name', 'id')
-            : collect();
+        return $this->lide ?? collect();
+    }
+
+    /**
+     * Jména jen těch lidí, na které dárky prostoru ukazují — a jen z prostoru.
+     *
+     * Dřív se tu natáhli všichni lidé **všech** prostorů: kromě zbytečné
+     * práce tím dárek s cizím `person_id` dostal jméno člověka z jiné galerie.
+     * Plní se znovu při každém sestavení, ať poskytovatel, který v kontejneru
+     * přežije požadavek, nepodstrčí jména z minulého.
+     *
+     * @param  Collection<int, object>  $polozky
+     * @return Collection<int, string>
+     */
+    private function lidePolozek(GallerySpace $prostor, Collection $polozky): Collection
+    {
+        $ids = $polozky->pluck('person_id')->filter()->map(fn ($id) => (int) $id)->unique()->values();
+
+        if ($ids->isEmpty() || ! Tabulky::je('people')) {
+            return collect();
+        }
+
+        return DB::table('people')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('id', $ids)
+            ->pluck('name', 'id');
     }
 
     private function odkud(object $d): string

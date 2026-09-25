@@ -5,6 +5,7 @@ namespace App\Services\Obsah;
 use App\Models\CycleDay;
 use App\Models\CycleSetting;
 use App\Models\GallerySpace;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -177,7 +178,9 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
-        $dnes = CarbonImmutable::now();
+        // Dnešek dvojice: v UTC je po pražské půlnoci ještě včerejšek a výročí
+        // by den po něm tvrdilo „letos" místo „před rokem".
+        $dnes = Cas::dnes();
 
         $ja = auth()->id();
 
@@ -236,8 +239,17 @@ class Denik implements MaPrazdneKolekce, PoskytovatelObsahu
             ->limit(30)
             ->get()
             ->filter(function (CycleDay $d) use ($ja, $urovne) {
-                return $d->user_id === $ja
-                    || ($urovne[$d->user_id] ?? CycleSetting::SHARE_NONE) !== CycleSetting::SHARE_NONE;
+                if ($d->user_id === $ja) {
+                    return true;
+                }
+
+                $uroven = $urovne[$d->user_id] ?? CycleSetting::SHARE_NONE;
+
+                // „Jen termíny" jsou začátky cyklu. Den jen s poznámkou by se
+                // vypsal jako „Záznam" bez textu — a i tak by prozradil, že
+                // ten den něco bylo.
+                return $uroven === CycleSetting::SHARE_FULL
+                    || ($uroven === CycleSetting::SHARE_DATES && $d->is_cycle_start);
             })
             ->map(function (CycleDay $d) use ($ja, $urovne) {
                 $cele = $d->user_id === $ja
