@@ -377,6 +377,54 @@ class StavTest extends TestCase
     }
 
     /**
+     * Zápis, který vznikl pod jiným účtem, se nezapíše.
+     *
+     * Fronta prohlížeče posílala zápisy bez signálu s tím, kdo byl přihlášený
+     * při odeslání. Na sdíleném telefonu tak to, co napsal on, skončilo po jeho
+     * odhlášení a jejím přihlášení v galerii pod jejím jménem. Klient teď
+     * posílá autora a server jiného nepustí — i partnera ze stejné galerie
+     * (autor se zapisuje k deníku i k úkolům), i účet z cizí.
+     */
+    public function test_zapis_pod_cizim_uctem_se_nezapise(): void
+    {
+        $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['zkouska' => ['jeho']]])->assertOk();
+
+        $cizi = User::factory()->create();
+
+        foreach ([$this->adri->id, $cizi->id, ['pole']] as $autor) {
+            $this->actingAs($this->maki)
+                ->patchJson('/api/state', ['data' => ['zkouska' => ['podvrzene']], 'ucet' => $autor])
+                ->assertStatus(422)
+                ->assertJsonPath('jiny_ucet', true);
+        }
+
+        $this->actingAs($this->maki)->getJson('/api/state')
+            ->assertOk()
+            ->assertJsonPath('data.zkouska', ['jeho'])
+            ->assertJsonPath('rev', 1);
+    }
+
+    /**
+     * Vlastní zápis projde — i s identifikátorem jako textem.
+     *
+     * Klient si účet bere z odpovědi serveru i z localStorage, kde je z čísla
+     * text. A čtení stavu mu říká, pod kým je karta přihlášená: token se
+     * mění i mimo přihlášení heslem (otisk prstu).
+     */
+    public function test_vlastni_zapis_s_uctem_projde_a_cteni_rekne_kdo(): void
+    {
+        $this->actingAs($this->maki)
+            ->patchJson('/api/state', ['data' => ['zkouska' => ['moje']], 'ucet' => (string) $this->maki->id])
+            ->assertOk()
+            ->assertJsonPath('rev', 1);
+
+        $this->actingAs($this->maki)->getJson('/api/state')
+            ->assertOk()
+            ->assertJsonPath('data.zkouska', ['moje'])
+            ->assertJsonPath('ucet', $this->maki->id);
+    }
+
+    /**
      * Smazání stavu smaže i soukromou (šifrovanou) část a revize klíčů.
      *
      * `private` ani `rev_keys` nejsou v `$fillable`, takže je `update()` tiše

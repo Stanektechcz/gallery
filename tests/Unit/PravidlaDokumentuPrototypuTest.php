@@ -777,8 +777,10 @@ class PravidlaDokumentuPrototypuTest extends TestCase
     {
         $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
 
-        $this->assertStringContainsString('if (cekal && Object.keys(cekal).length && stari < TYDEN) pending = cekal;', $api);
+        // I s tím, kdo ho napsal — po obnovení nesmí odejít pod jiným účtem.
+        $this->assertStringContainsString('if (cekal && Object.keys(cekal).length && stari < TYDEN) { pending = cekal; pendingUcet = raw.pendingUcet || null; }', $api);
         $this->assertStringContainsString('pending: ceka ? pending : undefined,', $api);
+        $this->assertStringContainsString('pendingUcet: ceka && pendingUcet ? pendingUcet : undefined', $api);
         $this->assertStringContainsString('if (Object.keys(pending).length) { merge(pending); schedule(0); }', $api);
     }
 

@@ -51,6 +51,7 @@
    */
   var subs = (window.__galerieSubs = window.__galerieSubs || []);
   var pending = {};      // patch, který čeká na odeslání
+  var pendingUcet = null; // kdo ho napsal — viz „Čí je čekající zápis"
   var timer = null;
   var inflight = false;
   var lastSync = null;
@@ -79,7 +80,7 @@
         rev = raw.rev || 0;
         var cekal = raw.pending && typeof raw.pending === 'object' ? raw.pending : null;
         var stari = raw.pendingAt ? Date.now() - raw.pendingAt : 0;
-        if (cekal && Object.keys(cekal).length && stari < TYDEN) pending = cekal;
+        if (cekal && Object.keys(cekal).length && stari < TYDEN) { pending = cekal; pendingUcet = raw.pendingUcet || null; }
         return raw.data || {};
       }
     } catch (e) {}
@@ -117,11 +118,63 @@
       localStorage.setItem(LS, JSON.stringify({
         data: ulozit, rev: rev, updated_at: new Date().toISOString(),
         pending: ceka ? pending : undefined,
-        pendingAt: ceka ? Date.now() : undefined
+        pendingAt: ceka ? Date.now() : undefined,
+        pendingUcet: ceka && pendingUcet ? pendingUcet : undefined
       }));
     } catch (e) {}
   }
   data = readLocal();
+
+  /*
+   * Čí je čekající zápis.
+   *
+   * Zápis bez signálu (tady v `pending` i ve frontě workera) odcházel s tím,
+   * kdo byl přihlášený **při odeslání**. Na sdíleném zařízení tak to, co
+   * napsala ona, po jejím odhlášení a jeho přihlášení skončilo v jeho galerii
+   * a pod jeho jménem — i soukromé klíče.
+   *
+   * Každý zápis proto nese autora (`ucet`) a server jiný účet nepustí.
+   * Kdo je přihlášený, ví s jistotou jen server (`ucet` v odpovědi na čtení
+   * stavu, `user` při přihlášení heslem); `kdo` platí jen pro token, ke
+   * kterému ho server potvrdil. Otisk prstu mění token mimo `signIn` — pak
+   * se čekající zápis před odesláním nejdřív zeptá, komu token patří.
+   */
+  var kdo = null;
+  try { kdo = localStorage.getItem('galerie.ucet') || null; } catch (e) {}
+  if (!kdo && !window.GALERIE_API_TOKEN && window.GALERIE_USER && window.GALERIE_USER.id != null) kdo = String(window.GALERIE_USER.id);
+  var kdoToken = window.GALERIE_API_TOKEN || null;
+  var overenyToken; // na který token se karta už ptala — podruhé rozhodne až server
+
+  function tokenBezUctu() { return (window.GALERIE_API_TOKEN || null) !== kdoToken; }
+  function kdoTed() { return tokenBezUctu() ? null : kdo; }
+  // Jednou za token; bez signálu se zápis pošle s autorem a cizí odmítne server.
+  function overUcet() {
+    var t = window.GALERIE_API_TOKEN || null;
+    if (overenyToken === t || !window.GalerieApi) return false;
+    overenyToken = t;
+    window.GalerieApi.load();
+    return true;
+  }
+
+  // Server řekl, komu patří aktuální token. Cizí čekající zápis se zahodí —
+  // neodejde pod nikým jiným; zápis bez autora (vznikl, když to karta nevěděla) se přivlastní.
+  function prevezmiUcet(id) {
+    if (id === undefined || id === null || id === '') return;
+    var novy = String(id);
+    if (pendingUcet && pendingUcet !== novy) {
+      pending = {}; pendingUcet = null; poJednom = false; odmitnutyToken = undefined;
+    }
+    if (!pendingUcet && Object.keys(pending).length) pendingUcet = novy;
+    kdo = novy;
+    kdoToken = window.GALERIE_API_TOKEN || null;
+    try { localStorage.setItem('galerie.ucet', novy); } catch (e) {}
+    writeLocal();
+  }
+  function teloZapisu(patch, ucet) {
+    var t = { data: patch, rev: rev };
+    if (ucet) t.ucet = ucet;
+    return JSON.stringify(t);
+  }
 
   function csrf() {
     var m = document.querySelector('meta[name="csrf-token"]');
@@ -252,7 +305,12 @@
     return p;
   }
   // Neodeslaný patch zpátky do fronty; novější zápis téhož klíče má přednost.
-  function vratDoFronty(patch) {
+  // Jen do fronty téhož autora — mezitím se mohl přihlásit někdo jiný.
+  function vratDoFronty(patch, zapsal) {
+    var ted = kdoTed();
+    if (zapsal && ted && zapsal !== ted) return;
+    if (!Object.keys(pending).length) pendingUcet = zapsal || pendingUcet;
+    else if (zapsal && pendingUcet && zapsal !== pendingUcet) return;
     Object.keys(patch).forEach(function (k) {
       if ((k === '__odebrane' || k === '__zmenene' || k === 'xRows') && pending[k] && typeof pending[k] === 'object' && patch[k] && typeof patch[k] === 'object') {
         pending[k] = Object.assign({}, patch[k], pending[k]);
@@ -265,7 +323,8 @@
   function odhlaseno(stav, zprava) {
     window.GALERIE_API_TOKEN = null;
     odmitnutyToken = null;
-    try { localStorage.removeItem('galerie.token'); } catch (e) {}
+    kdo = null; kdoToken = null;
+    try { localStorage.removeItem('galerie.token'); localStorage.removeItem('galerie.ucet'); } catch (e) {}
     zahodKopieDat();
     ohlas('galerie-odhlaseno', { status: stav, zprava: zprava || '' });
     notify();
@@ -276,7 +335,9 @@
    * Po odhlášení nebo odvolání zařízení („odhlásit ostatní zařízení" kvůli
    * ztracenému telefonu) zůstávala: stav v localStorage a odpovědi API
    * v paměti workera, které se bez signálu podávaly dál. Rozepsané změny
-   * zůstávají v paměti karty a po přihlášení odejdou.
+   * zůstávají v paměti karty a odejdou, jen když se přihlásí týž účet
+   * (`prevezmiUcet`); výslovné odhlášení je nejdřív doručí, pak zahodí
+   * i frontu workera (`signOut`).
    */
   function zahodKopieDat() {
     try { localStorage.removeItem(LS); } catch (e) {}
@@ -289,6 +350,65 @@
     } catch (e) {}
   }
 
+  /*
+   * Odhlášení a fronta workera.
+   *
+   * Zápisy bez signálu ležely v IndexedDB i po odhlášení — s tokenem a se
+   * vším, co v nich bylo, i soukromými klíči — a po přihlášení kohokoli
+   * odešly. Odhlášení je proto nejdřív doručí (token ještě platí), pak
+   * teprve zruší přihlášení a frontu smaže. Čeká se jen chvíli: bez signálu
+   * se nedoručí stejně a odhlášení nesmí viset.
+   */
+  var CEKANI_NA_FRONTU = 4000;
+  var QUEUE_DB = 'galerie-queue'; // stejné jméno jako v sw.js
+  var odhlasuji = false;
+
+  function odesliFrontuWorkeru() {
+    var sw = navigator.serviceWorker;
+    if (!sw || !sw.controller) return false;
+    // S aktuálním přihlášením a s tím, čí je — worker token vymění jen u zápisů téhož účtu.
+    var auth = window.GALERIE_API_TOKEN ? 'Bearer ' + window.GALERIE_API_TOKEN : null;
+    try { sw.controller.postMessage({ type: 'galerie-flush', auth: auth, ucet: kdoTed() }); } catch (e) { return false; }
+    return true;
+  }
+  function pockejNaFrontuWorkera() {
+    var sw = navigator.serviceWorker;
+    if (!sw || !sw.controller) return Promise.resolve();
+    return new Promise(function (hotovo) {
+      var konec = setTimeout(dal, CEKANI_NA_FRONTU);
+      function dal() { clearTimeout(konec); sw.removeEventListener('message', naZpravu); hotovo(); }
+      function naZpravu(e) { if (e.data && e.data.type === 'galerie-sync-done') dal(); }
+      sw.addEventListener('message', naZpravu);
+      if (!odesliFrontuWorkeru()) dal();
+    });
+  }
+  function dorucPredOdhlasenim() {
+    var cekani = Promise.resolve();
+    var nejistyUcet = pendingUcet && tokenBezUctu();
+    if (Object.keys(pending).length && !nejistyUcet && odmitnutyToken === undefined) {
+      var zapsal = pendingUcet || kdoTed();
+      var patch = pending;
+      pending = {};
+      cekani = fetch(base + '/state', { method: 'PATCH', headers: headers(), credentials: 'same-origin', body: teloZapisu(patch, zapsal) })
+        .catch(function () {});
+    }
+    return cekani.then(pockejNaFrontuWorkera);
+  }
+  function zahodFrontuWorkera() {
+    // Worker spojení při `versionchange` zavře, takže mazání nečeká.
+    try { if (window.indexedDB) indexedDB.deleteDatabase(QUEUE_DB); } catch (e) {}
+  }
+  // Adresa odběru upozornění tohoto zařízení — server podle ní pozná, který odběr je jeho.
+  function adresaOdberu() {
+    try {
+      if (!navigator.serviceWorker || !navigator.serviceWorker.getRegistration || !('PushManager' in window)) return Promise.resolve(null);
+      return navigator.serviceWorker.getRegistration()
+        .then(function (reg) { return reg && reg.pushManager ? reg.pushManager.getSubscription() : null; })
+        .then(function (sub) { return sub && sub.endpoint ? sub.endpoint : null; })
+        .catch(function () { return null; });
+    } catch (e) { return Promise.resolve(null); }
+  }
+
   function flush() {
     timer = null;
     if (inflight) { schedule(400); return; }
@@ -296,7 +416,10 @@
     // Čeká se na přihlášení: se stejným (žádným) tokenem by to dopadlo stejně.
     if (odmitnutyToken !== undefined && (window.GALERIE_API_TOKEN || null) === odmitnutyToken) return;
     odmitnutyToken = undefined;
+    // Token se změnil mimo přihlášení heslem (otisk): nejdřív zjistit, komu patří.
+    if (mode === 'http' && pendingUcet && tokenBezUctu() && overUcet()) return;
 
+    var zapsal = pendingUcet || kdoTed();
     var patch;
     var hlavniVeFronte = Object.keys(pending).filter(function (k) { return ROZDIL.indexOf(k) < 0; });
     if (poJednom && hlavniVeFronte.length) {
@@ -314,7 +437,7 @@
 
     inflight = true;
     var sTokenem = !!window.GALERIE_API_TOKEN;
-    fetch(base + '/state', { method: 'PATCH', headers: headers(), credentials: 'same-origin', body: JSON.stringify({ data: patch, rev: rev }) })
+    fetch(base + '/state', { method: 'PATCH', headers: headers(), credentials: 'same-origin', body: teloZapisu(patch, zapsal) })
       .then(function (r) {
         if (r.status === 401 || r.status === 403) {
           return r.json().catch(function () { return {}; }).then(function (b) {
@@ -332,6 +455,9 @@
           data = b.data || data; rev = b.rev || rev;
           writeLocal(); notify(); ohlasStret(b.strety || Object.keys(patch));
           return null;
+        });
+        if (r.status === 422) return r.json().catch(function () { return {}; }).then(function (b) {
+          throw Object.assign(new Error('HTTP 422'), { status: 422, jinyUcet: !!(b && b.jiny_ucet) });
         });
         if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
         return r.json();
@@ -377,16 +503,25 @@
         lastError = String(e && e.message || e);
 
         if (stav === 401 || stav === 403) {
-          vratDoFronty(patch);
+          vratDoFronty(patch, zapsal);
           odmitnutyToken = window.GALERIE_API_TOKEN || null;
           if (sTokenem) odhlaseno(stav, e.zprava);
+          return;
+        }
+
+        // Token patří jinému účtu, než kdo zápis napsal: neprojde ani po kouscích.
+        // Zápis se zahodí a karta se zeptá, čí token je — další zápisy pak nesou správného autora.
+        if (e && e.jinyUcet) {
+          kdoToken = undefined;
+          overenyToken = undefined;
+          overUcet();
           return;
         }
 
         if (stav === 400 || stav === 413 || stav === 422) {
           var hlavni = Object.keys(patch).filter(function (k) { return ROZDIL.indexOf(k) < 0; });
           if (hlavni.length > 1) {
-            vratDoFronty(patch);
+            vratDoFronty(patch, zapsal);
             poJednom = true;
             schedule(300);
             return;
@@ -399,7 +534,7 @@
 
         // Offline nebo chyba serveru: patch se vrátí do fronty a zkusí se
         // znovu, pokaždé s delší prodlevou. Prototyp funguje dál, jen nesynchronizuje.
-        vratDoFronty(patch);
+        vratDoFronty(patch, zapsal);
         prodleva = Math.min(prodleva ? prodleva * 2 : 4000, 120000);
         schedule(prodleva);
       })
@@ -423,7 +558,21 @@
   window.addEventListener('offline', notify);
   if (navigator.serviceWorker) {
     navigator.serviceWorker.addEventListener('message', function (e) {
-      if (e.data && e.data.type === 'galerie-sync-done') { queuedBySw = false; lastSync = new Date(); notify(); }
+      if (!e.data || e.data.type !== 'galerie-sync-done') return;
+      queuedBySw = false; lastSync = new Date();
+      /*
+       * Co fronta workera doručila, karta ještě nemá.
+       *
+       * Revize tu zůstala z doby bez signálu, takže další změna téhož klíče
+       * by narazila na střet s vlastním doručeným zápisem. A klíče, které
+       * mezitím změnil ten druhý, worker dřív zahodil mlčky — teď je vrací
+       * (`strety`, po autorech) a karta to řekne jako u vlastního zápisu.
+       */
+      var moje = kdoTed() && e.data.strety ? e.data.strety[kdoTed()] : null;
+      if (moje && moje.length) ohlasStret(moje);
+      // Při odhlašování ne: odpověď by po úklidu znovu uložila data do prohlížeče.
+      if (e.data.doruceno && window.GalerieApi && mode === 'http' && !odhlasuji) window.GalerieApi.load();
+      else notify();
     });
   }
   /*
@@ -443,12 +592,13 @@
     if (mode === 'local') { rev += 1; writeLocal(); return; }
     // Server tenhle zápis už odmítl (přihlášení, velikost) — naslepo by ho odmítl znovu.
     if (odmitnutyToken !== undefined || poJednom) return;
+    var zapsal = pendingUcet || kdoTed();
     var patch = pending;
     pending = {};
     try {
       fetch(base + '/state', {
         method: 'PATCH', headers: headers(), credentials: 'same-origin', keepalive: true,
-        body: JSON.stringify({ data: patch, rev: rev })
+        body: teloZapisu(patch, zapsal)
       }).catch(function () {});
     } catch (e) {
       // Starší prohlížeč bez `keepalive`: změna zůstane uložená lokálně
@@ -481,6 +631,7 @@
     load: function () {
       if (mode === 'local') return Promise.resolve(snapshot());
       var sTokenem = !!window.GALERIE_API_TOKEN;
+      var tokenCteni = window.GALERIE_API_TOKEN || null;
       return fetch(base + '/state', { headers: headers(), credentials: 'same-origin' })
         .then(function (r) {
           // Uložený token už neplatí (90 dní bez použití, odebraný přístup).
@@ -495,6 +646,8 @@
           return r.json();
         })
         .then(function (b) {
+          // Čí je token, dřív než se na stav položí čekající zápis — cizí se zahodí.
+          if ((window.GALERIE_API_TOKEN || null) === tokenCteni) prevezmiUcet(b.ucet);
           data = b.data || {}; rev = b.rev || 0;
           /*
            * Co čeká ve frontě, zůstává nahoře.
@@ -515,6 +668,8 @@
     save: function (patch) {
       if (!patch) return;
       if (!merge(patch)) return;
+      // Nová fronta patří tomu, kdo je právě přihlášený.
+      if (!Object.keys(pending).length) pendingUcet = kdoTed();
       Object.keys(patch).forEach(function (k) {
         /*
          * Změněné položky se ve frontě sčítají.
@@ -609,7 +764,9 @@
           if (b.token) {
             window.GALERIE_API_TOKEN = b.token;
             try { localStorage.setItem('galerie.token', b.token); } catch (e) {}
-            // Co čekalo na přihlášení, odejde hned.
+            // Co čekalo na přihlášení, odejde hned — ale jen když se přihlásil
+            // týž účet. Jinak by jeho zápis odešel pod ní (`prevezmiUcet` ho zahodí).
+            if (b.user) prevezmiUcet(b.user.id);
             if (Object.keys(pending).length) schedule(450);
           }
           return b;
@@ -617,12 +774,54 @@
       });
     },
 
+    /*
+     * Odhlášení: doručit, odhlásit, uklidit — v tomhle pořadí.
+     *
+     * Rozepsané změny a fronta workera odejdou ještě s platným tokenem;
+     * teprve pak se zruší přihlášení (s adresou odběru upozornění, ať
+     * odhlášený telefon dál nezvoní) a smaže se, co by po odhlášení zůstalo:
+     * token, kopie dat, čekající zápisy i fronta workera.
+     */
     signOut: function () {
-      window.GALERIE_API_TOKEN = null;
-      try { localStorage.removeItem('galerie.token'); } catch (e) {}
-      if (mode === 'http') zahodKopieDat();
-      if (mode !== 'http') return Promise.resolve(null);
-      return fetch(base + '/logout', { method: 'POST', headers: headers(), credentials: 'same-origin' }).catch(function () { return null; });
+      if (mode !== 'http') {
+        window.GALERIE_API_TOKEN = null;
+        try { localStorage.removeItem('galerie.token'); } catch (e) {}
+        return Promise.resolve(null);
+      }
+      if (timer) { clearTimeout(timer); timer = null; }
+      odhlasuji = true;
+      return dorucPredOdhlasenim()
+        .then(adresaOdberu)
+        .then(function (endpoint) {
+          return fetch(base + '/logout', {
+            method: 'POST', headers: headers(), credentials: 'same-origin',
+            body: JSON.stringify(endpoint ? { endpoint: endpoint } : {})
+          });
+        })
+        .catch(function () { return null; })
+        .then(function (odpoved) {
+          window.GALERIE_API_TOKEN = null;
+          try { localStorage.removeItem('galerie.token'); localStorage.removeItem('galerie.ucet'); } catch (e) {}
+          pending = {}; pendingUcet = null; poJednom = false; odmitnutyToken = undefined;
+          kdo = null; kdoToken = null;
+          zahodKopieDat();
+          zahodFrontuWorkera();
+          odhlasuji = false;
+          return odpoved;
+        });
+    },
+
+    /*
+     * „Odhlásit ostatní zařízení" s adresou odběru tohoto zařízení.
+     *
+     * Server bez ní zruší odběry upozornění všem, i tomuhle telefonu, který
+     * přihlášený zůstává; s ní ten jeho nechá být.
+     */
+    odhlasOstatni: function () {
+      var api = this;
+      return adresaOdberu().then(function (endpoint) {
+        return api.post('zamek/odhlasit-ostatni', endpoint ? { endpoint: endpoint } : {});
+      });
     },
 
     // ——— Nahrávání médií ———
@@ -1054,11 +1253,8 @@
     flush: function () {
       prodleva = 0;
       schedule(0);
-      if (navigator.serviceWorker && navigator.serviceWorker.controller) {
-        // S aktuálním přihlášením — zápis ve frontě workera nese token z doby, kdy vznikl.
-        var auth = window.GALERIE_API_TOKEN ? 'Bearer ' + window.GALERIE_API_TOKEN : null;
-        try { navigator.serviceWorker.controller.postMessage({ type: 'galerie-flush', auth: auth }); } catch (e) {}
-      }
+      // Zápis ve frontě workera nese token z doby, kdy vznikl — čerstvý dostane jen týž účet.
+      odesliFrontuWorkeru();
     }
   };
 })();

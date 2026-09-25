@@ -14360,7 +14360,8 @@ class Component extends DCLogic {
               if (base === 'Odhlásit ostatní') {
                 this.setState({ secUntil: 0 });
                 if (!window.GalerieApi || GalerieApi.mode !== 'http') { this.toast('Odhlásit jinde umí jen server', { icon: 'ph-warning' }); return; }
-                GalerieApi.post('zamek/odhlasit-ostatni', {})
+                // S adresou odběru upozornění tohoto zařízení — jeho odběr server nechá být.
+                GalerieApi.odhlasOstatni()
                   .then(b => {
                     this.toast(b.zprava || 'Odhlášeno jinde', { icon: 'ph-sign-out' });
                     if (window.GalerieObnovit) GalerieObnovit('system');

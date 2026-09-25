@@ -213,11 +213,127 @@ class DoruceniTest extends TestCase
     {
         $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
 
-        $this->assertStringContainsString('async function flush(auth) {', $worker);
-        $this->assertStringContainsString("hlavicky['Authorization'] = auth;", $worker);
+        $this->assertStringContainsString('async function flush(auth, ucet) {', $worker);
         $this->assertStringContainsString('if (r.ok || r.status === 409 || odmitnuto) await queueDrop(it.key);', $worker);
-        $this->assertStringContainsString('flush(e.data.auth || null);', $worker);
+        $this->assertStringContainsString('|| ((svuj || cizi) && (r.status === 401 || r.status === 403));', $worker);
         $this->assertStringNotContainsString('async function flush() {', $worker);
+    }
+
+    /**
+     * Čerstvý token jen pro zápis téhož účtu.
+     *
+     * Fronta dosazovala do každého zápisu token toho, kdo byl přihlášený při
+     * „Odeslat" — co napsala ona bez signálu, po jejím odhlášení a jeho
+     * přihlášení odešlo do jeho galerie pod jeho jménem. Autor se teď čte
+     * z těla zápisu a token se vymění, jen když sedí; zápis bez autora (z doby
+     * před opravou) jde se svým tokenem a bez cookie přihlášeného.
+     */
+    public function test_fronta_workera_meni_token_jen_temuz_uctu(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString('const svuj = !!auth && !!ucet && zapsal === ucet;', $worker);
+        $this->assertStringContainsString("if (svuj) {\n        Object.keys(hlavicky)", $worker);
+        $this->assertStringContainsString("credentials: zapsal ? 'same-origin' : 'omit'", $worker);
+        $this->assertStringContainsString('e.waitUntil(flush(e.data.auth || null, e.data.ucet ? String(e.data.ucet) : null));', $worker);
+        // Původní náhrada měnila token bezpodmínečně.
+        $this->assertStringNotContainsString("if (auth) {\n        Object.keys(hlavicky)", $worker);
+        $this->assertStringNotContainsString('flush(e.data.auth || null);', $worker);
+    }
+
+    /**
+     * Jedna položka fronty na adresu a účet.
+     *
+     * Každá změna bez signálu byla vlastní položka se stejnou starou revizí.
+     * Po návratu signálu prošla první a druhá narazila na střet s ní — novější
+     * hodnota se zahodila. Nový zápis se proto slučuje do čekajícího, revize
+     * zůstává nejstarší (střet s partnerem se tak pozná dál) a co server
+     * i tak vrátí jako střet, dostane aplikace zpátky.
+     */
+    public function test_fronta_workera_slucuje_zapisy_a_hlasi_strety(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString('function slozZapisy(starsi, novejsi) {', $worker);
+        $this->assertStringContainsString('rev: revize.length ? Math.min.apply(null, revize) : null', $worker);
+        $this->assertStringContainsString('cur.update(Object.assign({}, item, { body: JSON.stringify(telo) }));', $worker);
+        $this->assertStringNotContainsString("tx.objectStore('patches').add(body);", $worker);
+        $this->assertStringContainsString("c.postMessage({ type: 'galerie-sync-done', doruceno: doruceno, strety: strety })", $worker);
+
+        $api = File::get(public_path('galerie-api.js'));
+        $this->assertStringContainsString('if (moje && moje.length) ohlasStret(moje);', $api);
+        $this->assertStringContainsString("if (e.data.doruceno && window.GalerieApi && mode === 'http' && !odhlasuji) window.GalerieApi.load();", $api);
+    }
+
+    /**
+     * Čekající zápis v kartě odejde jen pod tím, kdo ho napsal.
+     *
+     * Po 401 karta zápis držela a poslala ho po dalším přihlášení — ať se
+     * přihlásil kdokoli. Zápis teď nese autora, přihlášení jiného účtu ho
+     * zahodí a odmítnutí serverem (`jiny_ucet`) se nezkouší po kouscích.
+     */
+    public function test_cekajici_zapis_nese_autora(): void
+    {
+        $api = File::get(public_path('galerie-api.js'));
+
+        $this->assertStringContainsString('if (ucet) t.ucet = ucet;', $api);
+        $this->assertStringContainsString('if (!Object.keys(pending).length) pendingUcet = kdoTed();', $api);
+        $this->assertStringContainsString("if (pendingUcet && pendingUcet !== novy) {\n      pending = {};", $api);
+        $this->assertStringContainsString('if (b.user) prevezmiUcet(b.user.id);', $api);
+        $this->assertStringContainsString('if ((window.GALERIE_API_TOKEN || null) === tokenCteni) prevezmiUcet(b.ucet);', $api);
+        $this->assertStringContainsString("if (mode === 'http' && pendingUcet && tokenBezUctu() && overUcet()) return;", $api);
+        $this->assertStringContainsString('if (e && e.jinyUcet) {', $api);
+        $this->assertStringNotContainsString('JSON.stringify({ data: patch, rev: rev })', $api);
+    }
+
+    /**
+     * Odhlášení doručí, odhlásí a uklidí — v tomhle pořadí.
+     *
+     * Fronta workera přežila odhlášení i se soukromými klíči a odešla po
+     * přihlášení kohokoli. Odhlášení ji teď nejdřív doručí s platným tokenem,
+     * pak zruší přihlášení (i s odběrem upozornění tohoto zařízení) a frontu
+     * smaže. Worker spojení k databázi při mazání pustí.
+     */
+    public function test_odhlaseni_doruci_a_smaze_frontu(): void
+    {
+        $api = File::get(public_path('galerie-api.js'));
+        $signOut = substr($api, (int) strpos($api, 'signOut: function () {'));
+
+        $doruceni = strpos($signOut, 'return dorucPredOdhlasenim()');
+        $odhlaseni = strpos($signOut, "return fetch(base + '/logout', {");
+        $uklid = strpos($signOut, 'zahodFrontuWorkera();');
+
+        $this->assertNotFalse($doruceni);
+        $this->assertLessThan($odhlaseni, $doruceni);
+        $this->assertLessThan($uklid, $odhlaseni);
+        $this->assertStringContainsString('body: JSON.stringify(endpoint ? { endpoint: endpoint } : {})', $signOut);
+        $this->assertStringContainsString('try { if (window.indexedDB) indexedDB.deleteDatabase(QUEUE_DB); } catch (e) {}', $api);
+        $this->assertStringContainsString("var QUEUE_DB = 'galerie-queue';", $api);
+
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+        $this->assertStringContainsString("const QUEUE_DB = 'galerie-queue';", $worker);
+        $this->assertStringContainsString('db.onversionchange = () => db.close();', $worker);
+    }
+
+    /**
+     * „Odhlásit ostatní" pošle adresu odběru tohoto zařízení.
+     *
+     * Server bez ní zruší upozornění všem, i telefonu, který přihlášený
+     * zůstává. Bez podpory upozornění se pošle prázdné tělo jako dřív.
+     */
+    public function test_odhlasit_ostatni_posle_adresu_odberu(): void
+    {
+        $api = File::get(public_path('galerie-api.js'));
+
+        $this->assertStringContainsString("return api.post('zamek/odhlasit-ostatni', endpoint ? { endpoint: endpoint } : {});", $api);
+        $this->assertStringContainsString('.then(function (sub) { return sub && sub.endpoint ? sub.endpoint : null; })', $api);
+
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $dokument) {
+            $obsah = File::get(resource_path('galerie/'.$dokument));
+
+            $this->assertStringContainsString('GalerieApi.odhlasOstatni()', $obsah, $dokument);
+            $this->assertStringNotContainsString("GalerieApi.post('zamek/odhlasit-ostatni'", $obsah, $dokument);
+        }
     }
 
     /**

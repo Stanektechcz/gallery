@@ -92,6 +92,14 @@ class StateController extends Controller
             'data' => $state->toClientObject(),
             'updated_at' => $state->updated_at?->toIso8601String(),
             'rev' => $state->rev,
+            /*
+             * Pod kým je tahle karta přihlášená.
+             *
+             * Klient si čekající zápisy označuje účtem, který je napsal
+             * (viz `update`). Token si ale drží v localStorage a otisk prstu ho
+             * mění mimo přihlášení heslem — jistotu, komu patří, má jen server.
+             */
+            'ucet' => $request->user()?->getAuthIdentifier(),
         ]);
     }
 
@@ -114,8 +122,31 @@ class StateController extends Controller
             'rev' => ['nullable', 'integer', 'min:0'],
         ]);
 
-        $coupleId = $this->parId($request);
         $uzivatel = $request->user();
+
+        /*
+         * Zápis patří účtu, který ho napsal.
+         *
+         * Co vzniklo bez signálu, čekalo ve frontě prohlížeče — a odešlo
+         * s tím, kdo byl přihlášený **v okamžiku odeslání**. Na sdíleném
+         * zařízení tak její neodeslané změny po jejím odhlášení a jeho
+         * přihlášení skončily v jeho galerii a pod jeho jménem (převodníky
+         * zapisují autora podle přihlášeného). Token proti CSRF to nezastaví
+         * a střet po klíčích většinou taky ne.
+         *
+         * Klient proto posílá, pod kým zápis vznikl (`ucet`), a jiný účet se
+         * nezapíše vůbec. Starší klient `ucet` neposílá a zapisuje jako dřív.
+         * Příznak `jiny_ucet` říká klientovi, že tenhle zápis nemá zkoušet
+         * po kouscích znovu — neprojde žádný.
+         */
+        if ($this->napsalJinyUcet($request->input('ucet'), $uzivatel)) {
+            return response()->json([
+                'message' => 'Změna vznikla pod jiným účtem, než který je teď přihlášený — nezapsala se.',
+                'jiny_ucet' => true,
+            ], 422);
+        }
+
+        $coupleId = $this->parId($request);
 
         return DB::transaction(function () use ($validated, $coupleId, $uzivatel, $request) {
             $state = CoupleState::where('couple_id', $coupleId)->lockForUpdate()->first()
@@ -537,6 +568,26 @@ class StateController extends Controller
                 'rev' => $state->rev,
             ]);
         });
+    }
+
+    /**
+     * Jestli zápis ohlásil jiného autora, než kdo je přihlášený.
+     *
+     * Porovnává se jako text: z prohlížeče přijde `"7"` i `7` podle toho,
+     * odkud si klient identifikátor vzal. Bez údaje se nic neodmítá — to je
+     * starší klient.
+     */
+    private function napsalJinyUcet(mixed $ucet, ?User $uzivatel): bool
+    {
+        if ($ucet === null || $ucet === '') {
+            return false;
+        }
+
+        if (! is_scalar($ucet) || $uzivatel === null) {
+            return true;
+        }
+
+        return (string) $ucet !== (string) $uzivatel->getAuthIdentifier();
     }
 
     /**

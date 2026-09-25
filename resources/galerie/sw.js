@@ -42,20 +42,91 @@ self.addEventListener('activate', e => {
 });
 
 // ——— fronta zápisů (IndexedDB, aby přežila zavření aplikace) ———
+//
+// Zápis patří účtu, který ho napsal: aplikace posílá autora v těle (`ucet`)
+// a worker si ho čte odtamtud. Fronta dřív nesla jen hlavičky a „Odeslat"
+// do nich dosadilo token toho, kdo byl přihlášený **teď** — takže co napsala
+// ona bez signálu, po jejím odhlášení a jeho přihlášení odešlo do jeho
+// galerie a pod jeho jménem.
+//
+// A na jednu adresu a jeden účet je ve frontě jediná položka. Každá změna
+// bez signálu byla dřív vlastní položka se stejnou, starou revizí: po návratu
+// signálu prošla první, druhá narazila na střet s tou první a novější hodnota
+// se zahodila, aniž by se to kdokoli dozvěděl.
 function idb() {
   return new Promise((res, rej) => {
     const r = indexedDB.open(QUEUE_DB, 1);
     r.onupgradeneeded = () => r.result.createObjectStore('patches', { autoIncrement: true });
-    r.onsuccess = () => res(r.result);
+    r.onsuccess = () => {
+      const db = r.result;
+      // Odhlášení frontu maže (`deleteDatabase`) a otevřené spojení by ho zdrželo.
+      db.onversionchange = () => db.close();
+      res(db);
+    };
     r.onerror = () => rej(r.error);
   });
 }
-async function queuePush(body) {
+// Kdo zápis napsal — `null` u zápisů z doby, kdy to aplikace ještě neposílala.
+function autorZapisu(telo) {
+  try {
+    const u = JSON.parse(telo).ucet;
+    return u === undefined || u === null || u === '' ? null : String(u);
+  } catch (e) { return null; }
+}
+function tokenZapisu(hlavicky) {
+  const k = Object.keys(hlavicky || {}).find(h => h.toLowerCase() === 'authorization');
+  return k ? hlavicky[k] : null;
+}
+// Dva zápisy v jeden. Novější klíč přepíše starší; rozdíly seznamů se slučují
+// jako ve frontě aplikace (`save` a `vratDoFronty` v galerie-api.js). Revize
+// zůstává **nejstarší**: od ní se počítá, co mezitím změnil ten druhý.
+function slozZapisy(starsi, novejsi) {
+  const a = (starsi && starsi.data) || {};
+  const b = (novejsi && novejsi.data) || {};
+  const data = Object.assign({}, a);
+  const mapa = v => !!v && typeof v === 'object' && !Array.isArray(v);
+  Object.keys(b).forEach(k => {
+    if (k === '__zmenene' && mapa(a[k]) && mapa(b[k])) {
+      const spojene = Object.assign({}, a[k]);
+      Object.keys(b[k]).forEach(s => {
+        spojene[s] = Array.isArray(spojene[s]) && Array.isArray(b[k][s])
+          ? spojene[s].concat(b[k][s].filter(id => spojene[s].indexOf(id) < 0))
+          : b[k][s];
+      });
+      data[k] = spojene;
+    } else if ((k === '__odebrane' || k === 'xRows') && mapa(a[k]) && mapa(b[k])) {
+      data[k] = Object.assign({}, a[k], b[k]);
+    } else {
+      data[k] = b[k];
+    }
+  });
+  const revize = [starsi && starsi.rev, novejsi && novejsi.rev].filter(r => typeof r === 'number');
+  return Object.assign({}, novejsi, { data: data, rev: revize.length ? Math.min.apply(null, revize) : null });
+}
+async function queuePush(item) {
   const db = await idb();
+  const autor = autorZapisu(item.body);
   return new Promise(res => {
     const tx = db.transaction('patches', 'readwrite');
-    tx.objectStore('patches').add(body);
-    tx.oncomplete = () => res();
+    const st = tx.objectStore('patches');
+    let slouceno = false;
+    st.openCursor().onsuccess = ev => {
+      const cur = ev.target.result;
+      if (!cur) { if (!slouceno) st.add(item); return; }
+      const it = cur.value;
+      // Bez autora se slučuje jen se zápisem pod týmž tokenem — účet se tu nedá poznat jinak.
+      const tentyz = it.url === item.url && autorZapisu(it.body) === autor
+        && (autor !== null || tokenZapisu(it.headers) === tokenZapisu(item.headers));
+      if (!slouceno && tentyz) {
+        try {
+          const telo = slozZapisy(JSON.parse(it.body), JSON.parse(item.body));
+          cur.update(Object.assign({}, item, { body: JSON.stringify(telo) }));
+          slouceno = true;
+        } catch (e) {}
+      }
+      cur.continue();
+    };
+    tx.oncomplete = tx.onabort = () => { db.close(); res(); };
   });
 }
 async function queueAll() {
@@ -68,7 +139,7 @@ async function queueAll() {
       const cur = ev.target.result;
       if (cur) { out.push({ key: cur.key, body: cur.value }); cur.continue(); }
     };
-    tx.oncomplete = () => res(out);
+    tx.oncomplete = tx.onabort = () => { db.close(); res(out); };
   });
 }
 async function queueDrop(key) {
@@ -76,25 +147,50 @@ async function queueDrop(key) {
   return new Promise(res => {
     const tx = db.transaction('patches', 'readwrite');
     tx.objectStore('patches').delete(key);
-    tx.oncomplete = () => res();
+    tx.oncomplete = tx.onabort = () => { db.close(); res(); };
   });
 }
-async function flush() {
+// `auth` a `ucet` posílá aplikace při „Odeslat": aktuální přihlášení a čí je.
+// Bez nich (Background Sync se zavřenou aplikací) jde každý zápis se svým tokenem.
+async function flush(auth, ucet) {
   const items = await queueAll();
+  const strety = {};
+  let doruceno = 0;
   for (const it of items) {
+    const zapsal = autorZapisu(it.body.body);
+    // Token z aplikace jen pro zápis téhož účtu; cizí zápis jde s tím svým.
+    const svuj = !!auth && !!ucet && zapsal === ucet;
+    const cizi = !!ucet && zapsal !== ucet;
     try {
-      const r = await fetch(it.body.url, { method: 'PATCH', headers: it.body.headers, body: it.body.body, credentials: 'same-origin' });
-      if (r.ok || r.status === 409) await queueDrop(it.key);
+      const hlavicky = Object.assign({}, it.body.headers);
+      if (svuj) {
+        Object.keys(hlavicky).forEach(k => { if (k.toLowerCase() === 'authorization') delete hlavicky[k]; });
+        hlavicky['Authorization'] = auth;
+      }
+      // Zápis bez autora bez cookie: jinak by server poznal přihlášeného, ne pisatele.
+      const r = await fetch(it.body.url, { method: 'PATCH', headers: hlavicky, body: it.body.body, credentials: zapsal ? 'same-origin' : 'omit' });
+      // Natrvalo odmítnutý zápis ven z fronty — jinak by se posílal při každém probuzení.
+      // 401/403 je natrvalo s čerstvým tokenem téhož účtu, a u cizího zápisu,
+      // jehož vlastní token skončil: pod jiným účtem už neodejde nikdy.
+      const odmitnuto = r.status === 400 || r.status === 413 || r.status === 422
+        || ((svuj || cizi) && (r.status === 401 || r.status === 403));
+      if (r.ok || r.status === 409) {
+        if (r.ok) doruceno++;
+        // Co mezitím změnil ten druhý, musí aplikace říct — ne to tiše zahodit.
+        const b = await r.json().catch(() => null);
+        if (b && Array.isArray(b.strety) && b.strety.length) strety[zapsal || ''] = (strety[zapsal || ''] || []).concat(b.strety);
+      }
+      if (r.ok || r.status === 409 || odmitnuto) await queueDrop(it.key);
     } catch (e) { return; } // pořád offline — zkusí se při dalším sync
   }
   const cs = await self.clients.matchAll();
-  cs.forEach(c => c.postMessage({ type: 'galerie-sync-done' }));
+  cs.forEach(c => c.postMessage({ type: 'galerie-sync-done', doruceno: doruceno, strety: strety }));
 }
 
 self.addEventListener('sync', e => { if (e.tag === 'galerie-patch') e.waitUntil(flush()); });
 self.addEventListener('periodicsync', e => { if (e.tag === 'galerie-refresh') e.waitUntil(flush()); });
 self.addEventListener('message', e => {
-  if (e.data && e.data.type === 'galerie-flush') flush();
+  if (e.data && e.data.type === 'galerie-flush') e.waitUntil(flush(e.data.auth || null, e.data.ucet ? String(e.data.ucet) : null));
 });
 
 self.addEventListener('fetch', e => {
