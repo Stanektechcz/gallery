@@ -98,6 +98,25 @@ class FinanceOfflineTest extends TestCase
         $this->assertSame(2, Transaction::count());
     }
 
+    /**
+     * Klíč, který se do sloupce nevejde, je chyba klienta — ne pád serveru.
+     *
+     * Sloupec je `uuid` (na MySQL char(36)); striktní MySQL delší hodnotu odmítne
+     * výjimkou a zápis skončil 500. SQLite v testech ji spolkne, proto se hlídá
+     * odpověď, ne databáze.
+     */
+    public function test_prilis_dlouhy_klic_odmitne_jako_chybu(): void
+    {
+        $this->postJson('/api/v1/rozpocet/transakce', $this->telo(['client_key' => 'dar-'.Str::uuid()]))
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('client_key');
+
+        $this->postJson('/api/v1/rozpocet/transakce', $this->telo(['client_key' => ['pole']]))
+            ->assertStatus(422);
+
+        $this->assertSame(0, Transaction::count());
+    }
+
     /** Zápis bez klíče funguje jako dřív — klíč je nepovinný. */
     public function test_zapis_bez_klice(): void
     {

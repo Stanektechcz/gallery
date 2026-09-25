@@ -47,7 +47,13 @@ class FinanceEntryController extends Controller
          *
          * Odhadovat to podle částky a času nejde: dva stejné nákupy za den jsou
          * legitimní a modul je jinde výslovně povoluje.
+         *
+         * Sloupec je `uuid` (na MySQL char(36)). Klient posílá `randomUUID()`, bez
+         * zabezpečeného spojení kratší náhradu — delší hodnota by na striktní MySQL
+         * spadla až při zápisu na 500, tak se odmítne rovnou.
          */
+        $request->validate(['client_key' => ['nullable', 'string', 'max:36']]);
+
         if ($klic = $request->input('client_key')) {
             $existuje = Transaction::where('gallery_space_id', $space->id)
                 ->where('client_key', $klic)->first();
