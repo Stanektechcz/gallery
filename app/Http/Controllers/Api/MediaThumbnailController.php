@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -35,8 +36,9 @@ class MediaThumbnailController extends Controller
         ]);
 
         // Scoped to spaces this person belongs to, so nobody can staple a picture of
-        // their choosing onto somebody else's media.
-        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
+        // their choosing onto somebody else's media. Jen prostory dvojice — host
+        // cizí galerie jí náhledy přepisovat nemá.
+        $spaceIds = app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
 
         $media = MediaItem::where('uuid', $uuid)
             ->whereIn('gallery_space_id', $spaceIds)

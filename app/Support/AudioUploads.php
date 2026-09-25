@@ -37,4 +37,18 @@ final class AudioUploads
     {
         return 'mimetypes:'.implode(',', self::MIME_TYPES);
     }
+
+    /**
+     * Typ, který smí jít do databáze a zpátky jako Content-Type.
+     *
+     * Cokoli mimo seznam je `application/octet-stream` — prohlížeč to stáhne,
+     * nikdy nevykreslí jako stránku. Parametry (`audio/webm;codecs=opus` z
+     * MediaRecorderu) se odříznou, jinak by poctivá nahrávka seznamem neprošla.
+     */
+    public static function bezpecnyTyp(?string $typ): string
+    {
+        $typ = strtolower(trim(explode(';', (string) $typ)[0]));
+
+        return in_array($typ, self::MIME_TYPES, true) ? $typ : 'application/octet-stream';
+    }
 }

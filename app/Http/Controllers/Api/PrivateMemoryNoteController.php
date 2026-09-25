@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -33,8 +34,12 @@ class PrivateMemoryNoteController extends Controller
         return response()->json(['content' => $data['content']]);
     }
 
+    /** Jen média prostorů dvojice — ne galerií, kam je účet pozvaný jako host. */
     private function media(Request $request, string $uuid): MediaItem
     {
-        return MediaItem::where('uuid', $uuid)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->whereNull('trashed_at')->firstOrFail();
+        return MediaItem::where('uuid', $uuid)
+            ->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))
+            ->whereNull('trashed_at')
+            ->firstOrFail();
     }
 }

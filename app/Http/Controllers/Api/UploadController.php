@@ -18,17 +18,41 @@ use App\Services\ExifExtractorService;
 use App\Services\Media\FilenameMetadataService;
 use App\Services\Media\MediaFormatService;
 use App\Services\Media\VideoProcessingService;
+use App\Support\Cas;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
+use Symfony\Component\Mime\MimeTypes;
 
 class UploadController extends Controller
 {
     private const CHUNK_DISK = 'local';
 
     private const CHUNK_DIR = 'upload_chunks';
+
+    /**
+     * Strop jednoho bloku. Klient posílá 1MiB bloky; rezerva je pro starší
+     * klienty. Bez stropu se kvóta hlídala jen podle ohlášené velikosti a
+     * bloky samotné mohly zaplnit disk.
+     */
+    private const MAX_CHUNK_BYTES = 8 * 1024 * 1024;
+
+    /**
+     * Strop počtu bloků — 100 000 po 1 MiB je ~100 GB. Sloupec je
+     * unsignedInteger, nad 4294967295 by MySQL vrátil 500.
+     */
+    private const MAX_CHUNKS = 100_000;
+
+    /** Stavy média, které se chovají jako hotová fotka. */
+    private const HOTOVE_STAVY = ['ready', 'received'];
+
+    /** Přípona do `media_items.extension` (varchar 20) i do cesty na disku. */
+    private const PRIPONA = '/^[a-z0-9]{1,10}$/';
 
     /**
      * POST /api/v1/uploads/check-duplicate
@@ -44,10 +68,26 @@ class UploadController extends Controller
         $user = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
 
-        $existing = MediaItem::where('gallery_space_id', $space->id)
+        // Fotka v zamčeném trezoru pro tuhle odpověď neexistuje — jinak by
+        // stačil hash souboru a odpověď by prozradila, že v trezoru je, i s názvem.
+        $query = MediaItem::where('gallery_space_id', $space->id)
             ->where('sha256', $v['sha256'])
-            ->whereNull('trashed_at')
+            ->whereNull('trashed_at');
+        if (! Trezor::odemcen($request)) {
+            $query->where('is_hidden', false);
+        }
+        $existing = $query
+            ->orderByRaw("case when status in ('ready', 'received') then 0 else 1 end")
             ->first();
+
+        // Selhaná nebo nedokončená kopie není duplicita: klient by soubor
+        // přeskočil a v galerii by po něm nezbylo nic funkčního.
+        if ($existing && ! in_array($existing->status, self::HOTOVE_STAVY, true)) {
+            return response()->json([
+                'exists' => false,
+                'replacement_required' => true,
+            ]);
+        }
 
         if ($existing) {
             $addedToAlbum = false;
@@ -92,13 +132,24 @@ class UploadController extends Controller
             'filename' => 'required|string|max:512',
             'mime_type' => 'required|string|max:100',
             'total_size' => 'required|integer|min:1',
-            'total_chunks' => 'required|integer|min:1',
+            'total_chunks' => 'required|integer|min:1|max:'.self::MAX_CHUNKS,
             'sha256' => 'nullable|string|size:64',
             'target_album_id' => 'nullable|integer|exists:albums,id',
             // The browser knows when the file was last written; we never will. Optional,
             // because an older client or a share-target upload may not send it.
             'client_modified_at' => 'nullable|date',
         ]);
+
+        // Každý blok má aspoň bajt a nejvýš MAX_CHUNK_BYTES. Jiný poměr velikosti
+        // a počtu bloků poctivý klient nepošle — a jen by otevřel cestu k tisícům
+        // prázdných souborů na disku nebo k relaci, která nejde dokončit.
+        $totalSize = (int) $validated['total_size'];
+        $totalChunks = (int) $validated['total_chunks'];
+        if ($totalChunks > $totalSize || $totalSize > $totalChunks * self::MAX_CHUNK_BYTES) {
+            throw ValidationException::withMessages([
+                'total_chunks' => 'Počet bloků neodpovídá velikosti souboru.',
+            ]);
+        }
 
         $user = $request->user();
         $space = $user->gallerySpaces()->firstOrFail();
@@ -131,7 +182,11 @@ class UploadController extends Controller
             'total_size' => $validated['total_size'],
             'total_chunks' => $validated['total_chunks'],
             'sha256' => $validated['sha256'] ?? null,
-            'client_modified_at' => $validated['client_modified_at'] ?? null,
+            // Okamžik v UTC. Přetypování `datetime` by pásmo z řetězce zahodilo
+            // a „+02:00" by se uložilo jako by to bylo UTC.
+            'client_modified_at' => empty($validated['client_modified_at'])
+                ? null
+                : Carbon::parse($validated['client_modified_at'])->utc(),
             'status' => 'pending',
             'expires_at' => now()->addDays(7),
         ]);
@@ -173,6 +228,15 @@ class UploadController extends Controller
                 'detail' => 'Zkontrolujte limit upload_max_filesize/post_max_size na serveru a zkuste nahrání znovu.',
             ], 422);
         }
+
+        // Ještě před zápisem na disk: blok nad strop, nebo bloky, které by
+        // dohromady přesáhly ohlášenou velikost (podle ní se hlídala kvóta).
+        $chunkSize = (int) $file->getSize();
+        if ($chunkSize > self::MAX_CHUNK_BYTES
+            || $this->bajtyOstatnichBloku($session, $index) + $chunkSize > $session->total_size) {
+            return $this->prilisVelkyBlok();
+        }
+
         $chunkDir = self::CHUNK_DIR.'/'.$session->uuid;
         $path = $file->storeAs($chunkDir, "chunk_{$index}", self::CHUNK_DISK);
 
@@ -184,22 +248,28 @@ class UploadController extends Controller
             return response()->json(['error' => 'Chunk checksum mismatch'], 422);
         }
 
-        UploadChunk::updateOrCreate(
+        $chunk = UploadChunk::updateOrCreate(
             ['upload_session_id' => $session->id, 'chunk_index' => $index],
             [
                 'path' => $path,
-                'size_bytes' => $file->getSize(),
+                'size_bytes' => $chunkSize,
                 'checksum' => $checksum,
                 'status' => 'received',
                 'received_at' => now(),
             ]
         );
 
-        $receivedCount = $session->chunks()->count();
-        $session->update([
-            'received_chunks' => $receivedCount,
-            'uploaded_bytes' => $session->chunks()->sum('size_bytes'),
-        ]);
+        // Souběžné bloky mohly kontrolou výše projít každý zvlášť. Kdo součet
+        // přetáhl, jde pryč i se souborem — klient ho pošle znovu.
+        if ($this->bajtyOstatnichBloku($session, $index) + $chunkSize > $session->total_size) {
+            Storage::disk(self::CHUNK_DISK)->delete($path);
+            $chunk->delete();
+            $this->prepocitejPrijate($session);
+
+            return $this->prilisVelkyBlok();
+        }
+
+        $receivedCount = $this->prepocitejPrijate($session);
 
         return response()->json([
             'chunk_index' => $index,
@@ -207,6 +277,34 @@ class UploadController extends Controller
             'total_chunks' => $session->total_chunks,
             'complete' => $receivedCount >= $session->total_chunks,
         ]);
+    }
+
+    /** Součet přijatých bloků kromě `$index` — ten se právě nahrazuje. */
+    private function bajtyOstatnichBloku(UploadSession $session, int $index): int
+    {
+        return (int) UploadChunk::where('upload_session_id', $session->id)
+            ->where('chunk_index', '!=', $index)
+            ->sum('size_bytes');
+    }
+
+    /** Přepočítá přijaté bloky a bajty relace; vrací počet bloků. */
+    private function prepocitejPrijate(UploadSession $session): int
+    {
+        $chunks = UploadChunk::where('upload_session_id', $session->id);
+        $receivedCount = (clone $chunks)->count();
+        $session->update([
+            'received_chunks' => $receivedCount,
+            'uploaded_bytes' => (int) (clone $chunks)->sum('size_bytes'),
+        ]);
+
+        return $receivedCount;
+    }
+
+    private function prilisVelkyBlok(): JsonResponse
+    {
+        $zprava = 'Blok souboru je větší, než nahrávání ohlásilo. Zkuste soubor nahrát znovu.';
+
+        return response()->json(['error' => $zprava, 'message' => $zprava], 422);
     }
 
     /**
@@ -243,8 +341,11 @@ class UploadController extends Controller
     {
         $session = UploadSession::where('uuid', $uuid)
             ->where('user_id', $request->user()->id)
-            ->where('status', 'pending')
             ->firstOrFail();
+
+        if ($session->status !== 'pending') {
+            return $this->relaceUzZpracovana($session);
+        }
 
         if (! $session->isComplete()) {
             return response()->json([
@@ -254,20 +355,40 @@ class UploadController extends Controller
             ], 422);
         }
 
+        // Kvóta znovu až teď: mezi zahájením a dokončením mohla druhá nahrání
+        // (nebo druhý člen dvojice) místo zaplnit.
+        $space = GallerySpace::find($session->gallery_space_id);
+        if ($space && ! app(EntitlementService::class)->canStore($space, (int) $session->total_size)) {
+            $zprava = 'Soubor by překročil limit úložiště tarifu. Uvolněte místo nebo přejděte na vyšší tarif — viz /cenik.';
+
+            return response()->json(['error' => $zprava, 'message' => $zprava], 402);
+        }
+
+        // Relaci si požadavek převezme jedním podmíněným zápisem. Kontrola stavu
+        // a zápis „assembling" zvlášť nechaly dvojí „dokončit" (opakovaný
+        // požadavek, dvě karty) založit dvě média z téhož souboru.
+        $claimed = UploadSession::whereKey($session->id)
+            ->where('status', 'pending')
+            ->update(['status' => 'assembling', 'updated_at' => now()]);
+        if ($claimed === 0) {
+            return $this->relaceUzZpracovana($session->fresh() ?? $session);
+        }
+        $session->forceFill(['status' => 'assembling'])->syncOriginal();
+
         $media = null;
         $destPath = null;
 
+        // Jedna očištěná přípona pro dočasný soubor, databázi i cestu originálu.
+        // Název od uživatele patří do metadat, nikdy ale nesmí určovat cestu na
+        // disku (ochrana před ../ i neplatnými znaky Windows).
+        $ext = self::bezpecnaPripona($session->original_filename, $session->mime_type);
+
         // Assemble synchronously — no queue worker required
         try {
-            $session->update(['status' => 'assembling']);
-
             $chunks = $session->chunks()->orderBy('chunk_index')->get();
             $destDir = storage_path("app/uploads/{$session->uuid}");
             @mkdir($destDir, 0755, true);
-            // Název od uživatele patří do metadat, nikdy ale nesmí určovat
-            // cestu na disku (ochrana před ../ i neplatnými znaky Windows).
-            $sourceExtension = preg_replace('/[^a-zA-Z0-9]/', '', strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION)));
-            $destPath = $destDir.'/source'.($sourceExtension ? ".{$sourceExtension}" : '');
+            $destPath = $destDir.'/source'.($ext !== '' ? ".{$ext}" : '');
 
             $destHandle = fopen($destPath, 'wb');
             if (! $destHandle) {
@@ -290,7 +411,6 @@ class UploadController extends Controller
                 throw new \RuntimeException("Size mismatch: expected {$session->total_size}, got {$assembledSize}");
             }
 
-            $ext = strtolower(pathinfo($session->original_filename, PATHINFO_EXTENSION));
             $formatSvc = new MediaFormatService;
             $isRaw = MediaFormatService::isRaw($ext);
             $isVideo = MediaFormatService::isVideo($ext);
@@ -303,8 +423,12 @@ class UploadController extends Controller
             // name held no date either, the file's own modification time stands in — the
             // last honest evidence we have. Real EXIF still wins: the metadata job runs
             // afterwards and overwrites this the moment it finds a genuine capture time.
+            //
+            // Prohlížeč posílá okamžik v UTC (toISOString), kdežto EXIF i datum z
+            // názvu jsou hodiny fotoaparátu. Bez převodu by silvestrovská fotka
+            // z 00:30 spadla do minulého roku.
             if (empty($filenameMetadata['taken_at']) && $session->client_modified_at) {
-                $filenameMetadata['taken_at'] = $session->client_modified_at;
+                $filenameMetadata['taken_at'] = Cas::mistni($session->client_modified_at)?->format('Y-m-d H:i:s');
             }
 
             // For RAW files: extract embedded JPEG preview for thumbnailing
@@ -313,7 +437,9 @@ class UploadController extends Controller
                 $previewPath = $formatSvc->extractRawPreview($destPath);
             }
 
-            $media = MediaItem::create([
+            // Instance napřed, uložení zvlášť: když selže posluchač `created`
+            // (řádek už je vložený), musí ho úklid v catch najít a smazat.
+            $media = new MediaItem([
                 'gallery_space_id' => $session->gallery_space_id,
                 'owner_user_id' => $session->user_id,
                 'uploaded_by' => $session->user_id,
@@ -335,9 +461,10 @@ class UploadController extends Controller
                 'last_verified_at' => now(),
                 ...$filenameMetadata,
             ]);
+            $media->save();
 
             // Store original file under public storage so it can be served
-            $relPath = "media/{$media->uuid}/original.".$media->extension;
+            $relPath = "media/{$media->uuid}/original".($ext !== '' ? ".{$ext}" : '');
             $stored = Storage::disk('public')->put(
                 $relPath,
                 fopen($destPath, 'rb'),
@@ -445,7 +572,8 @@ class UploadController extends Controller
                     'media_id' => $media->id,
                     'error' => $processingException->getMessage(),
                 ]);
-                $media->update(['processing_error' => 'Doplňkové zpracování bude možné spustit znovu: '.$processingException->getMessage()]);
+                // Podrobnosti jen do logu — pole se ukazuje v aplikaci.
+                $media->update(['processing_error' => 'Doplňkové zpracování se nepodařilo spustit; bude možné ho spustit znovu.']);
             }
 
             // Cleanup chunk files
@@ -486,15 +614,60 @@ class UploadController extends Controller
                     ->exists(),
             ]);
         } catch (\Throwable $e) {
-            if ($media) {
+            if ($media?->exists) {
                 Storage::disk('public')->deleteDirectory("media/{$media->uuid}");
                 $media->forceDelete();
             }
             $session->update(['status' => 'failed']);
-            Log::error('Upload assembly failed', ['uuid' => $uuid, 'error' => $e->getMessage()]);
+            Log::error('Upload assembly failed', [
+                'uuid' => $uuid,
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+                'file' => $e->getFile().':'.$e->getLine(),
+            ]);
 
-            return response()->json(['error' => 'Assembly failed: '.$e->getMessage()], 500);
+            // Text výjimky nesmí ven — nesl cesty na serveru i dotazy do databáze.
+            $zprava = 'Soubor se nepodařilo dokončit. Zkuste ho nahrát znovu.';
+
+            return response()->json(['error' => $zprava, 'message' => $zprava], 500);
         }
+    }
+
+    /**
+     * Relace už je ve skládání, hotová, nebo selhala — druhé dokončení nic nezaloží.
+     *
+     * Hotová relace odpoví stejně jako první dokončení: klient, kterému
+     * odpověď cestou vypadla (výpadek signálu), požadavek zopakuje a chyba
+     * by u nahrané fotky hlásila, že se nenahrála.
+     */
+    private function relaceUzZpracovana(UploadSession $session): JsonResponse
+    {
+        $hotove = $session->status === 'completed' && $session->resulting_media_id
+            ? MediaItem::find($session->resulting_media_id)
+            : null;
+
+        if ($hotove !== null) {
+            return response()->json([
+                'uuid' => $session->uuid,
+                'status' => 'completed',
+                'media_id' => $hotove->id,
+                'media_uuid' => $hotove->uuid,
+                'has_thumbnail' => $hotove->variants()
+                    ->whereIn('type', ['thumbnail', 'video_poster'])
+                    ->exists(),
+            ]);
+        }
+
+        $zprava = $session->status === 'completed'
+            ? 'Tenhle soubor už je nahraný.'
+            : 'Nahrávání tohohle souboru se už dokončuje nebo skončilo chybou. Zkuste ho nahrát znovu.';
+
+        return response()->json([
+            'error' => $zprava,
+            'message' => $zprava,
+            'status' => $session->status,
+            'media_id' => $session->resulting_media_id,
+        ], 409);
     }
 
     /**
@@ -756,9 +929,34 @@ class UploadController extends Controller
         });
     }
 
+    /**
+     * Přípona, kterou unese databáze i cesta na disku.
+     *
+     * `pathinfo` vezme všechno za poslední tečkou — z „Snímek 2024.05 dovolená
+     * u moře" udělal příponu „05 dovolená u moře", která v MySQL přetekla
+     * varchar(20) a nahrání spadlo na 500. Co nevypadá jako přípona, se
+     * nahradí příponou podle typu souboru; když ani ten nic neřekne, zůstane prázdná.
+     */
+    public static function bezpecnaPripona(string $nazev, ?string $mime): string
+    {
+        $pripona = mb_strtolower(pathinfo($nazev, PATHINFO_EXTENSION));
+        if (preg_match(self::PRIPONA, $pripona)) {
+            return $pripona;
+        }
+
+        $typ = strtolower(trim(explode(';', (string) $mime)[0]));
+        if ($typ === '' || $typ === 'application/octet-stream') {
+            return '';
+        }
+
+        $zTypu = MimeTypes::getDefault()->getExtensions($typ)[0] ?? '';
+
+        return preg_match(self::PRIPONA, $zTypu) ? $zTypu : '';
+    }
+
     private function isReusableInAlbum(MediaItem $media): bool
     {
-        return in_array($media->status, ['ready', 'received'], true)
+        return in_array($media->status, self::HOTOVE_STAVY, true)
             && ! $media->is_hidden
             && ! $media->trashed_at;
     }

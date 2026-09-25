@@ -8,6 +8,7 @@ use App\Models\Conversation;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
 use App\Models\VoiceNoteListen;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -63,7 +64,8 @@ class VoiceNoteController extends Controller
             'created_by' => $request->user()->id,
             'title' => $data['title'] ?? null,
             'path' => $path,
-            'mime_type' => $file->getClientMimeType(),
+            // Typ podle obsahu, ne podle prohlížeče — ten ohlásí cokoli, i text/html.
+            'mime_type' => AudioUploads::bezpecnyTyp($file->getMimeType()),
             'size_bytes' => $file->getSize(),
             'duration_ms' => $data['duration_ms'] ?? null,
             'transcript' => $data['transcript'] ?? null,
@@ -120,7 +122,7 @@ class VoiceNoteController extends Controller
             'source_message_uuid' => $messageUuid,
             'title' => 'Z konverzace',
             'path' => $path,
-            'mime_type' => $message->media_mime,
+            'mime_type' => AudioUploads::bezpecnyTyp($message->media_mime),
             'size_bytes' => $message->media_size,
             // Chat stores a voice message's length in media_height; see ChatController.
             'duration_ms' => $message->media_height ?: null,
@@ -133,7 +135,13 @@ class VoiceNoteController extends Controller
         return response()->json($this->payload($note->fresh('author'), true), 201);
     }
 
-    /** Streams the audio to a member of the owning space; never a public URL. */
+    /**
+     * Streams the audio to a member of the owning space; never a public URL.
+     *
+     * Typ jen ze seznamu zvukových — starší řádky (a hlasovky připnuté z chatu)
+     * nesou typ, který kdysi ohlásil prohlížeč, a text/html by se tu otevřel
+     * jako stránka galerie. CSP se sandboxem pro jistotu i tak.
+     */
     public function stream(Request $request, string $uuid): StreamedResponse
     {
         $this->available();
@@ -141,9 +149,10 @@ class VoiceNoteController extends Controller
         abort_unless(Storage::disk(self::DISK)->exists($note->path), 404);
 
         return Storage::disk(self::DISK)->response($note->path, null, [
-            'Content-Type' => $note->mime_type,
+            'Content-Type' => AudioUploads::bezpecnyTyp($note->mime_type),
             'Cache-Control' => 'private, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
+            'Content-Security-Policy' => "default-src 'none'; media-src 'self'; sandbox",
         ]);
     }
 
@@ -204,16 +213,20 @@ class VoiceNoteController extends Controller
         ];
     }
 
+    /**
+     * Jen prostory, kde účet patří do dvojice. Host cizí galerie (viewer,
+     * contributor) nemá slyšet její hlasovky jen proto, že je jejím členem.
+     */
     private function note(Request $request, string $uuid): VoiceNote
     {
         return VoiceNote::with('author:id,name')->where('uuid', $uuid)
-            ->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))
+            ->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))
             ->firstOrFail();
     }
 
     private function space(Request $request, ?int $id): GallerySpace
     {
-        $query = GallerySpace::whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
+        $query = GallerySpace::whereIn('id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()));
 
         return $id ? $query->findOrFail($id) : $query->orderByDesc('is_default')->firstOrFail();
     }
