@@ -27,8 +27,8 @@ class LedgerService
      * Tady se typy nerozlišují schválně: z pohledu peněženky je jedno, jestli peníze
      * odešly jako výdaj, nebo jako převod. Odešly.
      *
-     * Poplatek se odečítá od té strany, ze které se platil. U směny je to zdrojová
-     * peněženka; když poplatek zůstane bez měny, bere se měna zdroje.
+     * Poplatek se odečítá od té strany, ze které se platil — z peněženky v jeho měně
+     * (viz `FinanceService::ucetPoplatku`); když poplatek zůstane bez měny, ze zdroje.
      *
      * @return Collection<int, array<string, mixed>>
      */
@@ -41,11 +41,10 @@ class LedgerService
 
         $pohyby = Transaction::where('gallery_space_id', $space->id)
             ->whereIn('state', ['approved', 'settled'])
-            ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount', 'fee_currency', 'currency_from']);
+            ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount', 'fee_currency', 'fee_included', 'currency_from', 'currency_to']);
 
         $odchozi = [];
         $prichozi = [];
-        $poplatky = [];
 
         foreach ($pohyby as $pohyb) {
             if ($pohyb->wallet_from_id) {
@@ -55,15 +54,12 @@ class LedgerService
             if ($pohyb->wallet_to_id) {
                 $prichozi[$pohyb->wallet_to_id] = ($prichozi[$pohyb->wallet_to_id] ?? 0) + (float) $pohyb->amount_to;
             }
-
-            // Poplatek jde k té straně, ze které se platil. Bez zdrojové peněženky
-            // (poplatek u příchozí platby) k cílové.
-            $kde = $pohyb->wallet_from_id ?: $pohyb->wallet_to_id;
-
-            if ($kde && (float) $pohyb->fee_amount > 0) {
-                $poplatky[$kde] = ($poplatky[$kde] ?? 0) + (float) $pohyb->fee_amount;
-            }
         }
+
+        // Týž výpočet jako Rozpočet: jen poplatek placený navíc a z peněženky v jeho
+        // měně. Zahrnutý poplatek už je v částce a odečíst ho znovu by galerii
+        // ukázalo menší zůstatek, než jaký vidí Rozpočet.
+        $poplatky = FinanceService::poplatkyPoUctech($pohyby);
 
         return $penezenky->map(fn (Wallet $p) => [
             'uuid' => $p->uuid,

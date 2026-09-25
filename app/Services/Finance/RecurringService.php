@@ -7,7 +7,10 @@ use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\TransactionShare;
+use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Z předpisů dělá skutečné zápisy.
@@ -17,21 +20,46 @@ use Illuminate\Support\Carbon;
  * tomu, co je v bance, a to je přesně ta chyba, kvůli které lidé přestanou aplikaci
  * věřit. Co teprve přijde, se hlásí zvlášť jako závazek.
  *
- * Splátka vzniká jednou. Pozná se podle dvojice předpis + datum, ne podle částky —
- * dva nájmy stejné výše ve stejný měsíc jsou nesmysl, ale dvě stejné útraty za den
- * jsou běžné, a kdyby se rozlišovalo částkou, spletlo by se to.
+ * Splátka vzniká jednou **za měsíc**. Pozná se podle dvojice předpis + měsíc, ne podle
+ * přesného data ani částky. Přesné datum nestačí: kdo posune zářijový nájem z prvního
+ * na třetího, protože ho banka strhla později, by při dalším načtení přehledu dostal
+ * nájem na prvního znovu — a změna dne v měsíci z 1 na 5 by dopsala celý rok podruhé.
+ * Částka nestačí taky: dvě stejné útraty za den jsou běžné.
+ *
+ * Smazaná splátka se počítá jako hotová (`withTrashed`) — tak funguje i „přeskočit".
  */
 class RecurringService
 {
+    /** Jak dlouho počká souběžné načtení, než generování přenechá tomu prvnímu. */
+    private const CEKAT_NA_ZAMEK_SEKUND = 3;
+
+    /** Jak dlouho zámek nejvýš platí, kdyby běh uprostřed spadl. */
+    private const DRZET_ZAMEK_SEKUND = 30;
+
     /**
      * Dopíše splátky, které měly proběhnout a chybí.
+     *
+     * Běží při každém načtení přehledu, takže dva otevřené telefony by bez zámku
+     * zapsaly tentýž nájem dvakrát — oba by se podívaly „ještě tu není" a oba by ho
+     * založily. Druhý běh počká na první; když se nedočká, nezapíše nic a nechá to
+     * na něm.
      *
      * @return int kolik zápisů vzniklo
      */
     public function generovat(GallerySpace $space, ?Carbon $dnes = null): int
     {
-        $dnes ??= Carbon::today();
+        $dnes ??= FinanceFilter::dnes();
 
+        try {
+            return Cache::lock("fin-recurring:{$space->id}", self::DRZET_ZAMEK_SEKUND)
+                ->block(self::CEKAT_NA_ZAMEK_SEKUND, fn () => $this->generovatVse($space, $dnes));
+        } catch (LockTimeoutException) {
+            return 0;
+        }
+    }
+
+    private function generovatVse(GallerySpace $space, Carbon $dnes): int
+    {
         $predpisy = FinanceRecurring::where('gallery_space_id', $space->id)
             ->where('is_active', true)
             ->whereDate('starts_on', '<=', $dnes)
@@ -40,7 +68,7 @@ class RecurringService
         $vzniklo = 0;
 
         foreach ($predpisy as $p) {
-            $vzniklo += $this->generovatPredpis($p, $dnes);
+            $vzniklo += DB::transaction(fn () => $this->generovatPredpis($p, $dnes));
         }
 
         return $vzniklo;
@@ -48,36 +76,55 @@ class RecurringService
 
     private function generovatPredpis(FinanceRecurring $p, Carbon $dnes): int
     {
-        // Od začátku předpisu, ne od `generated_until` — kdyby se předpis založil
-        // zpětně (což u nájmu na rozjeté cestě dává smysl), musí se dopsat i minulost.
-        $terminy = $p->terminy($p->starts_on, $dnes);
+        $terminy = $p->terminy($this->odKdy($p), $dnes);
 
-        if ($terminy === []) {
-            return 0;
-        }
-
-        // Co už existuje. Jedním dotazem, ne jedním na každý termín.
-        $existujici = Transaction::withTrashed()
+        // Co už existuje — měsíce, ne data. Jedním dotazem, ne jedním na každý termín.
+        $hotoveMesice = Transaction::withTrashed()
             ->where('gallery_space_id', $p->gallery_space_id)
             ->where('recurring_id', $p->id)
             ->pluck('occurred_at')
-            ->map(fn ($d) => Carbon::parse($d)->toDateString())
+            ->map(fn ($d) => Carbon::parse($d)->format('Y-m'))
             ->flip();
 
         $vzniklo = 0;
 
         foreach ($terminy as $termin) {
-            if ($existujici->has($termin->toDateString())) {
+            if ($hotoveMesice->has($termin->format('Y-m'))) {
                 continue;
             }
 
             $this->zapsat($p, $termin);
+            $hotoveMesice->put($termin->format('Y-m'), true);
             $vzniklo++;
         }
 
-        $p->forceFill(['generated_until' => $dnes->toDateString()])->save();
+        // Nikdy zpátky: běh s dřívějším dnem nesmí znovu otevřít měsíce, které už prošly.
+        $doposud = $p->generated_until;
+
+        if ($doposud === null || $doposud->lessThan($dnes)) {
+            $p->forceFill(['generated_until' => $dnes->toDateString()])->save();
+        }
 
         return $vzniklo;
+    }
+
+    /**
+     * Od kterého dne má smysl termíny hledat.
+     *
+     * Poprvé od začátku předpisu — založený zpětně (nájem na rozjeté cestě) má dopsat
+     * i minulost. Potom až od měsíce posledního běhu: měsíce před ním generátor prošel
+     * celé, a co v nich chybí, člověk přesunul nebo odstranil sám. Otevřít je znovu by
+     * vrátilo nájem, který někdo vědomě přesunul do jiného měsíce.
+     */
+    private function odKdy(FinanceRecurring $p): Carbon
+    {
+        $zacatek = $p->starts_on->copy();
+
+        if ($p->generated_until === null) {
+            return $zacatek;
+        }
+
+        return $zacatek->max($p->generated_until->copy()->startOfMonth());
     }
 
     private function zapsat(FinanceRecurring $p, Carbon $den): void
@@ -147,7 +194,7 @@ class RecurringService
      */
     public function zavazky(GallerySpace $space, string $mena, ?Carbon $konec, ?Carbon $dnes = null): array
     {
-        $dnes ??= Carbon::today();
+        $dnes ??= FinanceFilter::dnes();
 
         if ($konec === null) {
             return ['total' => 0.0, 'items' => []];

@@ -16,7 +16,6 @@ use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -401,7 +400,7 @@ class FinanceController extends Controller
             ->get();
 
         $vObdobi = $vsechny->filter(fn (Transaction $t) => $t->occurred_at->betweenIncluded(
-            $filtr->od, $filtr->do ?? Carbon::today()->addYears(50),
+            $filtr->od, $filtr->do ?? FinanceFilter::dnes()->addYears(50),
         ));
 
         $radky = $vsechny->map(function (Transaction $t) {
@@ -509,7 +508,7 @@ class FinanceController extends Controller
      */
     private function dnesniStav(GallerySpace $space, ?array $rozpocet): array
     {
-        $dnes = Carbon::today();
+        $dnes = FinanceFilter::dnes();
 
         $pohyby = Transaction::where('gallery_space_id', $space->id)
             ->with(['walletFrom:id,name,currency', 'category:id,uuid,name,color'])
@@ -848,14 +847,14 @@ class FinanceController extends Controller
             'starts_on' => $c->starts_on?->toDateString(),
             'ends_on' => $c->ends_on?->toDateString(),
             /*
-             * Týž „dnešek" jako zbytek tohohle API (`FinanceFilter`, `safeDaily`).
+             * Týž „dnešek" jako zbytek tohohle API (`FinanceFilter::dnes()`,
+             * `safeDaily`) — všude den dvojice, ne UTC.
              *
-             * Model počítá od kola 2ae podle dne dvojice, starší API ale dál
-             * v UTC. Mezi půlnocí a druhou ráno pak tatáž cesta měla „zbývá 19
-             * dní" vedle „bezpečně na den · 21 dní včetně dneška" — dvě čísla,
-             * která se rozcházela o dva dny místo o jeden.
+             * Dokud tu byl dnešek v UTC a jinde podle Prahy, měla mezi půlnocí
+             * a druhou ráno tatáž cesta „zbývá 19 dní" vedle „bezpečně na den ·
+             * 21 dní včetně dneška" — čísla, která se rozcházela o dva dny.
              */
-            'days_left' => $c->dniDoKonce(Carbon::today()),
+            'days_left' => $c->dniDoKonce(FinanceFilter::dnes()),
             'budget' => $c->budget_amount !== null ? (float) $c->budget_amount : null,
             'reserve' => $c->reserve_amount !== null ? (float) $c->reserve_amount : null,
             'currency' => $c->base_currency,

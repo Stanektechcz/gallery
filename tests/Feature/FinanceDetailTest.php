@@ -9,7 +9,6 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 /**
@@ -66,8 +65,8 @@ class FinanceDetailTest extends TestCase
     {
         $u = $this->ucet('EUR', 'EUR', 1000);
 
-        $this->vydaj($u, 100, Carbon::today()->subDays(10)->toDateString());
-        $this->vydaj($u, 50, Carbon::today()->subDays(3)->toDateString());
+        $this->vydaj($u, 100, $this->dnes()->subDays(10)->toDateString());
+        $this->vydaj($u, 50, $this->dnes()->subDays(3)->toDateString());
 
         $odpoved = $this->getJson("/api/v1/rozpocet/ucty/{$u->uuid}")->assertOk();
 
@@ -78,11 +77,11 @@ class FinanceDetailTest extends TestCase
         $this->assertCount(90, $odpoved->json('history'), 'Devadesát dnů zpátky.');
 
         // Před prvním výdajem byl zůstatek 1000, mezi výdaji 900, po druhém 850.
-        $this->assertEqualsWithDelta(1000, $historie[Carbon::today()->subDays(11)->toDateString()]['balance'], 0.001);
-        $this->assertEqualsWithDelta(900, $historie[Carbon::today()->subDays(10)->toDateString()]['balance'], 0.001);
-        $this->assertEqualsWithDelta(900, $historie[Carbon::today()->subDays(4)->toDateString()]['balance'], 0.001);
-        $this->assertEqualsWithDelta(850, $historie[Carbon::today()->subDays(3)->toDateString()]['balance'], 0.001);
-        $this->assertEqualsWithDelta(850, $historie[Carbon::today()->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(1000, $historie[$this->dnes()->subDays(11)->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(900, $historie[$this->dnes()->subDays(10)->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(900, $historie[$this->dnes()->subDays(4)->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(850, $historie[$this->dnes()->subDays(3)->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(850, $historie[$this->dnes()->toDateString()]['balance'], 0.001);
     }
 
     /** Poplatek placený navíc patří do vývoje taky — ze zůstatku odešel. */
@@ -93,7 +92,7 @@ class FinanceDetailTest extends TestCase
 
         Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'transfer',
-            'occurred_at' => Carbon::today()->subDays(2)->toDateString(),
+            'occurred_at' => $this->dnes()->subDays(2)->toDateString(),
             'wallet_from_id' => $banka->id, 'wallet_to_id' => $hotovost->id,
             'amount_from' => 200, 'currency_from' => 'EUR',
             'amount_to' => 200, 'currency_to' => 'EUR',
@@ -103,8 +102,8 @@ class FinanceDetailTest extends TestCase
 
         $historie = collect($this->getJson("/api/v1/rozpocet/ucty/{$banka->uuid}")->json('history'))->keyBy('date');
 
-        $this->assertEqualsWithDelta(500, $historie[Carbon::today()->subDays(3)->toDateString()]['balance'], 0.001);
-        $this->assertEqualsWithDelta(297, $historie[Carbon::today()->toDateString()]['balance'], 0.001,
+        $this->assertEqualsWithDelta(500, $historie[$this->dnes()->subDays(3)->toDateString()]['balance'], 0.001);
+        $this->assertEqualsWithDelta(297, $historie[$this->dnes()->toDateString()]['balance'], 0.001,
             '500 − 200 převod − 3 poplatek.');
     }
 
@@ -116,7 +115,7 @@ class FinanceDetailTest extends TestCase
 
         Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'transfer',
-            'occurred_at' => Carbon::today()->toDateString(),
+            'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from_id' => $z->id, 'wallet_to_id' => $do->id,
             'amount_from' => 120, 'currency_from' => 'EUR',
             'amount_to' => 120, 'currency_to' => 'EUR',
@@ -137,8 +136,8 @@ class FinanceDetailTest extends TestCase
     {
         $u = $this->ucet('EUR', 'EUR', 1000);
 
-        $this->vydaj($u, 300, Carbon::today()->subMonths(2)->toDateString());
-        $this->vydaj($u, 40, Carbon::today()->toDateString());
+        $this->vydaj($u, 300, $this->dnes()->subMonths(2)->toDateString());
+        $this->vydaj($u, 40, $this->dnes()->toDateString());
 
         $obdobi = $this->getJson("/api/v1/rozpocet/ucty/{$u->uuid}?obdobi=dnes")->json('period');
 
@@ -156,20 +155,20 @@ class FinanceDetailTest extends TestCase
 
         $cesta = FinanceProject::create([
             'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Drážďany',
-            'starts_on' => Carbon::today()->subDays(4)->toDateString(),
-            'ends_on' => Carbon::today()->addDays(10)->toDateString(),
+            'starts_on' => $this->dnes()->subDays(4)->toDateString(),
+            'ends_on' => $this->dnes()->addDays(10)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 600,
         ]);
 
-        $this->vydaj($u, 50, Carbon::today()->subDays(3)->toDateString(), $cesta->id, 'Potraviny');
-        $this->vydaj($u, 70, Carbon::today()->toDateString(), $cesta->id, 'Doprava');
+        $this->vydaj($u, 50, $this->dnes()->subDays(3)->toDateString(), $cesta->id, 'Potraviny');
+        $this->vydaj($u, 70, $this->dnes()->toDateString(), $cesta->id, 'Doprava');
 
         $d = $this->getJson("/api/v1/rozpocet/cesty/{$cesta->uuid}/detail")->assertOk();
 
         // Pět dnů: od začátku do dneška. Ne patnáct — nuly za dny, které nebyly, by
         // srazily průměr na třetinu.
         $this->assertCount(5, $d->json('daily'));
-        $this->assertSame(Carbon::today()->toDateString(), collect($d->json('daily'))->last()['date']);
+        $this->assertSame($this->dnes()->toDateString(), collect($d->json('daily'))->last()['date']);
 
         $this->assertEqualsWithDelta(120, $d->json('trip.spent'), 0.001);
         $this->assertSame(2, $d->json('transactions'));
@@ -183,12 +182,12 @@ class FinanceDetailTest extends TestCase
         // Čtrnáctidenní cesta, čtvrtý den, utraceno 200 → tempo 50/den.
         $cesta = FinanceProject::create([
             'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Berlín',
-            'starts_on' => Carbon::today()->subDays(3)->toDateString(),
-            'ends_on' => Carbon::today()->addDays(10)->toDateString(),
+            'starts_on' => $this->dnes()->subDays(3)->toDateString(),
+            'ends_on' => $this->dnes()->addDays(10)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 500,
         ]);
 
-        $this->vydaj($u, 200, Carbon::today()->subDays(1)->toDateString(), $cesta->id, 'Potraviny');
+        $this->vydaj($u, 200, $this->dnes()->subDays(1)->toDateString(), $cesta->id, 'Potraviny');
 
         $p = $this->getJson("/api/v1/rozpocet/cesty/{$cesta->uuid}/detail")->json('prediction');
 
@@ -200,7 +199,7 @@ class FinanceDetailTest extends TestCase
         $this->assertSame('rough', $p['quality'], 'Ze čtyř dnů je odhad jen orientační.');
 
         // A ví, kdy peníze dojdou: zbývá 300, tempo 50 → za 6 dní.
-        $this->assertSame(Carbon::today()->addDays(6)->toDateString(), $p['runs_out_on']);
+        $this->assertSame($this->dnes()->addDays(6)->toDateString(), $p['runs_out_on']);
     }
 
     /** Spolehlivost se hlásí slovem podle počtu dnů, ne procentem. */
@@ -211,12 +210,12 @@ class FinanceDetailTest extends TestCase
         foreach ([[1, 'low'], [5, 'rough'], [20, 'stable']] as [$dnu, $ocekavano]) {
             $cesta = FinanceProject::create([
                 'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => "Cesta {$dnu}",
-                'starts_on' => Carbon::today()->subDays($dnu - 1)->toDateString(),
-                'ends_on' => Carbon::today()->addDays(10)->toDateString(),
+                'starts_on' => $this->dnes()->subDays($dnu - 1)->toDateString(),
+                'ends_on' => $this->dnes()->addDays(10)->toDateString(),
                 'base_currency' => 'EUR', 'budget_amount' => 1000,
             ]);
 
-            $this->vydaj($u, 30, Carbon::today()->toDateString(), $cesta->id, 'Potraviny');
+            $this->vydaj($u, 30, $this->dnes()->toDateString(), $cesta->id, 'Potraviny');
 
             $this->assertSame($ocekavano,
                 $this->getJson("/api/v1/rozpocet/cesty/{$cesta->uuid}/detail")->json('prediction.quality'),
@@ -229,8 +228,8 @@ class FinanceDetailTest extends TestCase
     {
         $cesta = FinanceProject::create([
             'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Příští měsíc',
-            'starts_on' => Carbon::today()->addDays(20)->toDateString(),
-            'ends_on' => Carbon::today()->addDays(30)->toDateString(),
+            'starts_on' => $this->dnes()->addDays(20)->toDateString(),
+            'ends_on' => $this->dnes()->addDays(30)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 800,
         ]);
 
@@ -248,13 +247,13 @@ class FinanceDetailTest extends TestCase
 
         $cesta = FinanceProject::create([
             'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Drážďany',
-            'starts_on' => Carbon::today()->subDays(2)->toDateString(),
-            'ends_on' => Carbon::today()->addDays(5)->toDateString(),
+            'starts_on' => $this->dnes()->subDays(2)->toDateString(),
+            'ends_on' => $this->dnes()->addDays(5)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 400,
         ]);
 
-        $this->vydaj($u, 60, Carbon::today()->toDateString(), $cesta->id, 'Potraviny');
-        $this->vydaj($u, 999, Carbon::today()->toDateString(), null, 'Ubytování');   // mimo cestu
+        $this->vydaj($u, 60, $this->dnes()->toDateString(), $cesta->id, 'Potraviny');
+        $this->vydaj($u, 999, $this->dnes()->toDateString(), null, 'Ubytování');   // mimo cestu
 
         $d = $this->getJson("/api/v1/rozpocet/cesty/{$cesta->uuid}/detail")->assertOk();
 

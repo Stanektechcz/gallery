@@ -295,10 +295,12 @@ class FinanceServiceTest extends TestCase
         $saldo = $this->sluzba->partnerBalance($this->nactiPohyby(), collect([$adri, $maki]));
         $eur = collect($saldo['by_currency'])->firstWhere('currency', 'EUR');
 
-        $this->assertSame(-40.0, collect($eur['partners'])->firstWhere('name', 'Adri')['balance']);
-        $this->assertSame(-40.0, collect($eur['partners'])->firstWhere('name', 'Maki')['balance']);
+        // Výdaj ze společné kasy se do salda nepočítá vůbec — dřív dal oběma stejný
+        // mínus, který vedle skutečného dluhu ten dluh schoval (viz
+        // Penize\SaldoAPoplatkyTest). Měna v přehledu zůstává, jen s nulami.
+        $this->assertSame(0.0, collect($eur['partners'])->firstWhere('name', 'Adri')['balance']);
+        $this->assertSame(0.0, collect($eur['partners'])->firstWhere('name', 'Maki')['balance']);
 
-        // Oba jsou „ve stejném mínusu" vůči společné kase, takže si navzájem nedluží nic.
         $this->assertSame([], $eur['settlement'], 'Ze společného účtu nevzniká osobní dluh.');
     }
 

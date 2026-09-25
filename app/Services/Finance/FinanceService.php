@@ -2,6 +2,7 @@
 
 namespace App\Services\Finance;
 
+use App\Models\FinanceAccess;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
@@ -44,17 +45,14 @@ class FinanceService
 
         $pohyby = Transaction::where('gallery_space_id', $space->id)
             ->when($kDatu, fn ($q) => $q->whereDate('occurred_at', '<=', $kDatu))
-            ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount', 'fee_currency', 'fee_included', 'currency_from']);
+            ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount', 'fee_currency', 'fee_included', 'currency_from', 'currency_to']);
 
         $odchozi = $pohyby->groupBy('wallet_from_id')->map(fn (Collection $s) => (float) $s->sum('amount_from'));
         $prichozi = $pohyby->groupBy('wallet_to_id')->map(fn (Collection $s) => (float) $s->sum('amount_to'));
 
-        // Poplatek placený navíc odešel ze zdrojové peněženky a v `amount_from` není.
-        // Bez tohohle řádku by zůstatek na účtu vycházel o poplatky vyšší, než jaký je.
-        $poplatky = $pohyby
-            ->filter(fn (Transaction $t) => ! $t->fee_included && (float) $t->fee_amount > 0)
-            ->groupBy('wallet_from_id')
-            ->map(fn (Collection $s) => (float) $s->sum('fee_amount'));
+        // Poplatek placený navíc v částkách není. Bez tohohle by zůstatek na účtu
+        // vycházel o poplatky vyšší, než jaký je.
+        $poplatky = self::poplatkyPoUctech($pohyby);
 
         $radky = $penezenky->map(function (Wallet $p) use ($odchozi, $prichozi, $poplatky) {
             $zustatek = (float) $p->opening_balance
@@ -83,6 +81,52 @@ class FinanceService
         ])->values();
 
         return ['by_currency' => $poMenach->all(), 'wallets' => $radky->all()];
+    }
+
+    /**
+     * Poplatky placené navíc, sečtené po peněženkách, ze kterých odešly.
+     *
+     * Jedno pravidlo pro Rozpočet i galerii (`LedgerService::walletBalances`). Dvě
+     * kopie se rozešly: galerie odečítala i poplatek, který už byl v částce, a ukazovala
+     * o něj menší zůstatek než Rozpočet.
+     *
+     * @param  Collection<int, Transaction>  $pohyby  potřebují peněženky, měny i poplatek
+     * @return array<int, float>
+     */
+    public static function poplatkyPoUctech(Collection $pohyby): array
+    {
+        $poplatky = [];
+
+        foreach ($pohyby as $t) {
+            /** @var Transaction $t */
+            $poplatek = $t->feePaidExtra();
+            $kde = self::ucetPoplatku($t);
+
+            if ($poplatek > 0 && $kde !== null) {
+                $poplatky[$kde] = ($poplatky[$kde] ?? 0) + $poplatek;
+            }
+        }
+
+        return $poplatky;
+    }
+
+    /**
+     * Ze které peněženky poplatek odešel.
+     *
+     * Z té, jejíž měna je měna poplatku. Dvě eura za směnu korun na eura si banka
+     * vzala z eur — odečíst je od korunového účtu by tam udělalo díru dvou „korun"
+     * a na eurovém účtu by dvě eura přebývala. Bez měny poplatku (starší zápisy)
+     * platí zdrojová strana, u příchozí platby cílová.
+     */
+    public static function ucetPoplatku(Transaction $t): ?int
+    {
+        $mena = $t->fee_currency;
+
+        if ($mena !== null && $t->wallet_to_id && $mena === $t->currency_to && $mena !== $t->currency_from) {
+            return $t->wallet_to_id;
+        }
+
+        return $t->wallet_from_id ?: $t->wallet_to_id;
     }
 
     /**
@@ -297,7 +341,7 @@ class FinanceService
      */
     public function safeDaily(float $limit, float $utraceno, float $rezerva, Carbon $od, ?Carbon $do, ?Carbon $dnes = null): array
     {
-        $dnes ??= Carbon::today();
+        $dnes ??= FinanceFilter::dnes();
 
         $zbyva = $limit - $utraceno;
         $kRozdeleni = $zbyva - $rezerva;
@@ -397,7 +441,21 @@ class FinanceService
             $mena = $t->currency_from;
             $castka = (float) $t->amount_from + ($t->fee_currency === $mena ? $t->feePaidExtra() : 0);
 
-            // Společný účet nemá osobního majitele — platba z něj nikomu nevzniká.
+            /*
+             * Výdaj ze společného účtu se přeskočí celý.
+             *
+             * Dřív se z něj nikomu nepřipsalo „zaplatil", ale oběma se připsalo „nesl".
+             * Oba pak šli do stejného mínusu a skutečný dluh se v něm ztratil: stovka,
+             * kterou Adri zaplatil za oba ze svého, vedle tisícovky ze společného účtu
+             * dala saldo −450 a −550 — dva dlužníci, žádný věřitel, žádné vyrovnání.
+             * Měna ale v přehledu zůstane, jen s nulami.
+             */
+            if ($t->walletFrom !== null && $t->walletFrom->partner_id === null) {
+                $zaplatil[$mena] ??= [];
+
+                continue;
+            }
+
             $platce = $t->walletFrom?->partner_id ?? $t->payer_partner_id;
 
             if ($platce !== null) {
@@ -583,13 +641,22 @@ class FinanceService
         return $radky->all();
     }
 
-    /** Aktivní cesta prostoru. Null, když se právě nikam nejede. */
-    public function activeTrip(GallerySpace $space): ?FinanceProject
+    /**
+     * Aktivní cesta prostoru. Null, když se právě nikam nejede.
+     *
+     * Jen taková, kterou uživatel smí vidět. Cizí soukromá cesta se jinak objevila
+     * na přehledu jako „aktivní cesta" i s rozpočtem, přestože v seznamu cest nebyla.
+     * Bez uživatele (konzole, fronta) platí všechny.
+     */
+    public function activeTrip(GallerySpace $space, ?int $uzivatel = null): ?FinanceProject
     {
-        return FinanceProject::where('gallery_space_id', $space->id)
+        $uzivatel ??= auth()->id();
+
+        $dotaz = FinanceProject::where('gallery_space_id', $space->id)
             ->where('kind', 'trip')
-            ->where('is_active', true)
-            ->first();
+            ->where('is_active', true);
+
+        return ($uzivatel === null ? $dotaz : FinanceAccess::viditelne($dotaz, 'trip', $uzivatel))->first();
     }
 
     /** Zajistí, že prostor má kategorie i nastavení. */

@@ -217,8 +217,9 @@ class FinanceStatsTest extends TestCase
     /** Filtr platí pro celou statistiku najednou. */
     public function test_filtr_plati_pro_vsechno(): void
     {
-        $this->vydaj(500, now()->subMonths(2)->toDateString(), 'Potraviny');
-        $this->vydaj(40, now()->toDateString(), 'Doprava');
+        // Dnešek dvojice, ne UTC — „dnes" v Rozpočtu je pražské datum.
+        $this->vydaj(500, $this->dnes()->subMonths(2)->toDateString(), 'Potraviny');
+        $this->vydaj(40, $this->dnes()->toDateString(), 'Doprava');
 
         $s = $this->getJson('/api/v1/rozpocet/statistiky?obdobi=dnes')->assertOk();
 

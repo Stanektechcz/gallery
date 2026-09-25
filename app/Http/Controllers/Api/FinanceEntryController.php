@@ -13,6 +13,7 @@ use App\Models\Wallet;
 use App\Services\Finance\FinanceService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -31,6 +32,9 @@ use Illuminate\Validation\ValidationException;
  */
 class FinanceEntryController extends Controller
 {
+    /** Největší kurz, který se vejde do sloupce decimal(16,8). */
+    private const NEJVYSSI_KURZ = 99999999.99999999;
+
     public function __construct(private readonly FinanceService $finance) {}
 
     public function store(Request $request): JsonResponse
@@ -71,13 +75,19 @@ class FinanceEntryController extends Controller
             return response()->json(['needs_confirmation' => true, 'warnings' => $varovani], 409);
         }
 
-        $t = Transaction::create($atributy + [
-            'gallery_space_id' => $space->id,
-            'created_by' => $request->user()->id,
-            'client_key' => $request->input('client_key'),
-        ]);
+        // Zápis i podíly najednou: bez transakce by chyba u podílů nechala v knize
+        // výdaj bez rozdělení, o kterém klient dostal odpověď „nepovedlo se".
+        $t = DB::transaction(function () use ($atributy, $podily, $space, $request) {
+            $t = Transaction::create($atributy + [
+                'gallery_space_id' => $space->id,
+                'created_by' => $request->user()->id,
+                'client_key' => $request->input('client_key'),
+            ]);
 
-        $this->ulozPodily($t, $podily, $space);
+            $this->ulozPodily($t, $podily, $space);
+
+            return $t;
+        });
 
         return response()->json(['uuid' => $t->uuid, 'warnings' => $varovani], 201);
     }
@@ -93,8 +103,10 @@ class FinanceEntryController extends Controller
             return response()->json(['needs_confirmation' => true, 'warnings' => $varovani], 409);
         }
 
-        $t->update($atributy);
-        $this->ulozPodily($t, $podily, $space);
+        DB::transaction(function () use ($t, $atributy, $podily, $space) {
+            $t->update($atributy);
+            $this->ulozPodily($t, $podily, $space);
+        });
 
         return response()->json(['uuid' => $t->uuid]);
     }
@@ -148,18 +160,22 @@ class FinanceEntryController extends Controller
             'occurred_at' => 'required|date',
             'wallet_from' => 'nullable|uuid',
             'wallet_to' => 'nullable|uuid',
-            'amount_from' => 'nullable|numeric',
-            'amount_to' => 'nullable|numeric',
+            // Horní mez podle sloupce decimal(14,2). Bez ní přešlo cokoli a MySQL
+            // pak spadla na „out of range" až při zápisu — pětistovkou, ne hláškou.
+            'amount_from' => 'nullable|numeric|max:999999999.99',
+            // Záporná přijatá částka by u směny „vyráběla" peníze na zdrojovém účtu.
+            'amount_to' => 'nullable|numeric|min:0.01|max:999999999.99',
             'category' => 'nullable|uuid',
             'trip' => 'nullable|uuid',
             // Partner jen z téhle galerie; `split.*.partner_id` se ověřoval
             // v `ulozPodily()`, tyhle dva se zapsaly, ať byly čí chtěly.
             'payer_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
             'beneficiary_partner_id' => ['nullable', 'integer', Rule::exists('partners', 'id')->where('gallery_space_id', $space->id)],
-            'fee_amount' => 'nullable|numeric|min:0',
+            'fee_amount' => 'nullable|numeric|min:0|max:999999999.99',
             'fee_currency' => 'nullable|string|size:3',
             'fee_included' => 'sometimes|boolean',
-            'reference_rate' => 'nullable|numeric|min:0',
+            // decimal(16,8): nejvýš osm číslic před čárkou.
+            'reference_rate' => 'nullable|numeric|min:0|max:99999999',
             'provider' => 'nullable|string|max:60',
             'counterparty' => 'nullable|string|max:200',
             'place' => 'nullable|string|max:120',
@@ -169,8 +185,10 @@ class FinanceEntryController extends Controller
             'refund_of' => 'nullable|uuid',
             'is_settlement' => 'sometimes|boolean',
             'split' => 'nullable|array|max:10',
-            'split.*.partner_id' => 'required|integer',
-            'split.*.amount' => 'required|numeric|min:0',
+            // Jeden partner v rozdělení jednou. Dvakrát tentýž narazil na unikát podílů
+            // až po uložení transakce — výdaj zůstal zapsaný a odpověď byla chyba 500.
+            'split.*.partner_id' => 'required|integer|distinct',
+            'split.*.amount' => 'required|numeric|min:0|max:999999999.99',
             'split.*.basis' => 'nullable|in:equal,percent,fixed',
         ]);
 
@@ -209,8 +227,9 @@ class FinanceEntryController extends Controller
             'rate' => $data['type'] === 'exchange' && $castkaDo > 0 ? $castkaZ / $castkaDo : null,
             'reference_rate' => $data['reference_rate'] ?? null,
             'fee_amount' => $poplatek,
+            // Bez měny poplatku platí měna účtu, ze kterého se platilo; u příjmu cílového.
             'fee_currency' => $poplatek > 0
-                ? strtoupper($data['fee_currency'] ?? $z?->currency ?? 'CZK')
+                ? strtoupper($data['fee_currency'] ?? $z?->currency ?? $do?->currency ?? 'CZK')
                 : null,
             'fee_included' => $poplatek > 0 ? (bool) ($data['fee_included'] ?? false) : false,
             'category_id' => $kategorie?->id,
@@ -274,6 +293,36 @@ class FinanceEntryController extends Controller
 
         if ($data['type'] === 'exchange' && empty($data['amount_to'])) {
             $chyby['amount_to'] = 'Zadejte, kolik doopravdy přišlo — z toho se počítá skutečný kurz.';
+        }
+
+        /*
+         * Přesun ve stejné měně: přijde tolik, kolik odešlo.
+         *
+         * Rozdílné částky by vyrobily peníze z ničeho (nebo je ztratily) — dvě stě
+         * odešlo, dvě stě padesát přišlo, a součet všech účtů najednou nesedí. Odmítá
+         * se, místo aby se jedna částka tiše přepsala druhou: kdo zadal dvě různé,
+         * obvykle myslel poplatek, a ten má vlastní pole, kde se správně započítá.
+         */
+        if (in_array($data['type'], ['transfer', 'withdrawal', 'deposit'], true)
+            && isset($data['amount_from'], $data['amount_to'])
+            && abs((float) $data['amount_from'] - (float) $data['amount_to']) > 0.005) {
+            $chyby['amount_to'] = 'U převodu ve stejné měně přijde tolik, kolik odešlo. Rozdíl je poplatek — zapište ho do pole Poplatek.';
+        }
+
+        // Kurz se ukládá do decimal(16,8); víc než osm číslic před čárkou je překlep.
+        if ($data['type'] === 'exchange' && ! empty($data['amount_to']) && (float) $data['amount_to'] > 0
+            && $castka / (float) $data['amount_to'] > self::NEJVYSSI_KURZ) {
+            $chyby['amount_to'] = 'Z těch částek vychází kurz, který nedává smysl. Zkontrolujte, kolik odešlo a kolik přišlo.';
+        }
+
+        // Poplatek je v měně jedné ze stran — z té se také odečte.
+        $poplatek = (float) ($data['fee_amount'] ?? 0);
+        $menaPoplatku = ! empty($data['fee_currency']) ? strtoupper($data['fee_currency']) : null;
+
+        if ($poplatek > 0 && $menaPoplatku !== null
+            && ! in_array($menaPoplatku, array_filter([$z?->currency, $do?->currency]), true)) {
+            $chyby['fee_currency'] = 'Poplatek musí být v měně jednoho z účtů ('
+                .implode(' nebo ', array_unique(array_filter([$z?->currency, $do?->currency]))).') — z toho se odečte.';
         }
 
         if (($data['excluded_from_budget'] ?? false) && empty($data['exclusion_reason'])) {

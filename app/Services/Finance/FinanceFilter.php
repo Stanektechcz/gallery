@@ -3,11 +3,15 @@
 namespace App\Services\Finance;
 
 use App\Models\Budget;
+use App\Models\FinanceAccess;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Support\Cas;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Jeden filtr pro všechny taby.
@@ -22,6 +26,9 @@ use Illuminate\Support\Carbon;
  */
 class FinanceFilter
 {
+    /** Nejdelší vlastní období — deset let, jako u přehledu financí prostoru. */
+    private const NEJDELSI_OBDOBI_DNI = 3660;
+
     public function __construct(
         public readonly Carbon $od,
         public readonly ?Carbon $do,
@@ -29,7 +36,22 @@ class FinanceFilter
         public readonly string $popis,
         public readonly ?FinanceProject $cesta = null,
         public readonly array $volby = [],
+        // Filtr podle cesty, kterou uživatel nevidí — výběr je prázdný.
+        public readonly bool $prazdny = false,
     ) {}
+
+    /**
+     * Dnešek dvojice — jediný „dnes" celého modulu.
+     *
+     * `occurred_at` je datum, jak ho člověk zapsal podle pražských hodin. Server běží
+     * v UTC, takže `Carbon::today()` mezi pražskou půlnocí a druhou ráno ukazoval ještě
+     * včerejšek: útrata zapsaná prvního října po půlnoci nebyla v „dnes" ani v „tomto
+     * měsíci" a přehled tvrdil, že se v říjnu ještě nic neutratilo.
+     */
+    public static function dnes(): Carbon
+    {
+        return Carbon::instance(Cas::dnes());
+    }
 
     /**
      * Poskládá filtr z parametrů dotazu.
@@ -38,18 +60,28 @@ class FinanceFilter
      * kalendářem: kdo se dívá na pobyt, chce vidět celý pobyt, ne jeho průnik
      * s tímhle měsícem.
      */
-    public static function zDotazu(array $data, GallerySpace $space, ?Carbon $dnes = null): self
+    public static function zDotazu(array $data, GallerySpace $space, ?Carbon $dnes = null, ?int $uzivatel = null): self
     {
-        $dnes ??= Carbon::today();
+        self::zkontroluj($data);
+
+        $dnes ??= self::dnes();
+        $uzivatel ??= auth()->id();
         $obdobi = $data['obdobi'] ?? 'mesic';
 
         $cesta = null;
 
+        /*
+         * Cesta, kterou uživatel nevidí (cizí soukromá nebo neexistující), dá prázdný
+         * výběr — ne „všechno bez filtru". Dřív se filtr podle ní tiše zahodil a
+         * seznam „za tuhle cestu" ukázal všechny zápisy prostoru.
+         */
+        $prazdny = false;
+
         if (! empty($data['cesta'])) {
-            $cesta = FinanceProject::where('gallery_space_id', $space->id)
-                ->where('uuid', $data['cesta'])->first();
+            $cesta = self::viditelneCesty($space, $uzivatel)->where('uuid', $data['cesta'])->first();
+            $prazdny = $cesta === null;
         } elseif ($obdobi === 'cesta') {
-            $cesta = FinanceProject::where('gallery_space_id', $space->id)
+            $cesta = self::viditelneCesty($space, $uzivatel)
                 ->where('kind', 'trip')->where('is_active', true)->first();
         }
 
@@ -62,6 +94,10 @@ class FinanceFilter
                 cesta: $cesta,
                 volby: $data,
             );
+        }
+
+        if ($obdobi === 'vlastni') {
+            self::zkontrolujRozsah($data, $dnes);
         }
 
         [$od, $do, $popis] = match ($obdobi) {
@@ -102,7 +138,64 @@ class FinanceFilter
             default => [$dnes->copy()->startOfMonth(), $dnes->copy()->endOfMonth(), 'Tento měsíc'],
         };
 
-        return new self($od, $do, $obdobi === 'vlastni' ? 'vlastni' : $obdobi, $popis, $cesta, $data);
+        return new self($od, $do, $obdobi === 'vlastni' ? 'vlastni' : $obdobi, $popis, $cesta, $data, $prazdny);
+    }
+
+    /**
+     * Parametry filtru, jak přišly z adresy.
+     *
+     * Jen řetězce a rozumná data. Pole místo řetězce (`typ[]=…`) shodilo štítky
+     * i dotaz a `od=abc` spadlo na nerozluštitelném datu — obojí jako chyba 500.
+     */
+    private static function zkontroluj(array $data): void
+    {
+        $retezec = 'nullable|string|max:200';
+
+        Validator::make($data, [
+            'obdobi' => 'nullable|string|max:40',
+            'od' => 'nullable|date',
+            'do' => 'nullable|date',
+            'cesta' => $retezec,
+            'typ' => $retezec,
+            'mena' => $retezec,
+            'ucet' => $retezec,
+            'kategorie' => $retezec,
+            'platce' => $retezec,
+            'prijemce' => $retezec,
+            'misto' => $retezec,
+            'hledat' => $retezec,
+            'od_castky' => 'nullable|numeric',
+            'do_castky' => 'nullable|numeric',
+        ])->validate();
+    }
+
+    /**
+     * Vlastní období: od před do a nejvýš deset let.
+     *
+     * Denní přehled má řádek za každý den rozsahu. `od=0001-01-01&do=9999-12-31`
+     * by jich vyrobil přes tři miliony a požadavek by padl na paměti. Deset let je
+     * stejná mez jako u přehledu financí prostoru.
+     */
+    private static function zkontrolujRozsah(array $data, Carbon $dnes): void
+    {
+        $od = Carbon::parse($data['od'] ?? $dnes->copy()->startOfMonth());
+        $do = Carbon::parse($data['do'] ?? $dnes);
+
+        if ($do->lessThan($od)) {
+            throw ValidationException::withMessages(['do' => 'Konec období musí být až po jeho začátku.']);
+        }
+
+        if ($od->diffInDays($do) > self::NEJDELSI_OBDOBI_DNI) {
+            throw ValidationException::withMessages(['od' => 'Jedno období může mít nejvýše deset let.']);
+        }
+    }
+
+    /** Cesty prostoru, které uživatel smí vidět. Bez uživatele (konzole) všechny. */
+    private static function viditelneCesty(GallerySpace $space, ?int $uzivatel): Builder
+    {
+        $dotaz = FinanceProject::where('gallery_space_id', $space->id);
+
+        return $uzivatel === null ? $dotaz : FinanceAccess::viditelne($dotaz, 'trip', $uzivatel);
     }
 
     /**
@@ -126,6 +219,7 @@ class FinanceFilter
             popis: 'Předchozí období',
             cesta: null,
             volby: $this->volby,
+            prazdny: $this->prazdny,
         );
     }
 
@@ -147,7 +241,7 @@ class FinanceFilter
      */
     public function dniUteklo(?Carbon $dnes = null): int
     {
-        $dnes ??= Carbon::today();
+        $dnes ??= self::dnes();
         $konec = $this->do === null ? $dnes : $dnes->copy()->min($this->do);
 
         return max(1, (int) $this->od->diffInDays($konec, false) + 1);
@@ -165,6 +259,7 @@ class FinanceFilter
             ->with(['walletFrom:id,name,currency,partner_id,kind', 'walletTo:id,name,currency,partner_id,kind',
                 'category:id,uuid,name,color,icon', 'shares', 'refundOf:id,category_id',
                 'payer:id,name', 'project:id,name,uuid'])
+            ->when($this->prazdny, fn ($q) => $q->whereRaw('1 = 0'))
             ->whereDate('occurred_at', '>=', $this->od)
             ->when($this->do, fn ($q) => $q->whereDate('occurred_at', '<=', $this->do))
             ->when($this->cesta, fn ($q) => $q->where('finance_project_id', $this->cesta->id))

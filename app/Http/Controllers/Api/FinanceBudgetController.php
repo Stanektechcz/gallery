@@ -10,6 +10,7 @@ use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
 use App\Services\Finance\RozdeleniService;
@@ -75,7 +76,8 @@ class FinanceBudgetController extends Controller
 
         $data = $request->validate([
             'category_uuid' => 'required|uuid',
-            'amount' => 'required|numeric|min:0',
+            // Horní mez se vejde do decimal(12,2) i (14,2); bez ní MySQL spadne až při zápisu.
+            'amount' => 'required|numeric|min:0|max:999999999.99',
             'priority' => 'sometimes|integer|min:1|max:999',
         ]);
 
@@ -320,8 +322,8 @@ class FinanceBudgetController extends Controller
             'currency' => "{$pravidlo}|string|size:3",
             'starts_on' => 'nullable|date',
             'ends_on' => 'nullable|date|after_or_equal:starts_on',
-            'amount' => "{$pravidlo}|numeric|min:0",
-            'reserve_amount' => 'nullable|numeric|min:0',
+            'amount' => "{$pravidlo}|numeric|min:0|max:999999999.99",
+            'reserve_amount' => 'nullable|numeric|min:0|max:999999999.99',
             // Obrazovka posílá `trip_uuid` (níž); tohle pole bez ověření
             // přijalo i cestu jiné galerie.
             'finance_project_id' => ['nullable', 'integer', Rule::exists('finance_projects', 'id')->where('gallery_space_id', $this->space($request)->id)],
@@ -358,7 +360,7 @@ class FinanceBudgetController extends Controller
         // Měsíční rozpočet nepotřebuje datum — období je aktuální měsíc a posouvá se
         // samo. Ptát se na něj by znamenalo zakládat nový každý první.
         if (($data['budget_kind'] ?? 'monthly') === 'monthly') {
-            $data['starts_on'] = $data['starts_on'] ?? Carbon::today()->startOfMonth()->toDateString();
+            $data['starts_on'] = $data['starts_on'] ?? FinanceFilter::dnes()->startOfMonth()->toDateString();
             $data['ends_on'] = null;
             $data['period_mode'] = 'rolling';
         } else {
@@ -398,7 +400,7 @@ class FinanceBudgetController extends Controller
         $limity = $request->validate([
             'limits' => 'array|max:40',
             'limits.*.category_uuid' => 'required|uuid',
-            'limits.*.amount' => 'required|numeric|min:0',
+            'limits.*.amount' => 'required|numeric|min:0|max:999999999.99',
             'limits.*.priority' => 'sometimes|integer|min:1|max:999',
         ])['limits'];
 
@@ -441,8 +443,8 @@ class FinanceBudgetController extends Controller
             : null;
 
         if ($b->budget_kind === 'monthly') {
-            $od = Carbon::today()->startOfMonth();
-            $do = Carbon::today()->endOfMonth();
+            $od = FinanceFilter::dnes()->startOfMonth();
+            $do = FinanceFilter::dnes()->endOfMonth();
         } else {
             $od = $cesta?->starts_on ?? $b->starts_on;
             $do = $cesta?->ends_on ?? $b->ends_on;
@@ -507,7 +509,7 @@ class FinanceBudgetController extends Controller
         // Dny se počítají dřív než rozdělení — předpověď na kategorie z nich vychází
         // a musí to být tytéž dny, jaké používá odhad na celý rozpočet. Dvě různá
         // čísla by znamenala, že součet předpovědí nesedí s předpovědí součtu.
-        $uteklo = max(1, (int) $od->diffInDays(Carbon::today()->min($do ?? Carbon::today()), false) + 1);
+        $uteklo = max(1, (int) $od->diffInDays(FinanceFilter::dnes()->min($do ?? FinanceFilter::dnes()), false) + 1);
         $celkemDni = $do ? (int) $od->diffInDays($do) + 1 : null;
 
         $kDispozici = max(0, $limit + $prijem - $rezerva);
@@ -589,7 +591,7 @@ class FinanceBudgetController extends Controller
             'top_categories' => array_slice($rozpad, 0, 6),
             'alert' => $this->hranice($procenta, $hranice),
             'alert_thresholds' => implode(',', $hranice),
-            'is_current' => $do === null || Carbon::today()->betweenIncluded($od, $do),
+            'is_current' => $do === null || FinanceFilter::dnes()->betweenIncluded($od, $do),
             // Průběh čerpání proti rovnoměrnému tempu. Odpovídá na jedinou otázku,
             // kvůli které se sem lidi dívají: vyjdeme s tím?
             'burndown' => $this->prubeh($pohyby, $mena, $od, $do, $kMereni, $rezerva),
@@ -622,9 +624,9 @@ class FinanceBudgetController extends Controller
      */
     private function prubeh(Collection $pohyby, string $mena, Carbon $od, ?Carbon $do, float $limit, float $rezerva): array
     {
-        $konec = $do ?? Carbon::today();
+        $konec = $do ?? FinanceFilter::dnes();
         $dni = max(1, (int) $od->diffInDays($konec) + 1);
-        $dnes = Carbon::today();
+        $dnes = FinanceFilter::dnes();
 
         // Přes zhruba šest týdnů se na telefonu jednotlivé dny stejně nerozliší, tak se
         // bere každý n-tý. Poslední bod je vždycky poslední den, ne ten, na který zrovna

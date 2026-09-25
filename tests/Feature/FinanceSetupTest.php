@@ -48,7 +48,7 @@ class FinanceSetupTest extends TestCase
     {
         return Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'expense',
-            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $z->id,
+            'occurred_at' => $this->dnes()->toDateString(), 'wallet_from_id' => $z->id,
             'amount_from' => $castka, 'currency_from' => $z->currency,
             'category_id' => $kategorie, 'finance_project_id' => $cesta,
             'state' => 'approved', 'created_by' => $this->uzivatel->id,
@@ -163,8 +163,8 @@ class FinanceSetupTest extends TestCase
     {
         $odpoved = $this->postJson('/api/v1/rozpocet/cesty', [
             'name' => 'Drážďany', 'country' => 'Německo', 'city' => 'Drážďany',
-            'starts_on' => now()->toDateString(),
-            'ends_on' => now()->addDays(9)->toDateString(),
+            'starts_on' => $this->dnes()->toDateString(),
+            'ends_on' => $this->dnes()->addDays(9)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 1000, 'reserve_amount' => 100,
             'activate' => true,
         ])->assertCreated();
@@ -180,7 +180,7 @@ class FinanceSetupTest extends TestCase
     public function test_rezerva_nesmi_prevysit_rozpocet(): void
     {
         $this->postJson('/api/v1/rozpocet/cesty', [
-            'name' => 'Nesmysl', 'starts_on' => now()->toDateString(),
+            'name' => 'Nesmysl', 'starts_on' => $this->dnes()->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 500, 'reserve_amount' => 900,
         ])->assertStatus(422);
 
@@ -191,17 +191,17 @@ class FinanceSetupTest extends TestCase
     public function test_konec_nesmi_byt_pred_zacatkem(): void
     {
         $this->postJson('/api/v1/rozpocet/cesty', [
-            'name' => 'Pozpátku', 'starts_on' => now()->toDateString(),
-            'ends_on' => now()->subDays(3)->toDateString(), 'base_currency' => 'EUR',
+            'name' => 'Pozpátku', 'starts_on' => $this->dnes()->toDateString(),
+            'ends_on' => $this->dnes()->subDays(3)->toDateString(), 'base_currency' => 'EUR',
         ])->assertStatus(422)->assertJsonValidationErrors('ends_on');
     }
 
     /** Aktivace druhé cesty zhasne první. */
     public function test_aktivni_cesta_je_jedna(): void
     {
-        $a = $this->postJson('/api/v1/rozpocet/cesty', ['name' => 'První', 'starts_on' => now()->toDateString(),
+        $a = $this->postJson('/api/v1/rozpocet/cesty', ['name' => 'První', 'starts_on' => $this->dnes()->toDateString(),
             'base_currency' => 'EUR', 'activate' => true])->json('trip.uuid');
-        $b = $this->postJson('/api/v1/rozpocet/cesty', ['name' => 'Druhá', 'starts_on' => now()->toDateString(),
+        $b = $this->postJson('/api/v1/rozpocet/cesty', ['name' => 'Druhá', 'starts_on' => $this->dnes()->toDateString(),
             'base_currency' => 'EUR'])->json('trip.uuid');
 
         $this->postJson("/api/v1/rozpocet/cesty/{$b}/aktivovat")->assertOk();
@@ -218,7 +218,7 @@ class FinanceSetupTest extends TestCase
     {
         $u = $this->ucet('EUR', 'EUR', 1000);
         $cesta = FinanceProject::create(['gallery_space_id' => $this->space->id, 'kind' => 'trip',
-            'name' => 'Berlín', 'starts_on' => now()->toDateString(), 'base_currency' => 'EUR']);
+            'name' => 'Berlín', 'starts_on' => $this->dnes()->toDateString(), 'base_currency' => 'EUR']);
 
         $this->vydaj($u, 40, null, $cesta->id);
 
@@ -234,8 +234,8 @@ class FinanceSetupTest extends TestCase
 
         $u = $this->ucet('EUR', 'EUR', 2000);
         $cesta = FinanceProject::create(['gallery_space_id' => $this->space->id, 'kind' => 'trip',
-            'name' => 'Berlín', 'starts_on' => now()->subDays(3)->toDateString(),
-            'ends_on' => now()->toDateString(), 'base_currency' => 'EUR', 'budget_amount' => 600]);
+            'name' => 'Berlín', 'starts_on' => $this->dnes()->subDays(3)->toDateString(),
+            'ends_on' => $this->dnes()->toDateString(), 'base_currency' => 'EUR', 'budget_amount' => 600]);
 
         $this->vydaj($u, 120, $jidlo->id, $cesta->id);
         $this->vydaj($u, 80, $jidlo->id, $cesta->id);

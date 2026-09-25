@@ -315,7 +315,7 @@ class StrategieService
     {
         $od = Carbon::parse($r['starts_on']);
         $do = $r['ends_on'] ? Carbon::parse($r['ends_on']) : null;
-        $dnes = Carbon::today();
+        $dnes = FinanceFilter::dnes();
 
         return max(0, (int) $od->diffInDays($dnes->min($do ?? $dnes), false) + 1);
     }

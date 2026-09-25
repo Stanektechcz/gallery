@@ -81,7 +81,7 @@ class FinanceScenarioTest extends TestCase
         $eur = $this->ucet('EUR', 'EUR', 1000);
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $eur->uuid, 'amount_from' => 12.5,
             'category' => $this->kategorie('Potraviny')->uuid,
         ])->assertCreated();
@@ -97,7 +97,7 @@ class FinanceScenarioTest extends TestCase
         $hotovost = $this->ucet('EUR hotovost', 'EUR', 50, null, 'cash');
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'transfer', 'occurred_at' => now()->toDateString(),
+            'type' => 'transfer', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $banka->uuid, 'wallet_to' => $hotovost->uuid,
             'amount_from' => 200, 'amount_to' => 200,
             'fee_amount' => 2, 'fee_currency' => 'EUR', 'fee_included' => false,
@@ -119,7 +119,7 @@ class FinanceScenarioTest extends TestCase
         $eur = $this->ucet('EUR', 'EUR', 0);
 
         $uuid = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'exchange', 'occurred_at' => now()->toDateString(),
+            'type' => 'exchange', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $czk->uuid, 'wallet_to' => $eur->uuid,
             'amount_from' => 50000, 'amount_to' => 2075,
             'fee_amount' => 120, 'fee_currency' => 'CZK', 'fee_included' => false,
@@ -150,7 +150,7 @@ class FinanceScenarioTest extends TestCase
         $eur = $this->ucet('EUR', 'EUR', 0);
 
         $uuid = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'exchange', 'occurred_at' => now()->toDateString(),
+            'type' => 'exchange', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $czk->uuid, 'wallet_to' => $eur->uuid,
             'amount_from' => 50000, 'amount_to' => 2075,
             'fee_amount' => 120, 'fee_currency' => 'CZK', 'fee_included' => true,
@@ -214,7 +214,7 @@ class FinanceScenarioTest extends TestCase
         $ucetAdri = $this->ucet('Adri EUR', 'EUR', 1000, $adri->id);
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $ucetAdri->uuid, 'amount_from' => 60,
             'category' => $this->kategorie('Potraviny')->uuid,
             'split' => [
@@ -241,7 +241,7 @@ class FinanceScenarioTest extends TestCase
         $spolecny = $this->ucet('Společný EUR', 'EUR', 1000);   // bez partner_id
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $spolecny->uuid, 'amount_from' => 60,
             'category' => $this->kategorie('Potraviny')->uuid,
             'split' => [
@@ -265,13 +265,13 @@ class FinanceScenarioTest extends TestCase
         $potraviny = $this->kategorie('Potraviny');
 
         $vydaj = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $eur->uuid, 'amount_from' => 50,
             'category' => $potraviny->uuid,
         ])->assertCreated()->json('uuid');
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'income', 'occurred_at' => now()->toDateString(),
+            'type' => 'income', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_to' => $eur->uuid, 'amount_to' => 20,
             'refund_of' => $vydaj,
         ])->assertCreated();
@@ -311,7 +311,7 @@ class FinanceScenarioTest extends TestCase
         $ucetMaki = $this->ucet('Maki EUR', 'EUR', 1000, $maki->id);
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $ucetMaki->uuid, 'amount_from' => 100,
             'category' => $this->kategorie('Potraviny')->uuid,
             'split' => [
@@ -394,7 +394,7 @@ class FinanceScenarioTest extends TestCase
 
         foreach ([[40, 'Potraviny'], [25, 'Potraviny'], [60, 'Doprava']] as [$c, $k]) {
             $this->postJson('/api/v1/rozpocet/transakce', [
-                'type' => 'expense', 'occurred_at' => now()->toDateString(),
+                'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
                 'wallet_from' => $eur->uuid, 'amount_from' => $c,
                 'category' => $this->kategorie($k)->uuid, 'potvrzeno' => true,
             ])->assertCreated();
@@ -420,7 +420,7 @@ class FinanceScenarioTest extends TestCase
 
         foreach ([[40, 'Potraviny'], [65, 'Doprava'], [12, 'Potraviny']] as [$c, $k]) {
             $this->postJson('/api/v1/rozpocet/transakce', [
-                'type' => 'expense', 'occurred_at' => now()->toDateString(),
+                'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
                 'wallet_from' => $eur->uuid, 'amount_from' => $c,
                 'category' => $this->kategorie($k)->uuid, 'potvrzeno' => true,
             ])->assertCreated();

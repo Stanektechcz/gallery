@@ -208,7 +208,8 @@ class FinanceApiTest extends TestCase
     {
         $ucet = $this->penezenka('EUR', 'EUR', 1000);
 
-        foreach ([['2026-08-05', 100], [now()->toDateString(), 30]] as [$den, $castka]) {
+        // Dnešek dvojice, ne UTC — „dnes" v Rozpočtu je pražské datum.
+        foreach ([['2026-08-05', 100], [$this->dnes()->toDateString(), 30]] as [$den, $castka]) {
             Transaction::create([
                 'gallery_space_id' => $this->space->id, 'type' => 'expense',
                 'occurred_at' => $den, 'wallet_from_id' => $ucet->id,
@@ -236,8 +237,8 @@ class FinanceApiTest extends TestCase
         $cesta = FinanceProject::create([
             'gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Německo',
             'country' => 'Německo', 'city' => 'Drážďany',
-            'starts_on' => now()->subDays(10)->toDateString(),
-            'ends_on' => now()->addDays(20)->toDateString(),
+            'starts_on' => $this->dnes()->subDays(10)->toDateString(),
+            'ends_on' => $this->dnes()->addDays(20)->toDateString(),
             'base_currency' => 'EUR', 'budget_amount' => 1500, 'reserve_amount' => 100,
             'state' => 'active', 'default_wallet_id' => $ucet->id,
         ]);
@@ -249,7 +250,7 @@ class FinanceApiTest extends TestCase
 
         Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'expense',
-            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $ucet->id,
+            'occurred_at' => $this->dnes()->toDateString(), 'wallet_from_id' => $ucet->id,
             'amount_from' => 300, 'currency_from' => 'EUR', 'finance_project_id' => $cesta->id,
             'created_by' => $this->uzivatel->id, 'state' => 'approved',
         ]);

@@ -50,7 +50,8 @@ class FinanceSetupController extends Controller
             'kind' => 'required|in:bank,card,cash,other',
             'currency' => 'required|string|size:3',
             'partner_id' => 'nullable|integer',
-            'opening_balance' => 'nullable|numeric',
+            // Meze podle sloupce decimal(14,2) — jinak MySQL spadne až při zápisu.
+            'opening_balance' => 'nullable|numeric|between:-999999999.99,999999999.99',
         ]);
 
         if (! empty($data['partner_id'])
@@ -93,7 +94,7 @@ class FinanceSetupController extends Controller
             'name' => 'sometimes|string|max:160',
             'kind' => 'sometimes|in:bank,card,cash,other',
             'partner_id' => 'nullable|integer',
-            'opening_balance' => 'sometimes|numeric',
+            'opening_balance' => 'sometimes|numeric|between:-999999999.99,999999999.99',
             'is_active' => 'sometimes|boolean',
             'sort_order' => 'sometimes|integer',
         ]);
@@ -131,7 +132,7 @@ class FinanceSetupController extends Controller
         $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
 
         $data = $request->validate([
-            'actual_balance' => 'required|numeric',
+            'actual_balance' => 'required|numeric|between:-999999999.99,999999999.99',
             'reason' => 'required|string|max:200',
             'occurred_at' => 'nullable|date',
         ]);
@@ -150,7 +151,7 @@ class FinanceSetupController extends Controller
         Transaction::create([
             'gallery_space_id' => $space->id,
             'type' => $rozdil < 0 ? 'expense' : 'income',
-            'occurred_at' => $data['occurred_at'] ?? Carbon::today()->toDateString(),
+            'occurred_at' => $data['occurred_at'] ?? FinanceFilter::dnes()->toDateString(),
             'wallet_from_id' => $rozdil < 0 ? $ucet->id : null,
             'wallet_to_id' => $rozdil > 0 ? $ucet->id : null,
             'amount_from' => $rozdil < 0 ? abs($rozdil) : null,
@@ -234,8 +235,8 @@ class FinanceSetupController extends Controller
      */
     private function vyvojZustatku(Wallet $ucet, $pohyby, float $konecny): array
     {
-        $od = Carbon::today()->subDays(89);
-        $dnes = Carbon::today();
+        $od = FinanceFilter::dnes()->subDays(89);
+        $dnes = FinanceFilter::dnes();
 
         // Denní změny zůstatku, aby se dalo jít zpětně.
         $zmeny = [];
@@ -273,7 +274,7 @@ class FinanceSetupController extends Controller
     private function obdobiUctu(Wallet $ucet, $pohyby, FinanceFilter $filtr): array
     {
         $vObdobi = $pohyby->filter(fn (Transaction $t) => $t->occurred_at->betweenIncluded(
-            $filtr->od, $filtr->do ?? Carbon::today()->addYears(50),
+            $filtr->od, $filtr->do ?? FinanceFilter::dnes()->addYears(50),
         ));
 
         $prislo = (float) $vObdobi->filter(fn (Transaction $t) => $t->wallet_to_id === $ucet->id)->sum('amount_to');
@@ -344,7 +345,7 @@ class FinanceSetupController extends Controller
             'default_period' => 'sometimes|in:dnes,tyden,mesic,minuly-mesic,cesta,vse',
             'default_tab' => 'sometimes|in:prehled,transakce,rozpocty,smeny,cesty,statistiky,ucty,nastaveni',
             'list_density' => 'sometimes|in:pohodlne,husté',
-            'default_reserve' => 'sometimes|numeric|min:0',
+            'default_reserve' => 'sometimes|numeric|min:0|max:999999999.99',
             'alert_thresholds' => 'sometimes|string|max:40',
             'show_partner_balance' => 'sometimes|boolean',
         ]);
@@ -592,10 +593,25 @@ class FinanceSetupController extends Controller
         ]);
     }
 
+    /**
+     * Cesta ke čtení — jen taková, kterou uživatel vidí i v seznamu.
+     *
+     * Seznam cizí soukromou cestu skrýval, detail a shrnutí ji ale podle uuid vydaly
+     * komukoli z prostoru. Pro neviditelnou cestu 404, stejně jako pro neexistující:
+     * odpověď „nesmíte" by prozradila, že taková cesta je.
+     */
+    private function cestaKeCteni(Request $request, GallerySpace $space, string $uuid): FinanceProject
+    {
+        return FinanceAccess::viditelne(
+            FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid),
+            'trip', $request->user()->id,
+        )->firstOrFail();
+    }
+
     public function tripSummary(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaKeCteni($request, $space, $uuid);
 
         return response()->json([
             'trip' => $this->cestaSeStavem($space, $cesta),
@@ -613,7 +629,7 @@ class FinanceSetupController extends Controller
     public function tripDetail(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $cesta = FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
+        $cesta = $this->cestaKeCteni($request, $space, $uuid);
 
         $pohyby = Transaction::where('gallery_space_id', $space->id)
             ->where('finance_project_id', $cesta->id)
@@ -626,9 +642,9 @@ class FinanceSetupController extends Controller
         $stav = $this->cestaSeStavem($space, $cesta);
 
         // Denní útrata do dneška, případně do konce, pokud už cesta skončila.
-        $konecVyvoje = $cesta->ends_on && $cesta->ends_on->lessThan(Carbon::today())
+        $konecVyvoje = $cesta->ends_on && $cesta->ends_on->lessThan(FinanceFilter::dnes())
             ? $cesta->ends_on
-            : Carbon::today();
+            : FinanceFilter::dnes();
 
         $denni = $cesta->starts_on && $cesta->starts_on->lessThanOrEqualTo($konecVyvoje)
             ? $this->finance->daily($pohyby, $mena, $cesta->starts_on, $konecVyvoje)
@@ -691,7 +707,7 @@ class FinanceSetupController extends Controller
             return null;
         }
 
-        $dnes = Carbon::today();
+        $dnes = FinanceFilter::dnes();
         $uteklo = max(0, (int) $cesta->starts_on->diffInDays($dnes->min($cesta->ends_on), false) + 1);
         $celkem = (int) $cesta->starts_on->diffInDays($cesta->ends_on) + 1;
 
@@ -835,7 +851,7 @@ class FinanceSetupController extends Controller
         $data = $request->validate([
             'name' => 'required|string|max:120',
             'type' => 'sometimes|in:expense,income',
-            'amount' => 'required|numeric|min:0.01',
+            'amount' => 'required|numeric|min:0.01|max:999999999.99',
             'wallet_uuid' => 'required|uuid',
             'category_uuid' => 'nullable|uuid',
             'trip_uuid' => 'nullable|uuid',
@@ -885,13 +901,30 @@ class FinanceSetupController extends Controller
         $space = $this->space($request);
         $predpis = FinanceRecurring::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
 
-        $predpis->update($request->validate([
+        $data = $request->validate([
             'name' => 'sometimes|string|max:120',
-            'amount' => 'sometimes|numeric|min:0.01',
+            'amount' => 'sometimes|numeric|min:0.01|max:999999999.99',
             'day_of_month' => 'sometimes|integer|min:1|max:31',
             'ends_on' => 'nullable|date',
             'is_active' => 'sometimes|boolean',
-        ]));
+        ]);
+
+        /*
+         * Prodloužený předpis má dopsat měsíce, které dřív zakrýval konec.
+         *
+         * Generátor se po prvním běhu dívá jen od měsíce posledního běhu dál. Měsíce
+         * mezi starým koncem a posledním během ale neprošel — konec je vyřadil. Bez
+         * posunu značky zpátky by se po prodloužení dopsaly až budoucí splátky.
+         */
+        $staryKonec = $predpis->ends_on;
+
+        if (array_key_exists('ends_on', $data) && $staryKonec !== null && $predpis->generated_until !== null
+            && $staryKonec->lessThan($predpis->generated_until)
+            && ($data['ends_on'] === null || Carbon::parse($data['ends_on'])->greaterThan($staryKonec))) {
+            $data['generated_until'] = $staryKonec->toDateString();
+        }
+
+        $predpis->update($data);
 
         return response()->json(['recurring' => $this->predpisy($space)]);
     }
@@ -928,7 +961,7 @@ class FinanceSetupController extends Controller
             ->get()
             ->map(function (FinanceRecurring $p) use ($cesta) {
                 $doKonce = $cesta?->ends_on
-                    ? $p->zbyvaDoKonce(Carbon::today(), $cesta->ends_on)
+                    ? $p->zbyvaDoKonce(FinanceFilter::dnes(), $cesta->ends_on)
                     : 0.0;
 
                 return [
@@ -1085,8 +1118,8 @@ class FinanceSetupController extends Controller
             'starts_on' => "{$pravidlo}|date",
             'ends_on' => 'nullable|date|after_or_equal:starts_on',
             'base_currency' => "{$pravidlo}|string|size:3",
-            'budget_amount' => 'nullable|numeric|min:0',
-            'reserve_amount' => 'nullable|numeric|min:0',
+            'budget_amount' => 'nullable|numeric|min:0|max:999999999.99',
+            'reserve_amount' => 'nullable|numeric|min:0|max:999999999.99',
             'default_wallet_id' => ['nullable', 'integer', Rule::exists('wallets', 'id')->where('gallery_space_id', $this->space($request)->id)],
             'state' => 'sometimes|in:draft,active,closed',
             'note' => 'nullable|string|max:2000',
@@ -1129,7 +1162,7 @@ class FinanceSetupController extends Controller
             + $pohyby->sum(fn (Transaction $t) => ($t->fee_currency ?? $t->currency_from) === $mena ? $t->feePaidExtra() : 0);
 
         $dni = $c->starts_on && $c->ends_on ? (int) $c->starts_on->diffInDays($c->ends_on) + 1 : null;
-        $uteklo = $c->starts_on ? max(0, (int) $c->starts_on->diffInDays(Carbon::today(), false) + 1) : 0;
+        $uteklo = $c->starts_on ? max(0, (int) $c->starts_on->diffInDays(FinanceFilter::dnes(), false) + 1) : 0;
 
         return [
             'uuid' => $c->uuid,
@@ -1141,7 +1174,7 @@ class FinanceSetupController extends Controller
             'days_total' => $dni,
             // Týž „dnešek" jako `per_day_so_far` a `safe_daily` o pár řádků níž
             // (starší API počítá v UTC) — viz `FinanceController::cestaRadek()`.
-            'days_left' => $c->dniDoKonce(Carbon::today()),
+            'days_left' => $c->dniDoKonce(FinanceFilter::dnes()),
             'currency' => $mena,
             'budget' => $limit,
             'reserve' => $c->reserve_amount !== null ? (float) $c->reserve_amount : null,
