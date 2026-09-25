@@ -804,6 +804,85 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ak. Třicáté osmé kolo — zámek, noční úlohy, peníze, alba (25. 9.)
+
+Audit oblastí, které dosud neprošly: plánované příkazy, řadiče galerie pro
+alba/sdílení/koš a pro peníze/plánování (tři `task-plan` naráz), opravy po
+dávkách (`task-deep`, `task-build`). Každý nález nejdřív potvrdil test, který
+bez opravy spadl.
+
+### Zabezpečení
+
+* **Otisk odemkl zámek bez kódu.** Bez klíče v zařízení ťuknutí na otisk
+  klíč rovnou zaregistrovalo a aplikaci odemklo — stačilo ověření samotného
+  zařízení (Windows Hello na společném počítači, PIN telefonu, který zná
+  partner), i když server pokusy o kód blokoval. Teď se otisk zapíná
+  s příštím správným kódem, volby registrace chtějí kód (kdo ho nemá, heslo)
+  se společným počítadlem pokusů (`PotvrzeniZamkem`) a odemyká jen token od
+  serveru. Tím je vyřízená i položka „registrace otisku chce jen přihlášení".
+* **Hledání duplicit míchalo dvojice.** Týdenní běh dal tutéž fotku dvou
+  dvojic do jednoho nálezu; první viděla cizí název a místo a „Sloučit"
+  poslalo cizí fotku do koše (za 30 dní smazaná). Teď po prostorech a bez
+  trezoru; migrace opraví staré nálezy (viz „Po nasazení").
+* Vzpomínky braly fotky z trezoru a koše; výzva „Zároveň", vzpomínky
+  a výročí chodily i hostům; „druhý z dvojice" (připomínka, domácí práce,
+  úkol, vyrovnání, účastníci akce) mohl být host.
+* Vzkaz hosta šel přivázat k jakékoli fotce prostoru (i z trezoru) a přepsat
+  jí popisek. Sdílený odkaz na smazané album dál vydával fotky.
+* Fotka z trezoru v koši se ukazovala se zamčeným trezorem a „Vyprázdnit
+  koš" ji smazal nadobro, i když na obrazovce nebyla.
+
+### Co padalo nebo počítalo špatně
+
+* **`gallery:memories` padal na MySQL každé ráno** (`strftime` jen ze
+  SQLite) — vzpomínky nedostal nikdo. Statický test hlídá `strftime` mimo
+  větev podle ovladače.
+* **„Opakovat" u starší platby dopsal zmeškané měsíce** (nájem z června
+  v září = tři výdaje navíc). **Výdaj za dárek padal na MySQL na 500** —
+  klíč o 40 znacích do `char(36)`; totéž hlídá i starý zápis platby.
+* Rozdělení platby ztrácelo haléř (10,03 = 5,01 + 5,01); řádky výpisu, které
+  modul banky už znal, do knihy nedošly; vyrovnání sama se sebou prošlo;
+  posun bodu programu cesty přelil konec přes půlnoc.
+* Okno výzvy „Zároveň" v UTC (v létě do 23 h); večerní souhrn vynechal
+  první dvě hodiny pražského dne; pevný LIMIT nechával štítky, výročí a dárky
+  za hranicí navždy; úklid koše přeskakoval každou druhou dávku.
+* Přesun staršího alba pod novější rozbil strom (chyběl předek, pak smyčka
+  a 500). ZIP alba vynechal fotky zařazené jen přes `primary_album_id`,
+  stejná jména se přepsala, zůstával prázdný dočasný soubor. Hlasovky hostů
+  z prohlížeče se odmítaly (finfo hlásí `video/webm`).
+
+### Po nasazení
+
+* **Migrace `oddelit_duplicity_dvojic`** — jen data: u nálezů s cizí fotkou
+  vrátí z koše fotky vyhozené tím sloučením (±5 minut od `resolved_at`),
+  při cizím vítězi i vlastní kopie a nález otevře; cizí položky odpojí.
+  Fotky nemaže. Ověřená jen na SQLite.
+* Otisk na zařízení, kde ještě není, se zapne až s kódem zámku — kdo kód
+  nemá, otisk nezapne (hláška to řekne).
+
+### Zbývá (vědomě neřešené)
+
+* `MediaPurger` volí spojení s Diskem bez ohledu na vlastníka fotky — při
+  dvou připojených Discích může trvalé smazání mířit na špatný účet
+  (oblast záloh).
+* Fotky z trezoru ve starých nálezech duplicit migrace neodpojí (seznam
+  i sloučení je už přeskakují); počet fotek alba dál zahrnuje trezor.
+* Znovunahraný totožný výpis, jehož řádky založil dřívější import, vidí
+  jen řádky, které sám založil.
+
+| Commit | Co |
+|---|---|
+| `7743efdf` | Otisk neodemkne zámek bez kódu |
+| `4cf2805f` | Platby a úkoly dvojice — zpětné měsíce, haléře, hosté |
+| `c91c5f63` | Starý zápis platby odmítne klíč, který se nevejde do sloupce |
+| `f6a89135` | Noční úlohy — vzpomínky na MySQL, trezor, hosté, pražský čas |
+| `f7cb4a15` | Hledání duplicit nemíchá fotky dvou dvojic |
+| `d6571bd1` | Strom alb po přesunu, odkaz na smazané album, archiv, vzkazy hostů |
+| `b1d3a2f8` | „Vyprázdnit koš" se zamčeným trezorem nesmaže trezor |
+
+Testy: **1813 PHP testů**, všechny prošly (nové i v noci a na Silvestra
+přes `TESTY_CAS`). **Jedna migrace** (jen data).
+
 ## 2aj. Třicáté sedmé kolo — účty, nahrávky, cloud a přepnutí účtu (25. 9.)
 
 Sloučené obě větve samostatného úkolu (klient, který čeká JSON, dostane
@@ -863,7 +942,8 @@ nález nejdřív potvrdil test, který bez opravy spadl.
 * Trezor se do cloudu kopíruje dál a přesun do trezoru kopii v cloudu
   nesmaže; trvalé smazání maže kopii jen na Google Disku, ne na Dropboxu,
   OneDrivu a WebDAV — rozhodnutí o zálohách.
-* Registrace otisku chce jen přihlášení, ne heslo.
+* ~~Registrace otisku chce jen přihlášení, ne heslo.~~ — hotovo (2ak): kód
+  zámku, kdo ho nemá, heslo.
 * Pojistka fronty (`queue:work` každých 5 minut, zámek na 10 minut) může
   při dlouhých převodech videa pustit víc pracovníků naráz; úlohy se
   nezdvojí (`retry_after`), jen se zvýší zátěž.
