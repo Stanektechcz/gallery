@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Services\Media\MazaniFotek;
 use App\Services\Media\MediaPurger;
 use App\Services\Obsah\System;
 use App\Support\SpaceContext;
@@ -161,24 +162,15 @@ class KosController extends Controller
      *
      * Odmítnutí se **říká**: tlačítko, které mlčí, vypadá jako rozbité, a
      * u mazání je to ta horší varianta z obou.
+     *
+     * Samotné pravidlo je v `MazaniFotek::smiTrvaleMazat` — stejné pro starý
+     * koš, panel rizik i tenhle; editor ani účet jen pro čtení neprojde.
      */
     private function smiMazat(Request $request, GallerySpace $prostor): ?JsonResponse
     {
         $clovek = $request->user();
 
-        if ($clovek === null) {
-            return response()->json(['ok' => false, 'zprava' => 'Trvale odstranit smí jen správce prostoru.'], 403);
-        }
-
-        if ((int) $prostor->owner_id === (int) $clovek->id) {
-            return null;
-        }
-
-        // Role v **tomhle** prostoru. `editor` je běžný člen dvojice — ten maže
-        // do koše, ne z něj; nevratný krok zůstává vlastníkovi a správci.
-        $role = (string) ($prostor->members()->where('users.id', $clovek->id)->first()?->pivot->role ?? '');
-
-        if (in_array($role, ['owner', 'admin'], true)) {
+        if ($clovek !== null && app(MazaniFotek::class)->smiTrvaleMazat($prostor, $clovek)) {
             return null;
         }
 

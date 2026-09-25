@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
-use App\Models\User;
 use App\Services\Media\MazaniFotek;
 use App\Services\Media\MediaPurger;
 use App\Support\SpaceContext;
@@ -13,7 +12,6 @@ use App\Support\Trezor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -37,14 +35,14 @@ class TrashController extends Controller
         return Inertia::render('Trash/Index', [
             'media' => $media,
             'retention_days' => $retentionDays,
-            // Tlačítko jen tomu, komu ho server opravdu provede (`smiTrvaleMazat`).
-            'can_purge' => $space !== null && $this->smiTrvaleMazat($space, $user),
+            // Tlačítko jen tomu, komu ho server opravdu provede.
+            'can_purge' => $space !== null && app(MazaniFotek::class)->smiTrvaleMazat($space, $user),
         ]);
     }
 
     public function restore(Request $request, string $uuid): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->prostorDvojice($request);
         $media = MediaItem::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
             ->whereNotNull('trashed_at')
@@ -58,7 +56,7 @@ class TrashController extends Controller
 
     public function bulkRestore(Request $request): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->prostorDvojice($request);
         $uuids = $request->validate(['uuids' => 'required|array|max:200', 'uuids.*' => 'string'])['uuids'];
 
         $count = MediaItem::where('gallery_space_id', $space->id)
@@ -133,7 +131,7 @@ class TrashController extends Controller
 
         abort_if($space === null, 404);
         abort_unless(
-            $this->smiTrvaleMazat($space, $request->user()),
+            app(MazaniFotek::class)->smiTrvaleMazat($space, $request->user()),
             403,
             'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
         );
@@ -142,26 +140,24 @@ class TrashController extends Controller
     }
 
     /**
-     * Vlastník prostoru nebo jeho správce (pivot `owner`/`admin`), a zároveň
-     * aktivní člen dvojice — účet jen pro čtení nevratně nemaže. Totéž
-     * pravidlo jako `Api\Galerie\KosController::smiMazat`.
+     * Prostor, do jehož koše se sahá — a jen když je v něm přihlášený z dvojice.
+     *
+     * Vrátit z koše je vratné, ale pořád zápis: dřív stačilo, že prostor byl
+     * první v seznamu účtu, takže vracel i účet jen pro čtení. Pravidlo je
+     * totéž jako `MediaPolicy::restore` a koš prototypu.
      */
-    private function smiTrvaleMazat(GallerySpace $space, User $kdo): bool
+    private function prostorDvojice(Request $request): GallerySpace
     {
-        if (! app(MazaniFotek::class)->jeClenDvojice($space, $kdo)) {
-            return false;
-        }
+        $space = $request->user()->gallerySpaces()->first();
 
-        if ((int) $space->owner_id === (int) $kdo->id) {
-            return true;
-        }
+        abort_if($space === null, 404);
+        abort_unless(
+            app(MazaniFotek::class)->jeClenDvojice($space, $request->user()),
+            403,
+            'Vracet z koše může jen dvojice galerie.'
+        );
 
-        $role = DB::table('gallery_space_user')
-            ->where('gallery_space_id', $space->id)
-            ->where('user_id', $kdo->id)
-            ->value('role');
-
-        return in_array((string) $role, ['owner', 'admin'], true);
+        return $space;
     }
 
     /**

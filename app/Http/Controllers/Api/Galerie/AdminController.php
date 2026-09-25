@@ -13,6 +13,7 @@ use App\Models\PersonalAccessToken;
 use App\Models\User;
 use App\Services\Billing\CheckoutService;
 use App\Services\Billing\EntitlementService;
+use App\Services\Media\MazaniFotek;
 use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\AdministraceZasahy;
 use App\Services\Provoz\PlanovaneUlohy;
@@ -349,6 +350,14 @@ class AdminController extends Controller
     {
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
+
+        // „Vysypat koš" je nevratné — `jenSpravce` pouští i editora, tady
+        // platí totéž pravidlo jako u trvalého smazání v koši.
+        abort_if(
+            $riziko === 'r2' && ! app(MazaniFotek::class)->smiTrvaleMazat($prostor, $request->user()),
+            403,
+            'Vysypat koš smí jen vlastník nebo správce galerie. Do koše to zatím zůstane.',
+        );
 
         if ($riziko === 'r1') {
             $this->omezProvoznuUlohu($request, 'mirror-backlog');

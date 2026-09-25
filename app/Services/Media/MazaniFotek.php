@@ -102,6 +102,36 @@ class MazaniFotek
     }
 
     /**
+     * Smí fotky z koše **trvale** smazat (jednu, vysypat koš, vysypat z panelu
+     * rizik)?
+     *
+     * Aktivní člen dvojice, který je v tomhle prostoru vlastníkem nebo
+     * správcem (`owner`/`admin` v členství). Běžný člen dvojice (`editor`)
+     * maže do koše, ne z něj — nevratný krok zůstává vlastníkovi a správci.
+     * Účet jen pro čtení nebo deaktivovaný nevratně nemaže nikdy.
+     *
+     * Jediné místo s tímhle pravidlem: dřív ho měl každý kontrolér po svém
+     * (`users.role`, `isAdmin()`, `jeSpravce` i s editorem) a každý jinak.
+     */
+    public function smiTrvaleMazat(GallerySpace $prostor, User $kdo): bool
+    {
+        if (! $this->jeClenDvojice($prostor, $kdo)) {
+            return false;
+        }
+
+        if ((int) $prostor->owner_id === (int) $kdo->id) {
+            return true;
+        }
+
+        $role = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('user_id', $kdo->id)
+            ->value('role');
+
+        return in_array((string) $role, ['owner', 'admin'], true);
+    }
+
+    /**
      * „Do koše": přesune, nebo navrhne. Na fotku, kterou už navrhl druhý,
      * je to souhlas a fotka jde do koše.
      *

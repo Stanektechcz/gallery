@@ -8,6 +8,7 @@ use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
+use App\Services\Provoz\PlanovaneUlohy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -164,10 +165,31 @@ class SpravaVeStavuTest extends TestCase
 
     public function test_pozastaveni_ulohy_ve_stavu_plati(): void
     {
+        // Úlohy běží pro celou instalaci — pozastavit je smí jen provozovatel.
+        config(['gallery.operator_emails' => $this->adri->email]);
+
         $odpoved = $this->patchStav(['admJobPause' => ['trash-purge' => true]])->assertOk();
 
         $this->assertTrue($odpoved->json('data.admJobPause.trash-purge'));
         $this->assertSame('pozastavená', collect($odpoved->json('data.admJobs'))->firstWhere('id', 'trash-purge')['state']);
+    }
+
+    /**
+     * Správce (i vlastník) jedné galerie úlohy nepozastaví.
+     *
+     * Pozastavení je jedno nastavení pro celý server: kdokoli z dvojice
+     * kterékoli galerie by jinak zastavil vysypávání koše, zálohy i načítání
+     * z banky všem ostatním. Samostatná cesta `/api/admin/jobs` to hlídala,
+     * stav ne.
+     */
+    public function test_pozastaveni_ulohy_ve_stavu_bez_provozovatele_nic_nezmeni(): void
+    {
+        config(['gallery.operator_emails' => 'provoz@jinde.example']);
+
+        $odpoved = $this->patchStav(['admJobPause' => ['trash-purge' => true]])->assertOk();
+
+        $this->assertFalse($odpoved->json('data.admJobPause.trash-purge'));
+        $this->assertFalse(app(PlanovaneUlohy::class)->pozastavena('trash-purge'));
     }
 
     /** Tep plánovače pozastavit nejde — jinak by kontrola hlásila mrtvý plánovač. */
@@ -186,9 +208,21 @@ class SpravaVeStavuTest extends TestCase
      */
     public function test_spusteni_ulohy_ve_stavu_ji_zaradi(): void
     {
+        config(['gallery.operator_emails' => $this->adri->email]);
+
         $this->patchStav(['admJobs' => [['id' => 'trash-purge', 'name' => 'Koš', 'state' => 'běží']]])->assertOk();
 
         Queue::assertPushed(SpustPlanovanouUlohu::class);
+    }
+
+    /** Spustit úlohu celé instalace nesmí správce jedné galerie — `trash-purge` maže všem. */
+    public function test_spusteni_ulohy_ve_stavu_bez_provozovatele_nic_nezaradi(): void
+    {
+        config(['gallery.operator_emails' => 'provoz@jinde.example']);
+
+        $this->patchStav(['admJobs' => [['id' => 'trash-purge', 'name' => 'Koš', 'state' => 'běží']]])->assertOk();
+
+        Queue::assertNotPushed(SpustPlanovanouUlohu::class);
     }
 
     /** Vymyšlená úloha se nespustí — tlačítko nesmí být cestou ke spuštění čehokoli. */

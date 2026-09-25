@@ -8,7 +8,10 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\PersonalAccessToken;
 use App\Models\User;
+use App\Services\Media\MazaniFotek;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
+use Illuminate\Support\Facades\RateLimiter;
 
 /**
  * Administrace, která přišla jako změna stavu.
@@ -37,6 +40,7 @@ class AdminVeStavu
         private readonly AdministraceGalerie $administrace,
         private readonly PlanovaneUlohy $ulohy,
         private readonly AdministraceZasahy $zasahy,
+        private readonly MazaniFotek $mazani,
     ) {}
 
     public function tykaSe(array $patch): bool
@@ -159,7 +163,7 @@ class AdminVeStavu
     /** @param  array<string, mixed>  $poslane */
     private function pauzy(array $poslane, GallerySpace $prostor, User $kdo): void
     {
-        if (! $this->zasahy->jeSpravce($prostor, $kdo)) {
+        if (! $this->smiUlohy($prostor, $kdo)) {
             return;
         }
 
@@ -191,7 +195,7 @@ class AdminVeStavu
      */
     private function spusteni(array $poslane, GallerySpace $prostor, User $kdo): void
     {
-        if (! $this->zasahy->jeSpravce($prostor, $kdo)) {
+        if (! $this->smiUlohy($prostor, $kdo)) {
             return;
         }
 
@@ -224,8 +228,9 @@ class AdminVeStavu
             }
 
             $popis = match ((string) $riziko) {
-                'r1' => $this->spustKopii(),
-                'r2' => $this->vysypKos($prostor),
+                'r1' => $this->spustKopii($kdo),
+                // Nevratné — editor tudy nevysype (stejně jako `AdminController::fixRisk`).
+                'r2' => $this->mazani->smiTrvaleMazat($prostor, $kdo) ? $this->vysypKos($prostor) : null,
                 'r3' => 'Obnova ověřena — zkušební stažení proběhlo',
                 default => null,
             };
@@ -280,8 +285,32 @@ class AdminVeStavu
         $this->zasahy->zmenTarifZdarma($prostor, $kdo, $novy);
     }
 
-    private function spustKopii(): string
+    /**
+     * Úlohy z plánu běží pro celou instalaci, ne pro jednu galerii.
+     *
+     * Pozastavení je jediné serverové nastavení a spuštění zařadí úlohu nad
+     * všemi galeriemi — správce (i editor) kterékoli galerie by jinak přes
+     * stav zastavil vysypávání koše, zálohy i načítání z banky všem. Stejně
+     * jako `AdminController::runJob/pauseJob`: správce téhle galerie a zároveň
+     * provozovatel.
+     */
+    private function smiUlohy(GallerySpace $prostor, User $kdo): bool
     {
+        return $kdo->isOperator() && $this->zasahy->jeSpravce($prostor, $kdo);
+    }
+
+    /** `null`, když ji tentýž člověk spustil před chvílí (limit sdílený s `/api/admin`). */
+    private function spustKopii(User $kdo): ?string
+    {
+        // Stejný klíč jako `AdminController::omezProvoznuUlohu`, aby se limit
+        // nedal obejít střídáním obou cest.
+        $klic = 'admin-uloha:mirror-backlog:'.$kdo->id;
+
+        if (RateLimiter::tooManyAttempts($klic, 1)) {
+            return null;
+        }
+
+        RateLimiter::hit($klic, 300);
         SpustPlanovanouUlohu::dispatch('mirror-backlog');
 
         return 'Druhá kopie spuštěna — originály se kopírují do cloudu';
@@ -289,9 +318,13 @@ class AdminVeStavu
 
     private function vysypKos(GallerySpace $prostor): string
     {
+        // Se zamčeným trezorem se nemaže, co koš neukazuje — stejné pravidlo
+        // jako `AdminController::vysypKos` a `KosController::vKosi`. Bez něj
+        // by „vyřešené riziko" ve stavu smazalo i fotky z trezoru.
         $pocet = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNotNull('trashed_at')
+            ->when(! Trezor::odemcen(), fn ($q) => $q->where('is_hidden', false))
             ->update(['purge_after' => now()->subMinute()]);
 
         SpustPlanovanouUlohu::dispatch('trash-purge');

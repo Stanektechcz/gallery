@@ -344,9 +344,10 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->whereNotNull('trashed_at')->firstOrFail();
 
         abort_if($media->is_hidden && ! Trezor::odemcen(), 404);
+        // `delete` pustí jen člena dvojice prostoru fotky, takže prostor tu existuje.
         Gate::authorize('delete', $media);
         abort_unless(
-            $this->smiTrvaleMazat($media->gallerySpace, $request->user()),
+            app(MazaniFotek::class)->smiTrvaleMazat($media->gallerySpace, $request->user()),
             403,
             'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
         );
@@ -359,30 +360,6 @@ class MediaController extends Controller
         $media->forceDelete();
 
         return response()->json(['status' => 'purged']);
-    }
-
-    /**
-     * Vlastník prostoru nebo jeho správce (role v **tomhle** prostoru, ne
-     * `users.role`), a zároveň aktivní člen dvojice — účet jen pro čtení
-     * nebo deaktivovaný nevratně nemaže. Pravidlo je totéž jako
-     * `Api\Galerie\KosController::smiMazat` a `TrashController::smiTrvaleMazat`.
-     */
-    private function smiTrvaleMazat(?GallerySpace $prostor, User $kdo): bool
-    {
-        if ($prostor === null || ! app(MazaniFotek::class)->jeClenDvojice($prostor, $kdo)) {
-            return false;
-        }
-
-        if ((int) $prostor->owner_id === (int) $kdo->id) {
-            return true;
-        }
-
-        $role = DB::table('gallery_space_user')
-            ->where('gallery_space_id', $prostor->id)
-            ->where('user_id', $kdo->id)
-            ->value('role');
-
-        return in_array((string) $role, ['owner', 'admin'], true);
     }
 
     /**

@@ -108,8 +108,9 @@ class AdministraceTest extends TestCase
     {
         ScheduledTaskRun::create([
             'task' => 'trash-purge',
-            'started_at' => now()->setTime(4, 20),
-            'finished_at' => now()->setTime(4, 20, 42),
+            // 4:20 na hodinách dvojice — administrace čas ukazuje v jejím pásmu, ne v UTC.
+            'started_at' => $this->ted()->setTime(4, 20)->utc(),
+            'finished_at' => $this->ted()->setTime(4, 20, 42)->utc(),
             'duration_ms' => 42_000,
             'state' => ScheduledTaskRun::HOTOVO,
             'exit_code' => 0,

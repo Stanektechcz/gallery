@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\ScheduledTaskRun;
 use App\Models\SystemSetting;
+use App\Support\Cas;
 use Illuminate\Console\Scheduling\Event;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Support\Carbon;
@@ -57,7 +58,7 @@ class PlanovaneUlohy
             ->limit(20)
             ->get()
             ->map(fn (ScheduledTaskRun $beh) => [
-                'when' => $beh->started_at->format('j. n. G:i'),
+                'when' => Cas::mistni($beh->started_at)->format('j. n. G:i'),
                 'what' => $this->popis($beh->task).' skončila chybou',
                 'fix' => trim(mb_substr((string) ($beh->output ?: 'bez výpisu'), 0, 160)),
             ]);
@@ -217,12 +218,18 @@ class PlanovaneUlohy
         };
     }
 
+    /**
+     * Okamžik běhu v pásmu dvojice — `started_at` je v UTC a noční záloha ve
+     * 2:00 by se jinak ukázala jako „včera 0:00".
+     */
     private function kdyBezela(Carbon $kdy): string
     {
+        $mistni = Cas::mistni($kdy);
+
         return match (true) {
-            $kdy->isToday() => 'dnes '.$kdy->format('G:i'),
-            $kdy->isYesterday() => 'včera '.$kdy->format('G:i'),
-            default => $kdy->format('j. n. G:i'),
+            $mistni->isToday() => 'dnes '.$mistni->format('G:i'),
+            $mistni->isYesterday() => 'včera '.$mistni->format('G:i'),
+            default => $mistni->format('j. n. G:i'),
         };
     }
 

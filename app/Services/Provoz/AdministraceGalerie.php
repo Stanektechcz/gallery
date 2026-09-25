@@ -11,6 +11,7 @@ use App\Models\StorageConnection;
 use App\Models\SystemSetting;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;
+use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Illuminate\Support\Carbon;
@@ -188,7 +189,8 @@ class AdministraceGalerie
 
     private function naposledy(User $clen): string
     {
-        $kdy = $clen->last_seen_at ?? $clen->last_login_at;
+        // V pásmu dvojice, ne v UTC — jinak je „dnes" po půlnoci ještě „včera".
+        $kdy = Cas::mistni($clen->last_seen_at ?? $clen->last_login_at);
 
         if ($kdy === null) {
             return 'nikdy';
@@ -316,7 +318,7 @@ class AdministraceGalerie
                 'id' => 'r3',
                 'label' => 'Záloha bez ověřené obnovy',
                 'note' => $cloud?->last_successful_request_at
-                    ? 'poslední úspěšný přenos '.$cloud->last_successful_request_at->format('j. n. Y')
+                    ? 'poslední úspěšný přenos '.Cas::mistni($cloud->last_successful_request_at)->format('j. n. Y')
                     : 'cloud není připojený — druhá kopie nevzniká',
                 'fix' => 'Zkusit obnovu',
                 'done' => 'Obnova ověřena — záloha je čitelná',
@@ -330,16 +332,16 @@ class AdministraceGalerie
     /** @return list<array<string, mixed>> */
     public function protokol(GallerySpace $prostor, int $kolik = 40): array
     {
-        $lide = $prostor->members()->pluck('users.id');
-
         return AuditLog::with('user:id,name')
             ->where('action', 'like', 'admin.%')
-            ->whereIn('user_id', $lide)
+            ->where(fn ($q) => $q
+                ->where('gallery_space_id', $prostor->id)
+                ->orWhere(fn ($q) => $q->whereNull('gallery_space_id')->whereIn('user_id', $this->autoriJenTady($prostor))))
             ->latest('created_at')
             ->limit($kolik)
             ->get()
             ->map(fn (AuditLog $zapis) => [
-                'when' => $zapis->created_at?->format('j. n. G:i') ?? '',
+                'when' => $zapis->created_at ? Cas::mistni($zapis->created_at)->format('j. n. G:i') : '',
                 // Jméno přihlášeného, ne „systém": administrace bez toho, kdo zásah
                 // udělal, je jen seznam změn.
                 'who' => $zapis->user?->name ?? 'systém',
@@ -347,6 +349,32 @@ class AdministraceGalerie
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Členové, u kterých jde starý zápis bez galerie přiřadit jen sem.
+     *
+     * Protokol se dřív vybíral podle autorů, ne podle galerie: kdo je členem
+     * dvou galerií, tomu se sem propsaly i zásahy z té druhé (s e-maily
+     * pozvaných). Zápisy mají `gallery_space_id` od 22. 9. 2026 a zásahy bez
+     * předmětu až od 24. 9. — starší řádky mají `null`. Aby z protokolu
+     * nezmizela celá historie, bere se takový řádek jen od autora, který jinou
+     * galerii nemá (ani jako člen, ani jako vlastník); u ostatních se nehádá.
+     *
+     * @return list<int>
+     */
+    private function autoriJenTady(GallerySpace $prostor): array
+    {
+        $lide = $prostor->members()->pluck('users.id')->map(fn ($id) => (int) $id);
+
+        $jinde = DB::table('gallery_space_user')
+            ->whereIn('user_id', $lide)
+            ->where('gallery_space_id', '!=', $prostor->id)
+            ->pluck('user_id')
+            ->merge(GallerySpace::query()->whereKeyNot($prostor->id)->whereIn('owner_id', $lide)->pluck('owner_id'))
+            ->map(fn ($id) => (int) $id);
+
+        return $lide->diff($jinde)->values()->all();
     }
 
     private function gb(int $bajtu): float
@@ -365,12 +393,18 @@ class AdministraceGalerie
         return $this->cislo($hodnota).' GB';
     }
 
+    /**
+     * Okamžik v pásmu dvojice — viz `App\Support\Cas`. V UTC by tep plánovače
+     * po půlnoci hlásil „včera 22:30" a hodina by byla o dvě vedle.
+     */
     private function kdy(Carbon $kdy): string
     {
+        $mistni = Cas::mistni($kdy);
+
         return match (true) {
-            $kdy->isToday() => 'dnes '.$kdy->format('G:i'),
-            $kdy->isYesterday() => 'včera '.$kdy->format('G:i'),
-            default => $kdy->format('j. n. G:i'),
+            $mistni->isToday() => 'dnes '.$mistni->format('G:i'),
+            $mistni->isYesterday() => 'včera '.$mistni->format('G:i'),
+            default => $mistni->format('j. n. G:i'),
         };
     }
 }
