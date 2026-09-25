@@ -869,12 +869,15 @@ class CalendarPlanningController extends Controller
         if (! empty($data['event_id'])) {
             CalendarEvent::where('id', $data['event_id'])->where('gallery_space_id', $trip->gallery_space_id)->firstOrFail();
         }
+        // Plátce a rovný podíl patří jen dvojici — host prostoru (viewer/contributor)
+        // do společných výdajů cesty nepatří.
+        $coupleIds = $finance->coupleIds($trip->gallery_space_id);
         if (! empty($data['paid_by_user_id'])) {
-            abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $data['paid_by_user_id'])->exists(), 422, 'Plátce musí být členem společného prostoru.');
+            abort_unless(in_array((int) $data['paid_by_user_id'], $coupleIds, true), 422, 'Plátce musí být členem dvojice.');
         }
         if (! empty($data['split'])) {
             foreach ($data['split'] as $share) {
-                abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $share['user_id'])->exists(), 422, 'Podíl patří neznámému uživateli.');
+                abort_unless(in_array((int) $share['user_id'], $coupleIds, true), 422, 'Podíl patří neznámému uživateli.');
             }
             if (round(array_sum(array_column($data['split'], 'amount')), 2) !== round((float) $data['amount'], 2)) {
                 abort(422, 'Součet podílů musí odpovídat výdaji.');
@@ -886,8 +889,7 @@ class CalendarPlanningController extends Controller
             $data['paid_by'] = 'Společný účet';
             $data['split'] = null;
         } elseif (! empty($data['paid_by_user_id']) && empty($data['split'])) {
-            $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
-            $data['split'] = json_encode($finance->equalShares((float) $data['amount'], $memberIds));
+            $data['split'] = json_encode($finance->equalShares((float) $data['amount'], $coupleIds));
         }
         if (! Schema::hasColumn('trip_expenses', 'payment_source')) {
             unset($data['payment_source']);
@@ -906,14 +908,16 @@ class CalendarPlanningController extends Controller
             $forbidden = array_intersect(array_keys($data), ['title', 'amount', 'currency', 'state', 'occurred_at']);
             abort_if($forbidden !== [], 409, 'Částku a původ bankovní platby upravte v jejím přiřazení, aby historie zůstala konzistentní.');
         }
+        // Plátce a rovný podíl patří jen dvojici — host prostoru (viewer/contributor)
+        // do společných výdajů cesty nepatří.
+        $coupleIds = $finance->coupleIds($trip->gallery_space_id);
         if (array_key_exists('paid_by_user_id', $data) && $data['paid_by_user_id'] !== null) {
-            abort_unless(DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->where('user_id', $data['paid_by_user_id'])->exists(), 422, 'Plátce musí být členem společného prostoru.');
+            abort_unless(in_array((int) $data['paid_by_user_id'], $coupleIds, true), 422, 'Plátce musí být členem dvojice.');
         }
-        $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
         $amount = (float) ($data['amount'] ?? $expense->amount);
         if (array_key_exists('split', $data) && $data['split'] !== null) {
             foreach ($data['split'] as $share) {
-                abort_unless(in_array((int) $share['user_id'], $memberIds, true), 422, 'Podíl patří neznámému uživateli.');
+                abort_unless(in_array((int) $share['user_id'], $coupleIds, true), 422, 'Podíl patří neznámému uživateli.');
             }
             abort_if(abs(array_sum(array_column($data['split'], 'amount')) - $amount) >= 0.01, 422, 'Součet podílů musí odpovídat výdaji.');
             $data['split'] = json_encode($data['split']);
@@ -925,7 +929,7 @@ class CalendarPlanningController extends Controller
             $data['paid_by'] = 'Společný účet';
             $data['split'] = null;
         } elseif ($payerId && ! array_key_exists('split', $data) && (array_key_exists('amount', $data) || array_key_exists('paid_by_user_id', $data))) {
-            $data['split'] = json_encode($finance->equalShares($amount, $memberIds));
+            $data['split'] = json_encode($finance->equalShares($amount, $coupleIds));
         }
         if (isset($data['currency'])) {
             $data['currency'] = strtoupper($data['currency']);

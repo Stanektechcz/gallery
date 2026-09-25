@@ -66,7 +66,7 @@ class RecipeService
             'storage_notes' => $recipe->storage_notes,
             'reheating_notes' => $recipe->reheating_notes,
             'is_favorite' => $recipe->is_favorite,
-            'cover' => $recipe->cover ? $this->mediaPayload($recipe->cover) : null,
+            'cover' => $this->visible($recipe->cover) ? $this->mediaPayload($recipe->cover) : null,
             'album' => $recipe->album?->only(['uuid', 'title']),
             'stats' => $stats,
             'created_at' => $recipe->created_at?->toIso8601String(),
@@ -98,10 +98,10 @@ class RecipeService
             'instruction' => $step->instruction, 'timer_seconds' => $step->timer_seconds,
             'temperature' => $step->temperature, 'temperature_unit' => $step->temperature_unit,
             'equipment' => $step->equipment, 'tip' => $step->tip,
-            'media' => $step->media ? $this->mediaPayload($step->media) : null,
+            'media' => $this->visible($step->media) ? $this->mediaPayload($step->media) : null,
         ])->values();
         $result['cooking_sessions'] = $recipe->cookingSessions->take(50)->map(fn (RecipeCookingSession $session) => $this->sessionPayload($session))->values();
-        $result['media'] = $recipe->media->unique('id')->values()->map(fn (MediaItem $media) => $this->mediaPayload($media) + [
+        $result['media'] = $recipe->media->unique('id')->filter(fn (MediaItem $media) => $this->visible($media))->values()->map(fn (MediaItem $media) => $this->mediaPayload($media) + [
             'role' => $media->pivot->role, 'caption' => $media->pivot->caption,
         ]);
 
@@ -124,7 +124,7 @@ class RecipeService
             'successes' => $session->successes, 'failures' => $session->failures, 'improvements' => $session->improvements,
             'changes_made' => $session->changes_made, 'partner_feedback' => $session->partner_feedback,
             'would_cook_again' => $session->would_cook_again, 'leftovers_notes' => $session->leftovers_notes,
-            'media' => $session->media->map(fn (MediaItem $media) => $this->mediaPayload($media))->values(),
+            'media' => $session->media->filter(fn (MediaItem $media) => $this->visible($media))->map(fn (MediaItem $media) => $this->mediaPayload($media))->values(),
         ];
     }
 
@@ -191,6 +191,12 @@ class RecipeService
             'thumbnail_url' => $media->thumbnail_url, 'media_type' => $media->media_type,
             'taken_at' => $media->taken_at?->toIso8601String(), 'detail_url' => '/media/'.$media->uuid,
         ];
+    }
+
+    /** Fotka odešlá po připojení do trezoru nebo koše se v čtecí odpovědi znovu neukáže. */
+    private function visible(?MediaItem $media): bool
+    {
+        return $media !== null && ! $media->is_hidden && $media->trashed_at === null;
     }
 
     private function formatQuantity(?float $value): ?string

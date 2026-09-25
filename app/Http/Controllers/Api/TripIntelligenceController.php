@@ -8,6 +8,7 @@ use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripBudgetAdvisorService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Planning\TripPreparationTimelineService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -32,7 +33,9 @@ class TripIntelligenceController extends Controller
         $documents = Schema::hasColumn('trip_document_checks', 'assigned_to')
             ? $documentsQuery->leftJoin('users as assignee', 'assignee.id', '=', 'document.assigned_to')->get(['document.*', 'assignee.name as assignee_name'])
             : $documentsQuery->get(['document.*']);
-        $expired = $documents->filter(fn ($document) => $document->expires_on && now()->toDateString() > $document->expires_on)->values();
+        // Dnešek dvojice (Europe/Prague), ne serveru v UTC — jinak doklad
+        // vypršelý včera v Praze ještě chvíli po půlnoci vypadá platný.
+        $expired = $documents->filter(fn ($document) => $document->expires_on && Cas::dnes()->toDateString() > $document->expires_on)->values();
         $activities = DB::table('trip_activities as a')->join('trip_days as d', 'd.id', '=', 'a.trip_day_id')->where('d.trip_id', $tripId)->orderBy('d.date')->orderBy('a.starts_at')->select('a.*', 'd.date')->get();
         $conflicts = $activities->groupBy('date')->flatMap(function ($day) {
             return $day->values()->zip($day->values()->slice(1))->filter(fn ($pair) => $pair[0]->ends_at && $pair[1]->starts_at && $pair[0]->ends_at > $pair[1]->starts_at)->map(fn ($pair) => ['date' => $pair[0]->date, 'first' => $pair[0]->title, 'second' => $pair[1]->title]);
@@ -504,6 +507,6 @@ class TripIntelligenceController extends Controller
         $distance = (float) $items->sum('distance_km');
         $fuel = $items->where('type', 'fuel');
 
-        return ['total' => $total, 'distance_km' => $distance, 'fuel_liters' => (float) $fuel->sum('liters'), 'cost_per_km' => $distance > 0 ? round($total / $distance, 2) : null, 'expired_vignettes' => $items->where('type', 'vignette')->filter(fn ($item) => $item->valid_until && $item->valid_until < now()->toDateString())->values()];
+        return ['total' => $total, 'distance_km' => $distance, 'fuel_liters' => (float) $fuel->sum('liters'), 'cost_per_km' => $distance > 0 ? round($total / $distance, 2) : null, 'expired_vignettes' => $items->where('type', 'vignette')->filter(fn ($item) => $item->valid_until && $item->valid_until < Cas::dnes()->toDateString())->values()];
     }
 }

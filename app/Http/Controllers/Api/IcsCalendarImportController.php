@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
+use App\Models\GallerySpace;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\CalendarEventTripService;
 use Carbon\Carbon;
@@ -27,7 +29,9 @@ class IcsCalendarImportController extends Controller
             'reminder_minutes' => 'nullable|integer|min:0|max:525600',
             'create_trips' => 'sometimes|boolean',
         ]);
-        $space = $request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->firstOrFail();
+        // Prostor dvojice — ne galerie, kam je účet pozvaný jen jako host.
+        $space = GallerySpace::whereIn('id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))
+            ->whereKey($data['gallery_space_id'])->firstOrFail();
         $rows = $this->events($data['ics']);
         abort_if(empty($rows), 422, 'Soubor neobsahuje žádnou platnou událost VEVENT.');
 

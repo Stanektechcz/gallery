@@ -386,7 +386,10 @@ class PlanningExpansionController extends Controller
         $this->write($request);
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'recipient_user_id' => 'required|integer|different:'.$request->user()->id, 'name' => 'required|string|max:160', 'is_active' => 'nullable|boolean', 'filters' => 'nullable|array']);
         $space = $this->space($request->user(), $data['gallery_space_id']);
-        abort_unless($space->members()->whereKey($data['recipient_user_id'])->exists(), 422, 'Příjemce musí být členem společného prostoru.');
+        // Příjemcem smí být jen dvojice — host prostoru (viewer/contributor)
+        // by tak dostal automaticky sdílené fotky, ke kterým nemá přístup.
+        $couple = app(PristupDoGalerie::class)->dvojice($space)->pluck('id');
+        abort_unless($couple->contains((int) $data['recipient_user_id']), 422, 'Příjemcem pravidla může být jen partner ve dvojici.');
         $id = DB::table('partner_share_rules')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $space->id, 'owner_user_id' => $request->user()->id, 'recipient_user_id' => $data['recipient_user_id'], 'name' => $data['name'], 'is_active' => $data['is_active'] ?? true, 'filters' => json_encode($data['filters'] ?? []), 'created_at' => now(), 'updated_at' => now()]);
 
         return response()->json(DB::table('partner_share_rules')->find($id), 201);

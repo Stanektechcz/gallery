@@ -24,7 +24,14 @@ class TripFinancialInsightService
         $connections = DB::table('bank_connections')->where('gallery_space_id', $space->id)->orderByDesc('id')->get()->map(fn ($row) => [
             'uuid' => $row->uuid, 'provider' => $row->provider, 'institution_name' => $row->institution_name,
             'status' => $row->status, 'sync_enabled' => (bool) $row->sync_enabled, 'consent_expires_at' => $row->consent_expires_at,
-            'last_success_at' => $row->last_success_at, 'last_error' => $row->last_error, 'revoked_at' => $row->revoked_at,
+            'last_success_at' => $row->last_success_at,
+            // Nikdy syrový text uložený v `last_error` — starší záznamy mohly
+            // nést odpověď banky i s tajným parametrem v URL. Přehled ukazuje
+            // jen to, že chyba je, a obecnou českou hlášku.
+            'has_error' => filled($row->last_error),
+            'error_message' => filled($row->last_error) ? BankingIntegrationService::SYNC_FAILED : null,
+            'last_error' => filled($row->last_error) ? BankingIntegrationService::SYNC_FAILED : null,
+            'revoked_at' => $row->revoked_at,
         ]);
         $accounts = BankAccount::whereHas('connection', fn ($query) => $query->where('gallery_space_id', $space->id))->with('connection')->get()->map(fn ($account) => [
             'uuid' => $account->uuid, 'name' => $account->name, 'institution' => $account->connection->institution_name,

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CycleDay;
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Health\CycleService;
 use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
@@ -25,10 +26,10 @@ class CycleController extends Controller
         $space = $this->space($request);
         $user = $request->user();
 
-        // Co sdílejí ostatní členové prostoru. Prázdné, dokud si to někdo nezapne.
-        $partners = $space->members()
-            ->where('users.id', '!=', $user->id)
-            ->get()
+        // Co sdílí dvojice. Host prostoru (viewer/contributor) partner není —
+        // ani jeho vlastní záznamy sem nepatří. Prázdné, dokud si to někdo nezapne.
+        $partners = app(PristupDoGalerie::class)->dvojice($space)
+            ->where('id', '!=', $user->id)
             ->map(fn ($member) => $this->cycles->partnerView($space, $member))
             ->filter()
             ->values();
@@ -140,7 +141,7 @@ class CycleController extends Controller
 
     private function space(Request $request): GallerySpace
     {
-        return $request->user()->gallerySpaces()->firstOrFail();
+        return GallerySpace::whereIn('id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))->firstOrFail();
     }
 
     private function write(Request $request): void

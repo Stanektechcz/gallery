@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Recipes\RecipeImportService;
 use App\Services\Recipes\RecipeService;
 use Illuminate\Http\JsonResponse;
@@ -245,6 +246,7 @@ class RecipeController extends Controller
 
     private function spaceIds(User $user): array
     {
-        return $user->gallerySpaces()->pluck('gallery_spaces.id')->map(fn ($id) => (int) $id)->all();
+        // Prostory dvojice — host prostoru (viewer/contributor) sem nepatří.
+        return app(PristupDoGalerie::class)->idProstoruDvojice($user);
     }
 }

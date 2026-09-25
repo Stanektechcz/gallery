@@ -371,7 +371,9 @@ class PlaceReviewController extends Controller
             'notes' => $review->notes,
             'next_time_note' => $review->next_time_note,
             'items' => $review->items->map(fn ($item) => $item->only(['uuid', 'category', 'name', 'quantity', 'overall_rating', 'quality_rating', 'presentation_rating', 'portion_rating', 'value_rating', 'price', 'currency', 'would_order_again', 'note']))->values(),
-            'media' => $review->media->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url, 'subject' => $media->pivot->subject, 'caption' => $media->pivot->caption])->values(),
+            // Fotka odešlá po připojení do trezoru nebo koše se v hodnocení znovu neukáže.
+            'media' => $review->media->filter(fn (MediaItem $media) => ! $media->is_hidden && $media->trashed_at === null)
+                ->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url, 'subject' => $media->pivot->subject, 'caption' => $media->pivot->caption])->values(),
             'created_at' => $review->created_at?->toIso8601String(),
             'updated_at' => $review->updated_at?->toIso8601String(),
         ];

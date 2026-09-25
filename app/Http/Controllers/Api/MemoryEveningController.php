@@ -7,6 +7,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\MemoryEvening;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Media\MemoryDiscoveryService;
 use App\Services\Memories\MemoryEveningService;
 use Illuminate\Http\JsonResponse;
@@ -124,7 +125,7 @@ class MemoryEveningController extends Controller
     private function payload(MemoryEvening $evening, int $viewerId): array
     {
         $items = DB::table('curation_board_items as item')->join('media_items as media', 'media.id', '=', 'item.media_item_id')
-            ->where('item.curation_board_id', $evening->curation_board_id)->whereNull('media.trashed_at')->orderBy('item.sort_order')
+            ->where('item.curation_board_id', $evening->curation_board_id)->whereNull('media.trashed_at')->where('media.is_hidden', false)->orderBy('item.sort_order')
             ->get(['item.id', 'item.status', 'media.id as media_id', 'media.uuid', 'media.media_type', 'media.display_title', 'media.original_filename', 'media.taken_at']);
         $votes = DB::table('curation_board_votes')->whereIn('curation_board_item_id', $items->pluck('id'))->get()->groupBy('curation_board_item_id');
         $models = MediaItem::whereIn('id', $items->pluck('media_id'))->with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'video_poster', 'placeholder'])])->get()->keyBy('id');
@@ -155,12 +156,14 @@ class MemoryEveningController extends Controller
 
     private function evening(Request $request, string $uuid): MemoryEvening
     {
-        return MemoryEvening::where('uuid', $uuid)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+        return MemoryEvening::where('uuid', $uuid)->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))->firstOrFail();
     }
 
     private function space(Request $request, ?int $id): GallerySpace
     {
-        $query = GallerySpace::whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
+        // Jen prostor dvojice — host cizí galerie by si přes parametr vynutil
+        // její večery se vzpomínkami.
+        $query = GallerySpace::whereIn('id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()));
 
         return $id ? $query->findOrFail($id) : $query->orderByDesc('is_default')->firstOrFail();
     }

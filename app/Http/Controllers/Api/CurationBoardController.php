@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -165,7 +166,8 @@ class CurationBoardController extends Controller
 
     private function spaceIds(Request $request): array
     {
-        return $request->user()->gallerySpaces()->pluck('gallery_spaces.id')->all();
+        // Prostory dvojice — host prostoru (viewer/contributor) sem nepatří.
+        return app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
     }
 
     private function visibleBoards(Request $request)
