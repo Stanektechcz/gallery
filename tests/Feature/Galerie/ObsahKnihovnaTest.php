@@ -604,6 +604,127 @@ class ObsahKnihovnaTest extends TestCase
         $this->assertSame('Praha', $s['autori']['Adrian']['place']);
     }
 
+    /**
+     * Charakterizační test na `LIBSTATS`: musí projít beze změny před i po
+     * přesunu počítání do `StatistikyKnihovny` — kdyby agregace v SQL vyšla
+     * na něco jiného než dřívější PHP průchod přes řádky, spadne tenhle test,
+     * ne až obrazovka Statistiky u dvojice.
+     *
+     * Smíšený vzorek schválně obsahuje video s délkou, řádek bez EXIF, adresu
+     * „Praha, Česko" (počítá se jen první část), snímek bez `taken_at`, cizí
+     * (ne moji) oblíbenou, fotku z koše a skrytou fotku (obě úplně mimo) a
+     * snímek pořízený 23:30 poslední den ledna — na tom by se ukázal rozdíl,
+     * kdyby agregace převáděla čas do jiného pásma než dřívější holé
+     * `CarbonImmutable::parse()` (viz komentář ve `StatistikyKnihovny`).
+     */
+    public function test_statistiky_charakterizace_smiseneho_vzorku(): void
+    {
+        $partner = User::factory()->create(['name' => 'Klára']);
+        $this->prostor->members()->syncWithoutDetaching([$partner->id => ['role' => 'editor']]);
+
+        $this->fotka(['taken_at' => '2026-03-05 10:00:00', 'media_type' => 'video', 'duration_ms' => 45_000], 1);
+        $this->fotka(['taken_at' => '2026-03-06 09:00:00'], 2);
+        $this->fotka(['taken_at' => '2026-03-07 11:00:00', 'location_name' => 'Praha, Česko', 'camera_make' => 'Canon', 'camera_model' => 'EOS R5', 'lens_model' => 'RF 24-70mm'], 3);
+        $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-03-08 12:00:00'], 4);
+        $ciziOblibena = $this->fotka(['taken_at' => '2026-03-09 14:00:00'], 5);
+        $this->fotka(['taken_at' => '2026-01-31 23:30:00'], 6);
+        $this->fotka(['taken_at' => '2026-03-10 08:00:00', 'trashed_at' => now()], 7);
+        $this->fotka(['taken_at' => '2026-03-11 08:00:00', 'is_hidden' => true], 8);
+
+        DB::table('user_favorites')->insert(['user_id' => $partner->id, 'media_item_id' => $ciziOblibena->id, 'created_at' => now()]);
+
+        $s = $this->getJson('/api/data/knihovna')->assertOk()->json('data.LIBSTATS');
+
+        $this->assertSame(6, $s['total'], 'Koš a skryté se nepočítají.');
+        $this->assertSame(1, $s['videos']);
+        $this->assertSame(0, $s['favs'], 'Cizí oblíbená se do mého počtu nepočítá.');
+        $this->assertSame(0, $s['pending']);
+        $this->assertSame(0, $s['errors']);
+        $this->assertSame(45, $s['videoAvg']);
+        $this->assertSame(['2026' => 6], collect($s['years'])->sortKeys()->all());
+        $this->assertSame(1, $s['months'][0], 'Hraniční snímek 31. 1. 23:30 patří do ledna, ne do února.');
+        $this->assertSame(5, $s['months'][2], 'Zbytek vzorku patří do března.');
+
+        $ocekavaneHodiny = array_fill(0, 24, 0);
+        foreach ([9, 10, 11, 14, 23] as $hodina) {
+            $ocekavaneHodiny[$hodina] = 1;
+        }
+        $this->assertSame($ocekavaneHodiny, $s['hours']);
+        $this->assertSame(5, array_sum($s['hours']), 'Snímek bez `taken_at` se do hodin nepočítá.');
+
+        $this->assertSame(['Praha' => 1], $s['places']);
+        $this->assertSame(1, $s['placeN']);
+        $this->assertSame(1, $s['dev']['Canon EOS R5']);
+        $this->assertSame(5, $s['dev']['']);
+        $this->assertSame(1, $s['lens']['RF 24-70mm']);
+        $this->assertSame(5, $s['lens']['']);
+
+        $this->assertSame(6, $s['autori']['Adrian']['count']);
+        $this->assertSame(1, $s['autori']['Adrian']['videos']);
+        $this->assertSame(0, $s['autori']['Adrian']['favs']);
+        $this->assertSame('Praha', $s['autori']['Adrian']['place']);
+        $this->assertSame(9, $s['autori']['Adrian']['hour']);
+    }
+
+    /**
+     * SQL agregace, ne PHP průchod přes celou knihovnu.
+     *
+     * `LIBSTATS` dřív stahovalo úplně každý viditelný řádek prostoru jedním
+     * dotazem (`camera_make` mezi vybranými sloupci, bez `GROUP BY`) a počítalo
+     * v PHP — u dvojice s desetitisíci fotkami dotaz, který se opakoval při
+     * každém otevření aplikace. Dotaz na `media_items`, který čte `camera_make`
+     * bez `GROUP BY`, by byl návrat k tomu chování.
+     */
+    public function test_statistiky_ctou_camera_make_jen_seskupene(): void
+    {
+        for ($i = 1; $i <= 50; $i++) {
+            $this->fotka([
+                'taken_at' => sprintf('2026-02-%02d 08:00:00', ($i % 27) + 1),
+                'camera_make' => 'Apple',
+                'camera_model' => 'iPhone '.($i % 5),
+            ], $i);
+        }
+
+        $dotazySCameraMake = [];
+        DB::listen(function ($query) use (&$dotazySCameraMake): void {
+            if (str_contains($query->sql, 'media_items') && str_contains($query->sql, 'camera_make')) {
+                $dotazySCameraMake[] = $query->sql;
+            }
+        });
+
+        $this->getJson('/api/data/knihovna')->assertOk();
+
+        $this->assertNotEmpty($dotazySCameraMake, 'Očekával se aspoň jeden dotaz čtoucí camera_make.');
+
+        foreach ($dotazySCameraMake as $sql) {
+            $this->assertStringContainsStringIgnoringCase(
+                'group by',
+                $sql,
+                "Dotaz na camera_make bez GROUP BY vrací každý řádek knihovny, ne skupiny: {$sql}",
+            );
+        }
+    }
+
+    /**
+     * `Vary: Authorization` chrání mezipaměť prohlížeče po přepnutí účtu na
+     * stejném zařízení — přidává ho globální `SecurityHeaders`, ne tenhle
+     * kontroler (viz komentář u `sPameti()` v `DataController`).
+     */
+    public function test_odpoved_nese_vary_s_authorization(): void
+    {
+        $odpoved = $this->getJson('/api/data/knihovna')->assertOk();
+
+        /*
+         * `Vary` chodí jako dvě samostatné hlavičkové položky („X-Inertia" od
+         * Inertie, „Authorization" od `SecurityHeaders`) — `get('Vary')` vrací
+         * jen tu první, takže by test prošel i bez druhé, i kdyby
+         * `SecurityHeaders` přestal fungovat. `all('Vary')` vrátí obě.
+         */
+        $vary = implode(', ', $odpoved->headers->all('Vary'));
+
+        $this->assertStringContainsStringIgnoringCase('Authorization', $vary);
+    }
+
     // ——— pomůcky ———
 
     private function fotka(array $navic = [], int $poradi = 1): MediaItem

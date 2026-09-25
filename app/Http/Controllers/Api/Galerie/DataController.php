@@ -42,10 +42,18 @@ class DataController extends Controller
      * Bylo tu `max-age=30`. Prohlížeč ale klíčuje mezipaměť jen adresou —
      * token v `Authorization` ani sezení v `Cookie` v klíči nejsou — takže po
      * přepnutí účtu na témže zařízení by druhý člověk půl minuty viděl obsah
-     * prvního, i jeho soukromé rozpočty. `Vary: Authorization, Cookie` by to
-     * řešil, jenže middleware Inertie hlavičku `Vary` u každé odpovědi
-     * přepíše na `X-Inertia`. Načtení stránky (`/api/data?skupiny=…`) chodí
-     * s `no-cache` stejně, takže se tím skoro nic nezdrží.
+     * prvního, i jeho soukromé rozpočty.
+     *
+     * `Vary: Authorization` tohle řeší a skutečně se posílá — ne odsud, ale
+     * z globálního `SecurityHeaders` (`bootstrap/app.php`, `$middleware->append()`),
+     * který ho k `Vary` přidá (nenahradí) u každé `private` odpovědi na
+     * `api/*`. Middleware Inertie (skupina `web`, do které routy Galerie patří)
+     * si sem nastaví `Vary: X-Inertia` — `SecurityHeaders` běží jako nejvíc
+     * vnější middleware, takže se spustí až po něm a `Authorization` přidá
+     * vedle, ne místo něj. `Cookie` se do `Vary` nepřidává, protože Laravel ji
+     * šifruje při každé odpovědi jinak — nezasáhla by mezipaměť nikdy.
+     * Načtení stránky (`/api/data?skupiny=…`) chodí s `no-cache` stejně, takže
+     * se tím skoro nic nezdrží.
      */
     private function sPameti(JsonResponse $odpoved, array $skupiny): JsonResponse
     {

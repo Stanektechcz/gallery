@@ -4,6 +4,7 @@ namespace Tests;
 
 use App\Models\User;
 use App\Support\Cas;
+use App\Support\SpaceContext;
 use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
@@ -30,6 +31,16 @@ abstract class TestCase extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        /*
+         * Mezipaměť viditelných prostorů je statická a přežívá jen do konce
+         * požadavku — v testu ale běží celý proces bez restartu, takže by
+         * jeden test klidně viděl prostory přihlášené jako jiný uživatel
+         * v testu předchozím. `RefreshDatabase` databázi vrátí zpátky, tohle
+         * ne — proto se zapomíná ručně u každého testu, ne jen u těch, které
+         * na to samy pamatují.
+         */
+        SpaceContext::forget();
 
         // Testy na síť nesahají. Dotaz bez `Http::fake()` spadne místo toho, aby tiše
         // šel ven — jinak by třeba součet rozpočtu v korunách vyšel podle dnešního
