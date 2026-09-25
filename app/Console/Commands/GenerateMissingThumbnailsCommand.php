@@ -60,73 +60,81 @@ class GenerateMissingThumbnailsCommand extends Command
                 return;
             }
 
+            /*
+             * Staré řádky náhledů se nemažou předem.
+             *
+             * `--force` je dřív smazal hned na začátku — a když pak chyběl
+             * zdroj (originál už jen na Drive), fotka zůstala bez náhledu, který
+             * do té chvíle fungoval. Nové náhledy staré přepíšou
+             * (`updateOrCreate`); bez zdroje zmizí jen řádky, jejichž soubor
+             * neexistuje (ty dělaly jen 404).
+             */
             $previewTypes = $media->media_type === 'video' ? ['thumbnail', 'video_poster'] : ['thumbnail'];
-            $media->variants()->whereIn('type', $previewTypes)->delete();
-
-            $originalVar = $media->variants()->where('type', 'original')->first();
-            $sourcePath = $originalVar ? Storage::disk($originalVar->disk)->path($originalVar->path) : null;
-
-            if ((! $sourcePath || ! file_exists($sourcePath)) && $this->option('recover') && $media->drive_file_id) {
-                $sourcePath = $this->downloadFromDrive($media);
-                if ($sourcePath) {
-                    $recovered++;
-                    $relPath = "media/{$media->uuid}/original.{$media->extension}";
-                    if (Storage::disk('public')->put($relPath, fopen($sourcePath, 'rb'), 'public')) {
-                        $media->variants()->updateOrCreate(['type' => 'original'], [
-                            'disk' => 'public',
-                            'path' => $relPath,
-                            'mime_type' => $media->mime_type,
-                            'size_bytes' => filesize($sourcePath),
-                        ]);
-                    }
-                }
-            }
-
-            if ((! $sourcePath || ! file_exists($sourcePath)) && $media->media_type === 'video') {
-                // A visible fallback is still preferable to a broken image and
-                // allows the grid to remain fast while the original is restored.
-                $videos->generateFallbackPoster($media);
-                $done++;
-                $bar->advance();
-
-                return;
-            }
-
-            if (! $sourcePath || ! file_exists($sourcePath)) {
-                $this->newLine();
-                $this->warn("  No source for #{$media->id} {$media->original_filename}".($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
-                $bar->advance();
-                $fail++;
-
-                return;
-            }
+            $docasny = null;
 
             try {
-                if ($media->media_type === 'video') {
-                    $poster = $videos->generatePoster($media, $sourcePath);
-                    if (! $poster) {
-                        $videos->generateFallbackPoster($media);
-                    }
-                } else {
-                    // Generate the complete compatible set, not just a tiny
-                    // thumbnail. HEIC/HEIF originals need a high-quality
-                    // WebP/JPEG variant for browser viewing and zooming.
-                    $images->generateAll($media, $sourcePath);
-                    if (! $media->fresh()->variants()->where('type', 'thumbnail')->exists()) {
-                        $this->makeThumbnail($media, $sourcePath);
-                    }
-                }
-                if (! $media->taken_at && $media->media_type === 'photo') {
-                    $this->extractExif($media, $sourcePath);
-                }
-                $done++;
-            } catch (\Throwable $e) {
-                $this->newLine();
-                $this->warn("  Failed #{$media->id}: {$e->getMessage()}");
-                $fail++;
-            }
+                $originalVar = $media->variants()->where('type', 'original')->first();
+                $sourcePath = $originalVar ? rescue(fn () => Storage::disk($originalVar->disk)->path($originalVar->path), null, false) : null;
 
-            $bar->advance();
+                if ((! $sourcePath || ! file_exists($sourcePath)) && $this->option('recover') && $media->drive_file_id) {
+                    $docasny = $this->downloadFromDrive($media);
+                    if ($docasny) {
+                        $sourcePath = $docasny;
+                        $recovered++;
+                        $this->ulozObnovenyOriginal($media, $docasny);
+                    }
+                }
+
+                if ((! $sourcePath || ! file_exists($sourcePath)) && $media->media_type === 'video') {
+                    // A visible fallback is still preferable to a broken image and
+                    // allows the grid to remain fast while the original is restored.
+                    $videos->generateFallbackPoster($media);
+                    $done++;
+
+                    return;
+                }
+
+                if (! $sourcePath || ! file_exists($sourcePath)) {
+                    $this->odstranRozbiteNahledy($media, $previewTypes);
+                    $this->newLine();
+                    $this->warn("  No source for #{$media->id} {$media->original_filename}".($media->drive_file_id ? ' (has Drive ID, use --recover)' : ' (no Drive ID)'));
+                    $fail++;
+
+                    return;
+                }
+
+                try {
+                    if ($media->media_type === 'video') {
+                        $poster = $videos->generatePoster($media, $sourcePath);
+                        if (! $poster) {
+                            $videos->generateFallbackPoster($media);
+                        }
+                    } else {
+                        // Generate the complete compatible set, not just a tiny
+                        // thumbnail. HEIC/HEIF originals need a high-quality
+                        // WebP/JPEG variant for browser viewing and zooming.
+                        $images->generateAll($media, $sourcePath);
+                        if (! $media->fresh()->variants()->where('type', 'thumbnail')->exists()) {
+                            $this->makeThumbnail($media, $sourcePath);
+                        }
+                    }
+                    if (! $media->taken_at && $media->media_type === 'photo') {
+                        $this->extractExif($media, $sourcePath);
+                    }
+                    $done++;
+                } catch (\Throwable $e) {
+                    $this->newLine();
+                    $this->warn("  Failed #{$media->id}: {$e->getMessage()}");
+                    $fail++;
+                }
+            } finally {
+                // Stažený originál je už uložený na disku `public`; dočasná kopie
+                // by jinak zůstala v temp adresáři po každé obnovené fotce.
+                if ($docasny !== null && is_file($docasny)) {
+                    @unlink($docasny);
+                }
+                $bar->advance();
+            }
         });
 
         $bar->finish();
@@ -146,8 +154,48 @@ class GenerateMissingThumbnailsCommand extends Command
             ->contains(fn ($variant) => Storage::disk($variant->disk)->exists($variant->path));
     }
 
+    /** Bez zdroje pryč jen řádky náhledů, jejichž soubor chybí; funkční zůstanou. */
+    private function odstranRozbiteNahledy(MediaItem $media, array $previewTypes): void
+    {
+        $media->variants()->whereIn('type', $previewTypes)->get()
+            ->reject(fn ($variant) => rescue(fn () => Storage::disk($variant->disk)->exists($variant->path), true, false))
+            ->each(fn ($variant) => $variant->delete());
+    }
+
+    private function ulozObnovenyOriginal(MediaItem $media, string $docasny): void
+    {
+        $relPath = "media/{$media->uuid}/original.{$media->extension}";
+        $proud = fopen($docasny, 'rb');
+
+        try {
+            $ulozeno = $proud && Storage::disk('public')->put($relPath, $proud, 'public');
+        } finally {
+            // Otevřený soubor na Windows nejde smazat.
+            if (is_resource($proud)) {
+                fclose($proud);
+            }
+        }
+
+        if ($ulozeno) {
+            $media->variants()->updateOrCreate(['type' => 'original'], [
+                'disk' => 'public',
+                'path' => $relPath,
+                'mime_type' => $media->mime_type,
+                'size_bytes' => filesize($docasny),
+            ]);
+        }
+    }
+
+    /**
+     * Originál z Drive do jednoho dočasného souboru; smaže ho volající.
+     *
+     * `tempnam()` založil prázdný soubor a vedle něj se psal druhý s příponou
+     * — oba v systémovém temp adresáři a ani jeden se nemazal.
+     */
     private function downloadFromDrive(MediaItem $media): ?string
     {
+        $tmpPath = null;
+
         try {
             $conn = StorageConnection::whereHas(
                 'owner',
@@ -158,18 +206,27 @@ class GenerateMissingThumbnailsCommand extends Command
                 return null;
             }
 
-            $provider = new GoogleDriveStorageProvider($conn);
+            $provider = app(GoogleDriveStorageProvider::class, ['connection' => $conn]);
             $stream = $provider->download($media->drive_file_id);
-            $tmpPath = tempnam(sys_get_temp_dir(), 'gallery_recover_').'.'.$media->extension;
+            $pripona = preg_replace('/[^a-z0-9]/i', '', (string) $media->extension) ?: 'bin';
+            @mkdir(storage_path('app/temp'), 0755, true);
+            $tmpPath = storage_path("app/temp/recover_{$media->uuid}.{$pripona}");
             $fh = fopen($tmpPath, 'wb');
-            while (! $stream->eof()) {
-                fwrite($fh, $stream->read(65536));
+
+            try {
+                while (! $stream->eof()) {
+                    fwrite($fh, $stream->read(65536));
+                }
+            } finally {
+                fclose($fh);
             }
-            fclose($fh);
 
             return $tmpPath;
         } catch (\Throwable $e) {
             Log::warning('Drive download failed', ['id' => $media->id, 'error' => $e->getMessage()]);
+            if ($tmpPath !== null && is_file($tmpPath)) {
+                @unlink($tmpPath);
+            }
 
             return null;
         }

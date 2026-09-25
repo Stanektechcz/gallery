@@ -6,6 +6,7 @@ use App\Models\MediaItem;
 use App\Models\MemoryInteraction;
 use App\Models\MemoryPreference;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -26,7 +27,7 @@ class MemoryDiscoveryService
 
         $cards = collect()
             ->concat(in_array('on_this_day', $enabledTypes, true) ? $this->onThisDay($space->id, $preferences) : [])
-            ->concat(in_array('trip_anniversary', $enabledTypes, true) ? $this->tripAnniversaries($space->id) : [])
+            ->concat(in_array('trip_anniversary', $enabledTypes, true) ? $this->tripAnniversaries($space->id, $preferences) : [])
             ->concat(in_array('favorite_flashback', $enabledTypes, true) ? $this->favoriteFlashback($space->id, $preferences) : [])
             ->concat(in_array('place_flashback', $enabledTypes, true) ? $this->placeFlashback($space->id, $preferences) : [])
             ->concat(in_array('monthly_highlight', $enabledTypes, true) ? $this->monthlyHighlight($space->id, $preferences) : []);
@@ -44,9 +45,15 @@ class MemoryDiscoveryService
             ->values();
     }
 
+    /**
+     * „Tento den" podle kalendáře dvojice.
+     *
+     * S `now()` v UTC patřily první dvě hodiny po pražské půlnoci ještě ke
+     * včerejšku — ve 0:30 2. července ukazovala karta fotky z 1. července.
+     */
     private function onThisDay(int $spaceId, MemoryPreference $preferences): array
     {
-        $today = now();
+        $today = Cas::ted();
         $cards = [];
         foreach (range(1, 10) as $offset) {
             $date = $today->copy()->subYears($offset);
@@ -76,9 +83,16 @@ class MemoryDiscoveryService
         return $cards;
     }
 
-    private function tripAnniversaries(int $spaceId): array
+    /**
+     * Výročí cesty z fotek, které vidí mřížka.
+     *
+     * Fotky se dřív braly jen bez koše — trezor, nedokončené nahrávky,
+     * archiv i fotky se skrytými lidmi pak vyskočily ve vzpomínce. Filtry
+     * jsou teď tytéž jako u ostatních karet (`baseMedia`).
+     */
+    private function tripAnniversaries(int $spaceId, MemoryPreference $preferences): array
     {
-        $today = now();
+        $today = Cas::dnes();
         $trips = DB::table('trips')->where('gallery_space_id', $spaceId)->where('start_date', '<', $today->copy()->subYear())->get();
         $cards = [];
         foreach ($trips as $trip) {
@@ -88,8 +102,8 @@ class MemoryDiscoveryService
                 continue;
             }
             $mediaIds = DB::table('trip_media')->where('trip_id', $trip->id)->pluck('media_item_id');
-            $items = MediaItem::with(['variants' => fn ($query) => $query->whereIn('type', ['thumbnail', 'placeholder'])])
-                ->whereIn('id', $mediaIds)->whereNull('trashed_at')->orderByDesc('is_favorite')->limit(16)->get();
+            $items = $this->baseMedia($spaceId, $preferences)
+                ->whereIn('id', $mediaIds)->orderByDesc('is_favorite')->limit(16)->get();
             if ($items->isEmpty()) {
                 continue;
             }
@@ -116,35 +130,52 @@ class MemoryDiscoveryService
         return [$this->card('favorite_flashback', 'Oblíbené znovu', 'Výběr, který stojí za návrat', 'Vybráno z vašich oblíbených', '💜', '#ec4899', $items, 'favorites:'.now()->format('o-W'), 80)];
     }
 
+    /**
+     * Nejčastější místo — počítané jen z fotek, které karta smí ukázat.
+     *
+     * `DB::table` nezná SoftDeletes a počet bral i trezor a smazané fotky.
+     * Vyhrálo tak místo, kde byly jen schované fotky, karta pak neměla co
+     * ukázat a zmizela celá — i když jiné místo viditelné fotky mělo. Zbylé
+     * filtry `baseMedia` (skrytí lidé) v součtu nejsou, proto se zkusí pár
+     * dalších míst, než se karta vzdá.
+     */
     private function placeFlashback(int $spaceId, MemoryPreference $preferences): array
     {
         $hiddenPlaces = $preferences->hidden_place_ids ?: [];
-        $place = DB::table('media_place')
+        $places = DB::table('media_place')
             ->join('places', 'places.id', '=', 'media_place.place_id')
             ->join('media_items', 'media_items.id', '=', 'media_place.media_item_id')
             ->where('places.gallery_space_id', $spaceId)
+            ->where('media_items.gallery_space_id', $spaceId)
             ->whereNull('media_items.trashed_at')
+            ->whereNull('media_items.deleted_at')
+            ->where('media_items.is_hidden', false)
+            ->where('media_items.status', 'ready')
+            ->when(! $preferences->include_archived, fn ($query) => $query->where('media_items.is_archived', false))
             ->when($hiddenPlaces, fn ($query) => $query->whereNotIn('places.id', $hiddenPlaces))
             ->where('media_items.taken_at', '<', now()->subMonths(6))
             ->select('places.id', 'places.name', DB::raw('COUNT(*) as media_count'))
             ->groupBy('places.id', 'places.name')
             ->orderByDesc('media_count')
-            ->first();
-        if (! $place) {
-            return [];
-        }
-        $mediaIds = DB::table('media_place')->where('place_id', $place->id)->pluck('media_item_id');
-        $items = $this->baseMedia($spaceId, $preferences)->whereIn('id', $mediaIds)->orderByDesc('rating')->limit(16)->get();
-        if ($items->isEmpty()) {
-            return [];
+            ->limit(5)
+            ->get();
+
+        foreach ($places as $place) {
+            $mediaIds = DB::table('media_place')->where('place_id', $place->id)->pluck('media_item_id');
+            $items = $this->baseMedia($spaceId, $preferences)->whereIn('id', $mediaIds)->orderByDesc('rating')->limit(16)->get();
+            if ($items->isEmpty()) {
+                continue;
+            }
+
+            return [$this->card('place_flashback', "Zpátky na místě {$place->name}", "{$place->media_count} zachycených okamžiků", 'Místo, kam se vracíte ve vzpomínkách', '📍', '#f59e0b', $items, "place:{$place->id}:".now()->format('Y-m'), 70)];
         }
 
-        return [$this->card('place_flashback', "Zpátky na místě {$place->name}", "{$place->media_count} zachycených okamžiků", 'Místo, kam se vracíte ve vzpomínkách', '📍', '#f59e0b', $items, "place:{$place->id}:".now()->format('Y-m'), 70)];
+        return [];
     }
 
     private function monthlyHighlight(int $spaceId, MemoryPreference $preferences): array
     {
-        $date = now()->subYear();
+        $date = Cas::ted()->subYear();
         $items = $this->baseMedia($spaceId, $preferences)
             ->whereYear('taken_at', $date->year)
             ->whereMonth('taken_at', $date->month)

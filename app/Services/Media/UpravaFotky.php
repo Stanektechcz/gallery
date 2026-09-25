@@ -7,11 +7,13 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Intervention\Image\Drivers\Gd\Driver as GdDriver;
 use Intervention\Image\Drivers\Imagick\Driver as ImagickDriver;
 use Intervention\Image\Encoders\WebpEncoder;
 use Intervention\Image\ImageManager;
+use Intervention\Image\Interfaces\ImageInterface;
 
 /**
  * Otočení a výřez fotky z prohlížeče — nedestruktivně.
@@ -43,13 +45,11 @@ class UpravaFotky
             return true;
         }
 
-        $zdroj = $this->zdroj($media);
+        $obraz = $this->nactiZdroj($media);
 
-        if ($zdroj === null) {
+        if ($obraz === null) {
             return false;
         }
-
-        $obraz = $this->spravce()->decodePath($zdroj);
 
         if ($otoceni !== 0) {
             // Kladný úhel otáčí po směru hodinových ručiček — stejně jako CSS `rotate()`.
@@ -117,20 +117,49 @@ class UpravaFotky
         }
     }
 
-    /** Největší soubor, který aplikace u sebe má — originál, jinak velký náhled. */
-    private function zdroj(MediaItem $media): ?string
+    /**
+     * Největší soubor, který aplikace u sebe má a umí přečíst.
+     *
+     * Dřív vyhrál první existující soubor — u RAW fotky originál `.cr2`,
+     * u HEIC bez Imagicku originál, kterému GD nerozumí — a `decodePath()`
+     * vyhodil výjimku až v kontroleru: 500 na každé otočení. Teď se kandidáti
+     * zkoušejí po řadě: RAW originál se přeskočí, nečitelný soubor
+     * i pixelová bomba (viz `ImageVariantService::prilisVelky`) také,
+     * a přijde na řadu velký náhled.
+     */
+    private function nactiZdroj(MediaItem $media): ?ImageInterface
     {
+        if ($media->media_type !== 'photo') {
+            return null;
+        }
+
         foreach (['original', 'large', 'medium'] as $typ) {
             $v = $media->variants()->where('type', $typ)->first();
 
-            if ($v === null || ! $media->media_type || $media->media_type !== 'photo') {
+            if ($v === null) {
+                continue;
+            }
+
+            if ($typ === 'original' && ($media->is_raw || MediaFormatService::isRaw(strtolower(pathinfo((string) $v->path, PATHINFO_EXTENSION))))) {
                 continue;
             }
 
             $cesta = rescue(fn () => Storage::disk($v->disk ?: 'public')->path($v->path), null, false);
 
-            if ($cesta && is_file($cesta)) {
-                return $cesta;
+            if (! $cesta || ! is_file($cesta)) {
+                continue;
+            }
+
+            if ($duvod = ImageVariantService::prilisVelky($cesta)) {
+                Log::warning("{$duvod} — úprava media #{$media->id} zkusí menší variantu než {$typ}.");
+
+                continue;
+            }
+
+            try {
+                return $this->spravce()->decodePath($cesta);
+            } catch (\Throwable $e) {
+                Log::info("Úprava media #{$media->id}: {$typ} nejde přečíst, zkouší se další varianta.", ['error' => $e->getMessage()]);
             }
         }
 

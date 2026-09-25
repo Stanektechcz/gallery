@@ -9,9 +9,20 @@ use Illuminate\Support\Facades\DB;
 
 class AutoStackService
 {
+    /**
+     * Návrhy sérií z nejnovějších `$limit` nesložených fotek.
+     *
+     * Dřív se bralo nejstarších `$limit` (`orderBy('taken_at')`): s víc
+     * samostatnými fotkami, než je limit, se nová série do výběru nedostala
+     * nikdy — a nové série jsou přesně ty, které člověk chce složit.
+     * Uvnitř výběru se řadí zase chronologicky, aby série držely pořadí.
+     *
+     * Složené fotky vylučuje korelovaný `NOT EXISTS`: dřív se ID ze všech
+     * prostorů vložila do `whereNotIn` jako placeholdery, a s desítkami
+     * tisíc složených fotek dotaz narazil na limit parametrů.
+     */
     public function candidates(int $spaceId, int $limit = 2000): Collection
     {
-        $stackedIds = DB::table('media_stack_items')->pluck('media_item_id');
         $items = MediaItem::with(['variants' => fn ($query) => $query->where('type', 'thumbnail')])
             ->where('gallery_space_id', $spaceId)
             ->where('media_type', 'photo')
@@ -19,10 +30,15 @@ class AutoStackService
             ->where('is_hidden', false)
             ->whereNull('trashed_at')
             ->whereNotNull('taken_at')
-            ->whereNotIn('id', $stackedIds)
-            ->orderBy('taken_at')
+            ->whereNotExists(fn ($query) => $query->select(DB::raw(1))
+                ->from('media_stack_items')
+                ->whereColumn('media_stack_items.media_item_id', 'media_items.id'))
+            ->orderByDesc('taken_at')
+            ->orderByDesc('id')
             ->limit($limit)
-            ->get();
+            ->get()
+            ->reverse()
+            ->values();
 
         $groups = collect();
         $current = collect();

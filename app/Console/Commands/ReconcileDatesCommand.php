@@ -23,6 +23,7 @@ class ReconcileDatesCommand extends Command
                             {--apply : Skutečně zapsat; bez tohoto přepínače jen ukáže, co by se stalo}
                             {--space= : Jen tento prostor}
                             {--limit=1000 : Nejvýš tolik záznamů v jednom běhu}
+                            {--after-id=0 : Pokračovat za tímto ID (vypíše ho předchozí běh)}
                             {--rewrite : Přepsat i data, která už jsou vyplněná, pokud se od názvu liší}';
 
     protected $description = 'Doplní chybějící datum pořízení z názvu souboru.';
@@ -32,16 +33,28 @@ class ReconcileDatesCommand extends Command
         $zapsat = (bool) $this->option('apply');
         $prepsat = (bool) $this->option('rewrite');
 
+        /*
+         * Po ID a s místem, kde pokračovat.
+         *
+         * `limit` bez řazení bral pokaždé tytéž první řádky — a fotky bez data
+         * v názvu zůstanou bez data navždy, takže je každý další běh vzal
+         * znovu a na zbytek archivu se nedostal nikdy. Běh, který narazí na
+         * limit, vypíše `--after-id` pro další dávku.
+         */
+        $limit = max(1, (int) $this->option('limit'));
         $query = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereNull('trashed_at')
             ->when($this->option('space'), fn ($q, $id) => $q->where('gallery_space_id', $id))
             ->when(! $prepsat, fn ($q) => $q->whereNull('taken_at'))
-            ->limit((int) $this->option('limit'));
+            ->where('id', '>', max(0, (int) $this->option('after-id')))
+            ->orderBy('id')
+            ->limit($limit);
 
         $zmeneno = 0;
         $preskoceno = 0;
+        $davka = $query->get();
 
-        foreach ($query->get() as $media) {
+        foreach ($davka as $media) {
             $odvozene = $filenames->infer($media->original_filename ?? '', $media->media_type ?? 'photo');
             $datum = $odvozene['taken_at'] ?? null;
 
@@ -75,6 +88,10 @@ class ReconcileDatesCommand extends Command
         }
 
         $this->newLine();
+
+        if ($davka->count() >= $limit) {
+            $this->comment("Dávka narazila na limit. Další pokračuje za posledním záznamem: --after-id={$davka->last()->id}");
+        }
 
         if ($zmeneno === 0) {
             $this->info('Nic k doplnění.'.($preskoceno ? " Přeskočeno {$preskoceno} bez data v názvu." : ''));

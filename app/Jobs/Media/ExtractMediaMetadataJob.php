@@ -51,6 +51,7 @@ class ExtractMediaMetadataJob implements ShouldQueue
         }
 
         $media->update(['processing_stage' => 'extracting_metadata']);
+        $datumZExif = false;
 
         try {
             $exifData = $exifService->extract($path);
@@ -66,13 +67,30 @@ class ExtractMediaMetadataJob implements ShouldQueue
                 }
             }
 
-            // Fill in dimensions if missing
-            if (empty($updateData['width']) && isset($exifData['width'])) {
-                $updateData['width'] = $exifData['width'];
-                $updateData['height'] = $exifData['height'] ?? null;
+            /*
+             * Rozměry jen tam, kde chybí — a otočené.
+             *
+             * Podmínka se dřív ptala na `$updateData['width']`, které nikdy
+             * nebylo nastavené, takže EXIF přepsal rozměry vždy. A EXIF
+             * `ImageWidth/Height` jsou rozměry senzoru před otočením: iPhone na
+             * výšku (Orientation 6) skončil jako 4032×3024 a mřížka mu dala
+             * dlaždici na šířku. Orientace 5–8 a video otočené o ±90° prohodí
+             * šířku s výškou.
+             */
+            if (! $media->width && isset($exifData['width'])) {
+                $sirka = $exifData['width'];
+                $vyska = $exifData['height'] ?? null;
+                $orientace = (int) ($exifData['orientation'] ?? 1);
+                $otoceni = abs((int) ($exifData['rotation'] ?? 0)) % 180;
+                if ($vyska && (($orientace >= 5 && $orientace <= 8) || $otoceni === 90)) {
+                    [$sirka, $vyska] = [$vyska, $sirka];
+                }
+                $updateData['width'] = $sirka;
+                $updateData['height'] = $vyska;
             }
 
             $media->update($updateData);
+            $datumZExif = isset($updateData['taken_at']);
 
             // Handle XMP keywords → tags (queued separately)
             if (! empty($exifData['xmp_keywords'])) {
@@ -87,7 +105,8 @@ class ExtractMediaMetadataJob implements ShouldQueue
         if ($media->media_type === 'photo') {
             GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
         } else {
-            GenerateVideoPosterJob::dispatch($media->id)->onQueue('media');
+            // Bez data z EXIF smí čas z ffprobe nahradit čas z prohlížeče.
+            GenerateVideoPosterJob::dispatch($media->id, ! $datumZExif)->onQueue('media');
         }
     }
 }

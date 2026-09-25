@@ -63,6 +63,11 @@ class ProcessVideosCommand extends Command
 
             try {
                 $updates = $videos->extractMetadata($source);
+                // Datum, které video už má (z EXIF nebo ruční úpravy), se
+                // nepřepisuje; ffprobe doplní jen prázdné.
+                if ($media->taken_at) {
+                    unset($updates['taken_at']);
+                }
                 if (empty($updates['taken_at']) && ! $media->taken_at) {
                     $updates += $filenames->infer($media->original_filename, 'video');
                 }

@@ -2,18 +2,28 @@
 
 namespace App\Jobs\Media;
 
+use App\Jobs\Media\Concerns\NajdeZdrojMedia;
 use App\Models\MediaItem;
-use App\Models\UploadSession;
 use App\Services\Media\VideoProcessingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Log;
 
+/**
+ * Kopie videa pro prohlížeč (H.264 + AAC).
+ *
+ * Zdroj hledá stejně jako sourozenecké úlohy (`NajdeZdrojMedia`): dočasný
+ * soubor nahrávky, jinak uložený originál. Dřív brala jen
+ * `UploadSession::assembled_path`, který souběžné nahrávání na Drive po
+ * dokončení maže — úloha pak tiše skončila a video z iPhonu (HEVC) se
+ * v prohlížeči nepřehrálo nikdy.
+ */
 class GenerateVideoCompatibilityVariantJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, NajdeZdrojMedia, Queueable, SerializesModels;
 
     public int $tries = 3;
 
@@ -28,10 +38,11 @@ class GenerateVideoCompatibilityVariantJob implements ShouldQueue
             return;
         }
 
-        $session = UploadSession::where('resulting_media_id', $media->id)->first();
-        $path = $session?->assembled_path;
+        $path = $this->zdrojovySoubor($media);
 
-        if (! $path || ! file_exists($path)) {
+        if (! $path) {
+            Log::warning("Zdroj videa pro kompatibilní kopii nebyl nalezen, media #{$media->id}");
+
             return;
         }
 

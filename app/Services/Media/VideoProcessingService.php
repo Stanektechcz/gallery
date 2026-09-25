@@ -4,7 +4,6 @@ namespace App\Services\Media;
 
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
-use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -44,6 +43,24 @@ class VideoProcessingService
         }
 
         $data = json_decode($output, true);
+
+        return is_array($data) ? $this->metadataZeSondy($data) : [];
+    }
+
+    /**
+     * Výstup ffprobe → sloupce `media_items`.
+     *
+     * Čas: `creation_time` je UTC a ukládal se tak, jak je — video natočené
+     * v Praze ve 0:30 mělo v knihovně 22:30 předchozího dne a na časové ose
+     * i ve vzpomínkách patřilo ke špatnému dni. Převádí se na hodiny dvojice
+     * (jako se ukládají fotky z EXIF); Apple `creationdate` nese posun
+     * a má přednost.
+     *
+     * Rozměry: telefon na výšku ukládá stopu 1920×1080 s otočením ±90°.
+     * Bez prohození měla videa na výšku v mřížce dlaždici na šířku.
+     */
+    private function metadataZeSondy(array $data): array
+    {
         $format = $data['format'] ?? [];
         $streams = $data['streams'] ?? [];
 
@@ -51,12 +68,17 @@ class VideoProcessingService
         $audioStream = collect($streams)->firstWhere('codec_type', 'audio');
 
         $durationSec = (float) ($format['duration'] ?? 0);
+        $width = (int) ($videoStream['width'] ?? 0);
+        $height = (int) ($videoStream['height'] ?? 0);
+        if (abs($this->otoceni($videoStream ?? [])) % 180 === 90) {
+            [$width, $height] = [$height, $width];
+        }
 
         $metadata = [
             'duration_ms' => (int) ($durationSec * 1000),
             'bitrate' => (int) ($format['bit_rate'] ?? 0),
-            'width' => (int) ($videoStream['width'] ?? 0),
-            'height' => (int) ($videoStream['height'] ?? 0),
+            'width' => $width,
+            'height' => $height,
             // r_frame_rate může být u HEVC pouze časová základna (např.
             // 90000/1), nikoliv skutečná frekvence snímků. avg_frame_rate
             // je správná hodnota pro zobrazení i databázi.
@@ -65,15 +87,27 @@ class VideoProcessingService
             'audio_codec' => $audioStream['codec_name'] ?? null,
         ];
 
-        $createdAt = $format['tags']['creation_time'] ?? $videoStream['tags']['creation_time'] ?? null;
-        if ($createdAt) {
-            try {
-                $metadata['taken_at'] = Carbon::parse($createdAt);
-            } catch (\Throwable) {
+        $tagy = array_merge($videoStream['tags'] ?? [], $format['tags'] ?? []);
+        $metadata['taken_at'] = ExifExtractionService::hodinyVidea(
+            $tagy['com.apple.quicktime.creationdate'] ?? null,
+            $tagy['creation_time'] ?? null,
+        );
+
+        return array_filter($metadata, fn ($value) => $value !== null && $value !== 0 && $value !== 0.0);
+    }
+
+    /** Otočení stopy ve stupních — novější ffprobe v `side_data_list`, starší v `tags.rotate`. */
+    private function otoceni(array $videoStream): int
+    {
+        foreach ($videoStream['side_data_list'] ?? [] as $side) {
+            if (is_array($side) && isset($side['rotation']) && is_numeric($side['rotation'])) {
+                return (int) $side['rotation'];
             }
         }
 
-        return array_filter($metadata, fn ($value) => $value !== null && $value !== 0 && $value !== 0.0);
+        $rotate = $videoStream['tags']['rotate'] ?? null;
+
+        return is_numeric($rotate) ? (int) $rotate : 0;
     }
 
     /**

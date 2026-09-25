@@ -22,7 +22,22 @@ class GenerateVideoPosterJob implements ShouldQueue
 
     public int $timeout = 600;
 
-    public function __construct(private readonly int $mediaItemId) {}
+    /**
+     * Smí čas z ffprobe nahradit `taken_at`, které už video má?
+     *
+     * Jen když úlohu posílá `ExtractMediaMetadataJob` a EXIF datum nenašel —
+     * pak je v `taken_at` jen čas změny souboru z prohlížeče. Jinak (EXIF
+     * datum našel, oprava náhledů, ruční úprava) se existující datum nechá:
+     * úloha ho dřív přepisovala vždycky, i správnou hodnotu z EXIF.
+     * Obyčejná vlastnost s výchozí hodnotou, aby prošly i úlohy ve frontě
+     * serializované před přidáním parametru.
+     */
+    private bool $datumZVidea = false;
+
+    public function __construct(private readonly int $mediaItemId, bool $datumZVidea = false)
+    {
+        $this->datumZVidea = $datumZVidea;
+    }
 
     public function handle(VideoProcessingService $videoService): void
     {
@@ -54,6 +69,9 @@ class GenerateVideoPosterJob implements ShouldQueue
         try {
             // Extract video metadata
             $videoMeta = $videoService->extractMetadata($path);
+            if ($media->taken_at && ! $this->datumZVidea) {
+                unset($videoMeta['taken_at']);
+            }
             if (! empty($videoMeta)) {
                 if (! empty($videoMeta['taken_at']) && ! $media->display_title) {
                     $date = Carbon::parse($videoMeta['taken_at'])->locale('cs')->isoFormat('D. M. YYYY');

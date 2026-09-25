@@ -145,10 +145,14 @@ class AlbumCurationAssistantService
             return null;
         }
 
+        // Trezor a smazané fotky ven: `DB::table` o SoftDeletes neví a nástěnka
+        // jinak ukazovala partnerovi i uuid a název fotky schované v trezoru.
         $items = DB::table('curation_board_items as item')
             ->join('media_items as media', 'media.id', '=', 'item.media_item_id')
             ->where('item.curation_board_id', $board->id)
             ->whereNull('media.trashed_at')
+            ->whereNull('media.deleted_at')
+            ->where('media.is_hidden', false)
             ->orderBy('item.sort_order')
             ->get(['item.id', 'item.status', 'item.note', 'item.sort_order', 'media.id as media_id', 'media.uuid as media_uuid', 'media.display_title', 'media.original_filename', 'media.media_type']);
         $media = MediaItem::whereIn('id', $items->pluck('media_id'))->with('variants')->get()->keyBy('id');

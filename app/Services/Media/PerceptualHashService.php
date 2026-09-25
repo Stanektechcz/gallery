@@ -2,6 +2,8 @@
 
 namespace App\Services\Media;
 
+use Illuminate\Support\Facades\Log;
+
 /**
  * Perceptual hash calculation service.
  * NOT AI - uses classical image hashing algorithms (pHash, dHash, aHash).
@@ -13,6 +15,10 @@ class PerceptualHashService
      */
     public function calculateDHash(string $imagePath): ?string
     {
+        if ($this->prilisVelky($imagePath)) {
+            return null;
+        }
+
         try {
             $image = imagecreatefromstring(file_get_contents($imagePath));
             if (! $image) {
@@ -47,6 +53,10 @@ class PerceptualHashService
      */
     public function calculateAHash(string $imagePath): ?string
     {
+        if ($this->prilisVelky($imagePath)) {
+            return null;
+        }
+
         try {
             $image = imagecreatefromstring(file_get_contents($imagePath));
             if (! $image) {
@@ -108,6 +118,22 @@ class PerceptualHashService
     public function areSimilar(string $hash1, string $hash2, int $threshold = 10): bool
     {
         return $this->hammingDistance($hash1, $hash2) <= $threshold;
+    }
+
+    /**
+     * Pixelová bomba se nedekóduje (viz `ImageVariantService::prilisVelky`).
+     *
+     * `imagecreatefromstring()` na PNG s hlavičkou 30 000 × 30 000 px skončí
+     * fatální chybou paměti, kterou `catch` níž nezachytí.
+     */
+    private function prilisVelky(string $imagePath): bool
+    {
+        $duvod = ImageVariantService::prilisVelky($imagePath);
+        if ($duvod !== null) {
+            Log::warning("{$duvod} — otisk se nepočítá.", ['path' => basename($imagePath)]);
+        }
+
+        return $duvod !== null;
     }
 
     private function grayValue(\GdImage $image, int $x, int $y): int

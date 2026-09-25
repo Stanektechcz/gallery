@@ -15,6 +15,9 @@ class ImageVariantService
 {
     private ?ImageManager $manager = null;
 
+    /** 100 Mpx — víc nemá ani fotka z 50Mpx fotoaparátu s rezervou; RGBA plátno ~400 MB. */
+    public const MAX_PIXELU = 100_000_000;
+
     private const VARIANTS = [
         'placeholder' => ['width' => 64,   'quality' => 40],
         'thumbnail' => ['width' => 320,  'quality' => 80],
@@ -43,10 +46,40 @@ class ImageVariantService
     }
 
     /**
+     * Důvod, proč obrázek nedekódovat — nebo `null`, když je v pořádku.
+     *
+     * Pixelová bomba: PNG o pár kilobajtech s hlavičkou 30 000 × 30 000 px
+     * si při dekódování řekne o ~3,6 GB. PHP skončí fatální chybou paměti,
+     * kterou žádný `catch` nechytí — worker spadne a fronta úlohu pouští
+     * znovu, dokud nevyčerpá pokusy. `getimagesize()` čte jen hlavičku.
+     * Formát, kterému PHP nerozumí (HEIC, RAW), projde: jeho rozměry se tu
+     * zjistit nedají a řeší ho Imagick s vlastními limity.
+     */
+    public static function prilisVelky(string $cesta): ?string
+    {
+        $rozmery = @getimagesize($cesta);
+        if (! is_array($rozmery)) {
+            return null;
+        }
+
+        [$sirka, $vyska] = [(int) $rozmery[0], (int) $rozmery[1]];
+
+        return $sirka * $vyska > self::MAX_PIXELU
+            ? "Obrázek je příliš velký na zpracování ({$sirka} × {$vyska} px, limit ".(self::MAX_PIXELU / 1_000_000).' Mpx)'
+            : null;
+    }
+
+    /**
      * Generate all standard image variants for a media item.
      */
     public function generateAll(MediaItem $mediaItem, string $sourcePath): void
     {
+        if ($duvod = self::prilisVelky($sourcePath)) {
+            Log::warning("{$duvod} — varianty pro media #{$mediaItem->id} se nevytvoří.");
+
+            return;
+        }
+
         foreach (self::VARIANTS as $type => $config) {
             $this->generateVariant($mediaItem, $sourcePath, $type, $config);
         }
@@ -56,6 +89,12 @@ class ImageVariantService
 
     public function generateVariant(MediaItem $mediaItem, string $sourcePath, string $type, array $config): ?MediaVariant
     {
+        if ($duvod = self::prilisVelky($sourcePath)) {
+            Log::warning("{$duvod} — varianta {$type} pro media #{$mediaItem->id} se nevytvoří.");
+
+            return null;
+        }
+
         try {
             /*
              * API Intervention Image 4.
@@ -106,6 +145,10 @@ class ImageVariantService
 
     private function calculateBlurHashAndColor(MediaItem $mediaItem, string $sourcePath): void
     {
+        if (self::prilisVelky($sourcePath)) {
+            return;
+        }
+
         try {
             $image = $this->manager()->decodePath($sourcePath);
             $image->scaleDown(width: 64); // tiny version for hash/color

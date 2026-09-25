@@ -41,10 +41,15 @@ class SmartAlbumService
             ? json_decode($album->smart_rules, true)
             : $album->smart_rules;
 
+        $rules = is_array($rules) ? $rules : [];
+
         $q = MediaItem::where('gallery_space_id', $spaceId)->whereNull('trashed_at')->where('is_hidden', false);
         $mode = ($rules['match'] ?? 'all') === 'any' ? 'or' : 'and';
 
-        $conditions = $rules['conditions'] ?? [];
+        // Podmínka, která není pole, se přeskočí stejně jako neznámé pole.
+        $conditions = is_array($rules['conditions'] ?? null)
+            ? array_values(array_filter($rules['conditions'], 'is_array'))
+            : [];
 
         if (empty($conditions)) {
             return $q->whereRaw('1 = 0'); // no rules = empty album
@@ -84,11 +89,31 @@ class SmartAlbumService
 
     // ─── Condition applicators ─────────────────────────────────────────────
 
+    /** Pole, která berou seznam hodnot; ostatní čekají jednu skalární hodnotu. */
+    private const SEZNAMOVA_POLE = ['extension', 'tag_id', 'person_id'];
+
+    /**
+     * Hodnota v tom tvaru, který pole čeká — jinak se podmínka přeskočí.
+     *
+     * Validace pouští `value` jako cokoli. Pole místo textu u `camera_make`
+     * skončilo „Array to string conversion" (500), a protože se pravidlo
+     * uložilo, padala stránka alba při každém dalším otevření. Neplatná
+     * podmínka se proto chová jako neznámé pole: nic neomezí.
+     */
     private function applyCondition(Builder $q, array $cond): void
     {
-        $field = $cond['field'] ?? null;
-        $op = $cond['op'] ?? 'eq';
+        $field = is_string($cond['field'] ?? null) ? $cond['field'] : null;
+        $op = is_string($cond['op'] ?? null) ? $cond['op'] : 'eq';
         $value = $cond['value'] ?? null;
+
+        if (in_array($field, self::SEZNAMOVA_POLE, true) || ($field === 'rating' && $op === 'in')) {
+            $value = is_array($value) ? array_values(array_filter($value, 'is_scalar')) : $value;
+            if ($value === [] || (! is_array($value) && ! is_scalar($value))) {
+                return;
+            }
+        } elseif (! is_scalar($value) && $value !== null) {
+            return;
+        }
 
         match ($field) {
             'rating' => $this->applyScalar($q, 'rating', $op, $value),
@@ -136,9 +161,15 @@ class SmartAlbumService
 
     public static function conditionLabel(array $cond): string
     {
-        $field = $cond['field'] ?? '';
+        $field = is_scalar($cond['field'] ?? null) ? (string) $cond['field'] : '';
         $op = $cond['op'] ?? 'eq';
         $value = $cond['value'] ?? '';
+        // Vnořené pole by `implode()` převedl na „Array" s varováním (500).
+        if (is_array($value)) {
+            $value = array_filter($value, 'is_scalar');
+        } elseif (! is_scalar($value)) {
+            $value = '';
+        }
 
         $opLabel = match ($op) {
             'gte' => '≥',
