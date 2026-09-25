@@ -14,6 +14,9 @@ class GallerySpace extends Model
     protected $fillable = [
         'uuid', 'name', 'slug', 'description', 'owner_id', 'is_default',
         'drive_root_folder_id', 'settings',
+        // Kdo smí mazat fotky — mění se jen dohodou (`MazaniFotek`).
+        'media_delete_mode', 'media_delete_mode_requested',
+        'media_delete_mode_requested_by', 'media_delete_mode_requested_at',
     ];
 
     protected function casts(): array
@@ -21,6 +24,8 @@ class GallerySpace extends Model
         return [
             'is_default' => 'boolean',
             'settings' => 'array',
+            'media_delete_mode_requested_by' => 'integer',
+            'media_delete_mode_requested_at' => 'datetime',
         ];
     }
 

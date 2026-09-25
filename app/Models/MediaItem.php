@@ -82,6 +82,10 @@ class MediaItem extends Model
         'live_photo_pair_id',
         'trashed_at',
         'purge_after',
+        // Návrh ke smazání čeká na souhlas druhého z dvojice (`MazaniFotek`).
+        'trash_requested_by',
+        'trash_requested_at',
+        'trashed_by',
         'last_verified_at',
         'processing_error',
         'search_text',
@@ -95,6 +99,9 @@ class MediaItem extends Model
             'imported_at' => 'datetime',
             'trashed_at' => 'datetime',
             'purge_after' => 'datetime',
+            'trash_requested_by' => 'integer',
+            'trash_requested_at' => 'datetime',
+            'trashed_by' => 'integer',
             'last_verified_at' => 'datetime',
             'taken_at_estimated' => 'boolean',
             'is_favorite' => 'boolean',
@@ -197,6 +204,12 @@ class MediaItem extends Model
     public function scopeNotTrashed($query)
     {
         return $query->whereNull('trashed_at');
+    }
+
+    /** Navržené ke smazání, ještě bez souhlasu druhého — pořád v knihovně. */
+    public function scopeCekaNaSmazani($query)
+    {
+        return $query->whereNotNull('trash_requested_at')->whereNull('trashed_at');
     }
 
     public function scopeReady($query)
