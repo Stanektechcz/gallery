@@ -804,6 +804,144 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2an. Čtyřicáté první kolo — mazání po společném schválení, stav, obsah obrazovek (25. 9.)
+
+Rozhodnutí dvojice ke `can_delete` z minulého kola: **„Mazat fotky mohou
+jen po společném schválení pokud si po vzájemném schválení nenastaví
+jinak."** K tomu audit poskytovatelů obsahu (`app/Services/Obsah`),
+převodníků stavu (`app/Services/Provoz`), řadičů galerie a zbylých míst
+s „dneškem" v UTC — čtyři `task-plan` naráz, opravy v patnácti dávkách
+na oddělených souborech, každý nález nejdřív potvrdil test, který bez
+opravy spadl.
+
+### Mazání fotek po společném schválení
+
+* **Výchozí pro všechny galerie, i stávající:** „Do koše" od jednoho
+  z dvojice fotku jen **navrhne** — zůstane v knihovně s přesýpacími
+  hodinami. Do koše (30 dní na vrácení, pak noční úklid jako dřív) ji
+  přesune až **souhlas druhého**: „Smazat" v prohlížeči fotky nebo
+  v koši (oddíl „Čeká na schválení"), případně jeho vlastní „Do koše" na
+  tutéž fotku. „Ponechat" návrh odmítne, navrhující ho může stáhnout.
+  Vlastní návrh schválit nejde. Druhý dostane jedno oznámení na dávku
+  (bez jmen souborů, nic za trezor).
+* **„Každý maže sám"** jen po vzájemném schválení: jeden navrhne
+  (Nastavení → zámek → Mazání fotek), druhý potvrdí **kódem zámku, nebo
+  heslem do galerie**, nebo návrh odmítne. Návrat ke společnému
+  schvalování smí kdokoli sám — hned.
+* Kdo je v galerii zatím sám (partner nepřijal pozvánku), maže rovnou.
+  Partner s odebraným přístupem se **počítá** — odebráním přístupu nejde
+  dohodu obejít. Host nesmí navrhovat, schvalovat ani mazat nic.
+* Týká se všech cest do koše: knihovna, prohlížeč fotky, hromadný výběr,
+  porovnání, série, duplicity, karanténa úklidu (i přes zápis stavu),
+  staré webové rozhraní a API v1. Trvale smazat z koše smí dál jen
+  vlastník nebo správce (`MazaniFotek::smiTrvaleMazat`, jedno pravidlo
+  pro koš galerie, staré rozhraní i panel rizik).
+* `can_delete` v členství už oprávnění není; `MediaPolicy::delete/restore`
+  pustí jen dvojici prostoru.
+
+### Zabezpečení
+
+* **Úlohy celého serveru přes stav:** kterýkoli člen dvojice kterékoli
+  galerie pozastavil nebo spustil zálohy, úklid koše i synchronizaci
+  banky všem (`admJobPause`, `admJobs`). Teď jen provozovatel.
+* **Trvalé smazání mimo koš:** `DELETE /media/{uuid}/purge` smazal
+  nadobro i fotku z knihovny; `trash/{uuid}/purge` a `trash/empty`
+  hlídaly `users.role` (owner má každý účet). „Vysypat koš" z panelu rizik
+  spustil i běžný člen a smazal i trezor při zamčeném trezoru.
+* **„Necháváme obě"** u duplicit kopie ve skutečnosti vyhodilo.
+* Host cizí galerie vyhazoval její fotky přes hromadnou akci starého API;
+  fotka z trezoru šla do koše se zamčeným trezorem.
+* **Tajné dárky** zapsané z prototypu viděl ten, pro koho byly
+  (`visibility` zůstalo „shared") — migrace je dodatečně skryje.
+* **Soukromé věci partnera:** rozpočet (fondy, odhady, vyrovnání, cíl na
+  Dnes), akce kalendáře v přehledu událostí, zápisy deníku v rekonstrukci
+  dne a příběhu, zprávy z konverzací, kde člověk není, fotky vzpomínek
+  přesunuté do trezoru. Platbu šlo přiřadit k cizí soukromé cestě.
+* **Host jako partner** na desítce obrazovek (obálky, Klid, Mluvení,
+  rozhodování, dárky, e-mail hosta v LOCKMAIL, seznam s přístupem
+  k trezoru, účastník akcí „spolu" a jejich připomínky).
+* Trezor v počtech (osoby, zdraví dat, duplicity jen z trezoru); video
+  a archivy odcházely `Cache-Control: public`, originál z trezoru bez
+  `no-store`; data obrazovek s trezorem se držela 30 s v mezipaměti
+  prohlížeče i po zamčení. Protokol správy ukazoval záznamy z jiných galerií.
+
+### Co padalo nebo počítalo špatně
+
+* **Na MySQL celá skupina `system` prázdná:** dotaz na `trips.deleted_at`,
+  sloupec, který tabulka nemá (SQLite to spolkne) — koš, trezor, zámek,
+  oznámení i schránka. Na Dnes šifrovaný text zpráv („eyJpdiI6…").
+* **Datum pořízení před rokem 1970** (sken z roku 1965) shodilo na MySQL
+  celý zápis stavu — `taken_at` byl `timestamp`.
+* **Stará kopie stavu** mazala a vracela: chybějící den jídelníčku smazal
+  večeři (`ckMenu: {}` celý týden), smazané kapitoly, milníky, dárky,
+  pravidla a úkoly se vracely, přepínače a fondy přepsaly novější změny
+  druhého, dluh zápisů přehrával nejstarší popisky a srdíčka jednoho
+  dával druhému. Připomínka partnerovi tvořila řádky bez stropu.
+* Délky a rozsahy, které MySQL odmítne (poznámky, částky, minuty, id delší
+  než 64 znaků — druhý zápis pak 500 dokola, 2026-13-45).
+* **Posun termínu cesty** nechal dny cesty na starých datech („Teď",
+  deník, rezervace, jídla); souběžné vklady do fondu se ztrácely, dvojí
+  „Opakovat" založilo dva předpisy; `FinanceService::balances` počítal
+  i rozepsané záznamy.
+* **Pražský den** na dalších ~30 místech: poznámka dne, týdenní přehled
+  v pondělí ráno, volné soboty (v neděli nabízely včerejšek), hotové úkoly
+  týdne, @dnes, „letos" na Nový rok, den cyklu, otevření sdílené
+  vzpomínky a připomínky o hodinu až dvě pozdě, časy ve správě.
+
+### Po nasazení
+
+* **Tři migrace:** `2026_09_27_100000_spolecne_mazani_fotek` (sloupce
+  režimu a návrhů), `2026_09_27_110000_skryt_chystane_darky` (jen úprava
+  dat, bez návratu), `2026_09_27_120000_taken_at_datetime` — na MySQL
+  `ALTER TABLE media_items` kopíruje celou tabulku a po dobu běhu blokuje
+  zápisy: **pustit v klidné chvíli**. Hodnoty zůstanou (pásmo sezení se
+  nemění), návrat odmítne, když by data zničil.
+* Ve dvojici „Do koše" od nasazení jen navrhuje — **oba o tom mají
+  vědět**. Co už v koši leží, dožije se svého termínu jako dřív.
+* Staré webové rozhraní (zmrazené) čekající návrh neukazuje: po smazání
+  přejde na časovou osu, hromadná lišta napíše „Hotovo: N" i za návrhy.
+* Termín cesty mění už jen hlavní akce cesty v kalendáři (posun rezervace
+  vlaku cestu neposune). Účet jen pro čtení přes stav nezapíše tabulky.
+* Protokol správy u účtů ve více galeriích nezobrazí záznamy bez prostoru
+  starší než 24. 9.
+
+### Zbývá (vědomě neřešené)
+
+* Vlastník může partnera přeřadit na hosta a pak mazat sám — zásah je
+  v protokolu, ale dohodu obchází.
+* Součty přes účty v různých měnách (`FinanceRozbory::zustatek`,
+  průměrná denní útrata) — potřebuje rozhodnutí o hlavní měně.
+* `LIBSTATS` prochází celou knihovnu; opakovaný zápis po ztracené
+  odpovědi může zdvojit nové přání nebo úkol Klidu (bez klientského id).
+* Další `timestamp` sloupce s daty od lidí (`happened_at`, `recorded_at`,
+  plány `started_at/ends_at`); připomínky v `PlanovaniVeStavu` a výdaj
+  z deníku cesty (`TripPlanController::addJournalEntry`) ještě v UTC.
+* `Vary` přepisuje middleware Inertie; `TrashController` bere první
+  prostor bez řazení.
+* Z předchozích kol: čekající karetní platby Revolutu, `r3` panelu rizik,
+  souběh zamčení trezoru, `SpaceContext` ve statické proměnné.
+
+| Commit | Co |
+|---|---|
+| `6a372c63` | Platba jen k cestě, kterou smí upravit; zůstatek jen ze zapsaných |
+| `1d5ef726` | Mazání po společném schválení — jádro (`MazaniFotek`, migrace) |
+| `bb2d5982` | Staré rozhraní maže jen přes dohodu, trvale jen z koše |
+| `3472747d` | Úklid přes stav maže jen po dohodě, „necháváme obě" |
+| `29e88cf5` | API galerie a data obrazovek pro schvalování |
+| `378d2c44` | Úlohy serveru jen provozovatel, vysypat koš jen správce |
+| `7c3375af` | Datum pořízení před 1970, dluh zápisů, fondy, jen pro čtení |
+| `0c344798`, `1ef94637` | Telefon — schvalování, sloučení, přepínače |
+| `f9b85477`, `ec302142` | Převodníky stavu — MySQL, hosté, dárky, jídelníček, stará kopie |
+| `176fb9df` | Počítač — schvalování, jídelníček, přepínače, fondy |
+| `2a36b48f` | Pražský den ve starém API a službách |
+| `8b2d0263` | Obsah obrazovek — soukromé rozpočty, deník, chat, hosté |
+| `35805294` | Skupina `system` na MySQL, šifrovaný chat, trezor v počtech |
+| `43690604` | Posun cesty posune i dny, souběh vkladů a pravidelných plateb |
+| `db08d0e8` | Testy — pražský den i v noci |
+
+Testy: **2435 PHP testů** (280 nových), všechny prošly — i v noci na
+Silvestra a v letní noci přes `TESTY_CAS`. **Tři migrace.**
+
 ## 2am. Čtyřicáté kolo — staré API: nahrávání, cesty, peníze, úložiště (25. 9.)
 
 Audit souborů, kterých se od 13. 9. nedotkla žádná oprava (319 souborů,
