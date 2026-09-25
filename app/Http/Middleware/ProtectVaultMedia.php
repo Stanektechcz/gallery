@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\MediaItem;
+use App\Support\Trezor;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -32,8 +33,8 @@ class ProtectVaultMedia
 
         // Požadavek jen s tokenem (klíč k API, aplikace) sezení nemá, a tedy ani
         // odemčený trezor — dřív tu spadl na „Session store not set" s chybou 500.
-        $odemceno = $request->hasSession()
-            && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+        // Odemčení platí jen pro toho, kdo odemykal — viz `Trezor`.
+        $odemceno = Trezor::odemcen($request);
 
         if ($isHidden && ! $odemceno) {
             if ($request->expectsJson()) {

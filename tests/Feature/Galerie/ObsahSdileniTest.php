@@ -217,7 +217,7 @@ class ObsahSdileniTest extends TestCase
         $this->patchJson('/api/state', ['data' => ['vaultAdded' => [], 'vaultVyjmout' => [$foto->uuid]]])->assertOk();
         $this->assertTrue($foto->refresh()->is_hidden);
 
-        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+        $this->withSession($this->odemcenyTrezor($this->adri))
             ->patchJson('/api/state', ['data' => ['vaultAdded' => [], 'vaultVyjmout' => [$foto->uuid]]])->assertOk();
 
         $this->assertFalse($foto->refresh()->is_hidden);

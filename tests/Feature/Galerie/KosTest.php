@@ -80,7 +80,7 @@ class KosTest extends TestCase
         $zamceno = $this->getJson('/api/data/system')->assertOk()->json('data.TRASH');
         $this->assertSame(['IMG_1.jpg'], array_column($zamceno, 'name'));
 
-        $odemceno = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+        $odemceno = $this->withSession($this->odemcenyTrezor($this->adri))
             ->getJson('/api/data/system')->assertOk()->json('data.TRASH');
         $this->assertEqualsCanonicalizing(['IMG_1.jpg', 'pas-a-obcanka.jpg'], array_column($odemceno, 'name'));
     }
@@ -100,7 +100,7 @@ class KosTest extends TestCase
         $zamceno = $this->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT.trash');
         $this->assertSame('1', $zamceno);
 
-        $odemceno = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+        $odemceno = $this->withSession($this->odemcenyTrezor($this->adri))
             ->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT.trash');
         $this->assertSame('2', $odemceno);
     }
@@ -209,7 +209,7 @@ class KosTest extends TestCase
         $this->assertNull(MediaItem::withTrashed()->find($bezna->id));
         $this->assertNotNull(MediaItem::find($trezor->id), 'Fotka z trezoru, kterou koš neukázal, zůstává.');
 
-        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+        $this->withSession($this->odemcenyTrezor($this->adri))
             ->postJson('/api/kos/odstranit', ['id' => $trezor->uuid])
             ->assertOk();
 

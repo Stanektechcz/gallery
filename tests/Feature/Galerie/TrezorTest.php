@@ -213,7 +213,8 @@ class TrezorTest extends TestCase
             ->post('/vault/unlock', ['password' => 'spravne-heslo'])
             ->assertSessionHasErrors('password');
 
-        $this->assertFalse((int) session('vault_unlocked_until', 0) > now()->timestamp);
+        $this->assertFalse(session()->has('vault_unlocked_until'));
+        $this->assertFalse(session()->has('vault_unlocked_by'));
     }
 
     /** Zamčený trezor neposílá, co je v něm. */

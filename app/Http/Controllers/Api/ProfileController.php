@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Notifications\ZmenaEmailuNotification;
+use App\Support\Provozovatel;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -50,9 +51,11 @@ class ProfileController extends Controller
         $user = $request->user();
         abort_if($user->read_only_mode, 403, 'V režimu pouze pro čtení nelze měnit profil.');
 
+        // Adresa provozovatele by z účtu udělala provozovatele celé instalace —
+        // a že adresa patří tomu, kdo ji zadal, se tu neověřuje. Viz `Provozovatel`.
         $data = $request->validate([
             'name' => 'required|string|min:2|max:120',
-            'email' => ['required', 'email', 'max:190', Rule::unique('users')->ignore($user->id)],
+            'email' => ['required', 'email', 'max:190', Rule::unique('users')->ignore($user->id), Provozovatel::pravidlo($user)],
             'current_password' => 'nullable|string',
         ]);
 

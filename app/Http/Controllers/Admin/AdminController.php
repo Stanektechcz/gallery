@@ -10,6 +10,7 @@ use App\Models\StorageConnection;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
 use App\Services\Billing\EntitlementService;
+use App\Support\Provozovatel;
 use App\Support\SpaceContext;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -58,9 +59,11 @@ class AdminController extends Controller
 
     public function invite(Request $request): RedirectResponse
     {
+        // Sem smí každý vlastník galerie (`can:admin`), ne jen provozovatel —
+        // účet na adresu provozovatele by si tu založil sám. Viz `Provozovatel`.
         $data = $request->validate([
             'name' => 'required|string|max:100',
-            'email' => 'required|email|unique:users,email',
+            'email' => ['required', 'email', 'unique:users,email', Provozovatel::pravidlo($request->user())],
             'role' => 'required|in:partner,viewer,admin',
         ]);
 

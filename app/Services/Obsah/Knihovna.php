@@ -9,6 +9,7 @@ use App\Models\Person;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
+use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
@@ -783,10 +784,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->all();
     }
 
-    /** Odemčený trezor v tomhle sezení — stejná podmínka jako v `System`. */
+    /** Odemčený trezor pro toho, kdo je přihlášený — stejná podmínka jako v `System`. */
     private function trezorOtevreny(): bool
     {
-        return (int) session('vault_unlocked_until', 0) > CarbonImmutable::now()->timestamp;
+        return Trezor::odemcen();
     }
 
     /**

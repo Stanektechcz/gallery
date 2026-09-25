@@ -8,7 +8,9 @@ use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Billing\EntitlementService;
+use App\Support\Provozovatel;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -43,9 +45,11 @@ class RegistrationController extends Controller
     {
         abort_unless(config('gallery.registration_open'), 403, 'Registrace je zavřená.');
 
+        // Registrace je nepřihlášená, adresu provozovatele tedy nedostane nikdy —
+        // jinak by se provozovatelem celé instalace stal, kdo se zaregistruje první.
         $data = $request->validate([
             'name' => 'required|string|max:100',
-            'email' => 'required|email|max:190|unique:users,email',
+            'email' => ['required', 'email', 'max:190', 'unique:users,email', Provozovatel::pravidlo(null)],
             'space_name' => 'required|string|max:120',
             'password' => ['required', 'confirmed', Password::min(8)],
         ]);
@@ -81,6 +85,8 @@ class RegistrationController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        // Odemčený trezor předchozího člověka v prohlížeči nezůstane — viz `Trezor`.
+        Trezor::zamkni($request);
         // Membership changed inside this request; the cached space ids must not survive it.
         SpaceContext::forget();
 

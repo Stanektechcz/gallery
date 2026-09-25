@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
+use App\Support\Trezor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -57,6 +58,8 @@ class InvitationController extends Controller
 
         Auth::login($user);
         $request->session()->regenerate();
+        // Odemčený trezor předchozího člověka v prohlížeči nezůstane — viz `Trezor`.
+        Trezor::zamkni($request);
 
         AuditLog::record('auth.invitation.accepted', $user);
 

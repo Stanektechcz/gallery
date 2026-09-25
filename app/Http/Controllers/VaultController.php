@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Services\Provoz\PokusyOvereni;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -46,7 +47,7 @@ class VaultController extends Controller
                 ? 'Tři neúspěšné pokusy. Přístup je '.PokusyOvereni::naJakDlouho($chyba['blok']).' uzavřený.'
                 : 'Heslo není správné.']);
         }
-        $request->session()->put('vault_unlocked_until', now()->addMinutes(15)->timestamp);
+        Trezor::odemkni($request, 15 * 60);
         PokusyOvereni::uspech($kdo, 'trezor');
         AuditLog::record('vault.unlock');
 
@@ -55,7 +56,7 @@ class VaultController extends Controller
 
     public function lock(Request $request): RedirectResponse
     {
-        $request->session()->forget('vault_unlocked_until');
+        Trezor::zamkni($request);
 
         return redirect()->route('vault.index');
     }
@@ -73,8 +74,9 @@ class VaultController extends Controller
         return response()->json(['is_hidden' => $media->is_hidden]);
     }
 
+    /** Odemčení patří člověku, ne prohlížeči — viz `Trezor`. */
     private function isUnlocked(Request $request): bool
     {
-        return (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+        return Trezor::odemcen($request);
     }
 }

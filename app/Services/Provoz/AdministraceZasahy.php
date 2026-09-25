@@ -10,6 +10,7 @@ use App\Models\WebauthnCredential;
 use App\Notifications\InvitationNotification;
 use App\Services\Billing\EntitlementService;
 use App\Services\Notifications\OdberyPush;
+use App\Support\Provozovatel;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
 
@@ -128,6 +129,17 @@ class AdministraceZasahy
         if (! $this->jeVlastnik($prostor, $kdo)
             || filter_var($email, FILTER_VALIDATE_EMAIL) === false
             || ! $this->tarify->memberUsage($prostor)['can_add']) {
+            return null;
+        }
+
+        /*
+         * Adresa provozovatele se pozvánkou nezakládá.
+         *
+         * Pozvánka vrací odkaz tomu, kdo zve — účet na adresu provozovatele by
+         * si tak vlastník kterékoli galerie otevřel sám a byl by provozovatelem
+         * celé instalace. Viz `Provozovatel`.
+         */
+        if (! Provozovatel::smiNastavit($email, $kdo)) {
             return null;
         }
 

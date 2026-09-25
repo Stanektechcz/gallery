@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Services\Provoz\PokusyOvereni;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -29,13 +30,14 @@ use Illuminate\Support\Facades\Hash;
  *
  * Pokusy a uzavření počítá `PokusyOvereni` u účtu, ne v sezení — to by
  * vynulovalo smazání cookies.
+ *
+ * Odemčení patří tomu, kdo odemkl, ne prohlížeči — čte a zapisuje ho jen
+ * `App\Support\Trezor`.
  */
 class TrezorController extends Controller
 {
     /** Jak dlouho odemčení platí. Stejných patnáct minut jako na webu. */
     private const MINUT = 15;
-
-    private const KLIC = 'vault_unlocked_until';
 
     public function stav(Request $request): JsonResponse
     {
@@ -78,7 +80,7 @@ class TrezorController extends Controller
             ], 422);
         }
 
-        $request->session()->put(self::KLIC, now()->addMinutes(self::MINUT)->timestamp);
+        Trezor::odemkni($request, self::MINUT * 60);
         PokusyOvereni::uspech($kdo, 'trezor');
         AuditLog::record('vault.unlock');
 
@@ -87,7 +89,7 @@ class TrezorController extends Controller
 
     public function zamkni(Request $request): JsonResponse
     {
-        $request->session()->forget(self::KLIC);
+        Trezor::zamkni($request);
         AuditLog::record('vault.lock');
 
         return response()->json($this->odpoved($request));
@@ -104,8 +106,7 @@ class TrezorController extends Controller
      */
     private function odpoved(Request $request): array
     {
-        $do = (int) $request->session()->get(self::KLIC, 0);
-        $zbyva = max(0, $do - now()->timestamp);
+        $zbyva = Trezor::zbyva($request);
 
         return [
             'odemceno' => $zbyva > 0,

@@ -7,6 +7,7 @@ use App\Jobs\Media\GenerateVideoPosterJob;
 use App\Models\MediaItem;
 use App\Services\Auth\PristupDoGalerie;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
@@ -88,6 +89,16 @@ class MediaFileController extends Controller
         $length = $end - $start + 1;
         $status = $range === null ? Response::HTTP_OK : Response::HTTP_PARTIAL_CONTENT;
 
+        /*
+         * Soubor z trezoru se neukládá ani do mezipaměti prohlížeče.
+         *
+         * S `max-age` na den ho prohlížeč po zamčení trezoru ukázal z paměti,
+         * aniž by se serveru zeptal — zámek by platil jen pro soubory, které
+         * ještě nikdo neotevřel. Soukromé fotky nepatří ani do sdílených
+         * mezipamětí (proxy, CDN), proto u ostatních `private`.
+         */
+        $mezipamet = $this->zTrezoru($path) ? 'private, no-store' : 'private, max-age=86400';
+
         return response()->stream(function () use ($path, $start, $length) {
             $filePath = Storage::disk('public')->path($path);
             $stream = @fopen($filePath, 'rb');
@@ -111,8 +122,7 @@ class MediaFileController extends Controller
             'Content-Length' => $length,
             'Content-Range' => $range === null ? null : "bytes {$start}-{$end}/{$size}",
             'Accept-Ranges' => 'bytes',
-            // Soukromé fotky nepatří do sdílených mezipamětí (proxy, CDN).
-            'Cache-Control' => 'private, max-age=86400',
+            'Cache-Control' => $mezipamet,
             'ETag' => $etag,
             'Last-Modified' => gmdate('D, d M Y H:i:s', $lastMod).' GMT',
             'X-Content-Type-Options' => 'nosniff',
@@ -174,9 +184,26 @@ class MediaFileController extends Controller
         return false;
     }
 
+    /** Odemčený pro toho, kdo je přihlášený (i tokenem) — viz `Trezor`. */
     private function trezorOdemceny(Request $request): bool
     {
-        return $request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+        return Trezor::odemcen($request, $request->user('sanctum') ?? $request->user());
+    }
+
+    /**
+     * Patří soubor fotce z trezoru?
+     *
+     * Podle ní se řídí mezipaměť — viz `serve()`.
+     */
+    private function zTrezoru(string $path): bool
+    {
+        if (! preg_match('#^(?:media|variants)/([0-9a-f-]{36})/#i', $path, $shoda)) {
+            return false;
+        }
+
+        return (bool) MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('uuid', $shoda[1])
+            ->value('is_hidden');
     }
 
     /**

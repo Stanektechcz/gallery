@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\TotpService;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -162,6 +163,8 @@ class TwoFactorController extends Controller
 
         Auth::login($user, $remember);
         $request->session()->regenerate();
+        // Odemčený trezor předchozího člověka v prohlížeči nezůstane — viz `Trezor`.
+        Trezor::zamkni($request);
 
         $user->update(['last_login_at' => now(), 'last_login_ip' => $request->ip()]);
         AuditLog::record('auth.login', $user, ['second_factor' => true]);

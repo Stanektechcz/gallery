@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Notifications\ObnovaHeslaNotification;
+use App\Support\Provozovatel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
@@ -115,13 +116,13 @@ class User extends Authenticatable
      * Tržby všech galerií, tarify, seznam všech účtů nebo plánované úlohy, které
      * běží pro všechny, mu patřit nemají. Provozovatel se proto pozná podle
      * e-mailu z `gallery.operator_emails`, bez nastavení podle vlastníka instalace.
+     *
+     * Seznam čte `Provozovatel` — tentýž, podle kterého registrace, profil
+     * a pozvánky provozovatelskou adresu nikomu jinému nedají.
      */
     public function isOperator(): bool
     {
-        $seznam = (string) (config('gallery.operator_emails') ?: config('gallery.owner_email'));
-        $emaily = array_filter(array_map(fn (string $e) => mb_strtolower(trim($e)), explode(',', $seznam)));
-
-        return $emaily !== [] && in_array(mb_strtolower(trim((string) $this->email)), $emaily, true);
+        return Provozovatel::jeAdresa((string) $this->email);
     }
 
     public function isPartner(): bool

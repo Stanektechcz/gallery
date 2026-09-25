@@ -17,6 +17,7 @@ use App\Services\Storage\DriveConnectionResolver;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
+use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
@@ -330,20 +331,21 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     /**
      * Je trezor právě odemčený?
      *
-     * Čte se `vault_unlocked_until` ze sezení — tentýž klíč, jaký hlídá výdej
-     * souborů (`ProtectVaultMedia`) a jaký nastavuje `TrezorController`.
-     * Jediné místo pravdy: kdyby si obrazovka vedla vlastní odpočet, dala by
-     * se otevřít přepsáním čísla v konzoli a soubory by stejně nedostala.
+     * Ptá se `Trezor` — tatáž podmínka, jakou hlídá výdej souborů
+     * (`ProtectVaultMedia`) a jakou nastavuje `TrezorController`, a jen pro
+     * toho, kdo odemykal. Jediné místo pravdy: kdyby si obrazovka vedla
+     * vlastní odpočet, dala by se otevřít přepsáním čísla v konzoli a soubory
+     * by stejně nedostala.
      */
     private function trezorOtevreny(): bool
     {
-        return (int) session('vault_unlocked_until', 0) > CarbonImmutable::now()->timestamp;
+        return Trezor::odemcen();
     }
 
     /** @return array{odemceno: bool, zbyva: int} */
     private function stavTrezoru(): array
     {
-        $zbyva = max(0, (int) session('vault_unlocked_until', 0) - CarbonImmutable::now()->timestamp);
+        $zbyva = Trezor::zbyva();
 
         return ['odemceno' => $zbyva > 0, 'zbyva' => $zbyva];
     }

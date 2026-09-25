@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Notifications\OdberyPush;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
@@ -86,6 +87,10 @@ class TokenController extends Controller
 
         $user->forceFill(['last_login_at' => now(), 'last_login_ip' => $request->ip()])->save();
         AuditLog::record('auth.login', $user, ['cesta' => 'aplikace', 'zarizeni' => $data['device_name']]);
+
+        // Cesta běží ve skupině `web`: sezení prohlížeče tu je a nese i trezor
+        // odemčený tím, kdo tu byl předtím. S novým přihlášením končí — viz `Trezor`.
+        Trezor::zamkni($request);
 
         return response()->json([
             'token' => $user->createToken($data['device_name'])->plainTextToken,

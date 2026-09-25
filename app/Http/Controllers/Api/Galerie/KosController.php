@@ -11,6 +11,7 @@ use App\Models\MediaItem;
 use App\Services\Media\MediaPurger;
 use App\Services\Obsah\System;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -199,8 +200,7 @@ class KosController extends Controller
      */
     private function vKosi(GallerySpace $prostor)
     {
-        $trezor = request()->hasSession()
-            && (int) request()->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+        $trezor = Trezor::odemcen();
 
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)

@@ -32,6 +32,7 @@ use App\Services\Provoz\UklidVeStavu;
 use App\Services\Provoz\VztahVeStavu;
 use App\Services\Provoz\ZdraviVeStavu;
 use App\Services\Provoz\ZpravyVeStavu;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -255,7 +256,7 @@ class StateController extends Controller
             if ($this->trezor->tykaSe($patch)) {
                 // Vrátit z trezoru do knihovny smí jen ten, kdo ho má odemčený —
                 // jinak by heslo k trezoru obešel jeden zápis stavu.
-                $odemceno = $request->hasSession() && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+                $odemceno = Trezor::odemcen($request);
                 $this->trezor->zpracuj($patch, GallerySpace::findOrFail($coupleId), $odemceno);
                 $patch = $this->trezor->bezTrezoru($patch);
             }

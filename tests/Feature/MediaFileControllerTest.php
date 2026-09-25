@@ -132,7 +132,7 @@ class MediaFileControllerTest extends TestCase
         $this->actingAs($this->adri)->get('/files/media/'.$media->uuid.'/original?ext=jpg')->assertNotFound();
 
         $this->actingAs($this->adri)
-            ->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->withSession($this->odemcenyTrezor($this->adri))
             ->get('/files/media/'.$media->uuid.'/original?ext=jpg')
             ->assertOk();
     }
@@ -147,7 +147,9 @@ class MediaFileControllerTest extends TestCase
         $media->forceFill(['is_hidden' => true])->save();
 
         $this->get($podepsana)->assertNotFound();
-        $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])->get($podepsana)->assertOk();
+
+        // Odemčení patří člověku: s podpisem projde jen tomu, kdo trezor odemkl.
+        $this->actingAs($this->adri)->withSession($this->odemcenyTrezor($this->adri))->get($podepsana)->assertOk();
     }
 
     /** Podepsaný náhled galerie fotku z trezoru nevydá vůbec — trezor náhledy neposílá. */

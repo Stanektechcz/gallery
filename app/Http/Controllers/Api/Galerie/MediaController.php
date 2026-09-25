@@ -15,6 +15,7 @@ use App\Services\Media\MediaFormatService;
 use App\Services\Media\UpravaFotky;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -613,11 +614,10 @@ class MediaController extends Controller
 
     // ——— pomocné ———
 
-    /** Stejný klíč v sezení jako TrezorController a `/files`. */
+    /** Tatáž podmínka jako TrezorController a `/files` — viz `Trezor`. */
     private function trezorOdemceny(Request $request): bool
     {
-        return $request->hasSession()
-            && (int) $request->session()->get('vault_unlocked_until', 0) > now()->timestamp;
+        return Trezor::odemcen($request);
     }
 
     private function najdi(Request $request, string $uuid): MediaItem

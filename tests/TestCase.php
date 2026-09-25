@@ -2,7 +2,9 @@
 
 namespace Tests;
 
+use App\Models\User;
 use App\Support\Cas;
+use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
 
@@ -70,6 +72,22 @@ abstract class TestCase extends BaseTestCase
     protected function ted(): CarbonImmutable
     {
         return Cas::ted();
+    }
+
+    /**
+     * Sezení s trezorem odemčeným pro `$kdo` — do `withSession()`.
+     *
+     * Odemčení patří člověku, ne prohlížeči (`App\Support\Trezor`): samotný
+     * čas v sezení trezor neotevře, musí u něj být i kdo ho odemkl.
+     *
+     * @return array<string, int>
+     */
+    protected function odemcenyTrezor(User $kdo, int $minut = 5): array
+    {
+        return [
+            Trezor::DO => now()->addMinutes($minut)->timestamp,
+            Trezor::KDO => (int) $kdo->id,
+        ];
     }
 
     /**

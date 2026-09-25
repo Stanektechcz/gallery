@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\WebauthnCredential;
 use App\Services\Auth\PotvrzeniZamkem;
 use App\Services\Auth\PristupDoGalerie;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -293,6 +294,10 @@ class WebauthnController extends Controller
 
         // Otisk teď patří novému tokenu; ten předchozí právě zanikl.
         $zaznam->update(['personal_access_token_id' => $klic->accessToken->getKey()]);
+
+        // Stejně jako přihlášení heslem: trezor odemčený předchozím člověkem
+        // v tomhle prohlížeči s novým přihlášením končí — viz `Trezor`.
+        Trezor::zamkni($request);
 
         return response()->json([
             'token' => $klic->plainTextToken,

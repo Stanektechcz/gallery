@@ -251,7 +251,7 @@ class MediaTest extends TestCase
 
         $this->get('/api/media/'.$nahrane->json('id').'/raw')->assertNotFound();
 
-        $odpoved = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+        $odpoved = $this->withSession($this->odemcenyTrezor($this->adri))
             ->get('/api/media/'.$nahrane->json('id').'/raw')
             ->assertOk();
 
