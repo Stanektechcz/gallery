@@ -85,6 +85,26 @@ class KosTest extends TestCase
         $this->assertEqualsCanonicalizing(['IMG_1.jpg', 'pas-a-obcanka.jpg'], array_column($odemceno, 'name'));
     }
 
+    /**
+     * Odznak koše v postranním panelu počítá totéž, co seznam koše ukáže.
+     *
+     * Seznam fotku z trezoru se zamčeným trezorem vynechá, odznak ji počítal:
+     * u Koše stálo „2", otevřel se s jednou — a rozdíl řekl, že v koši leží
+     * něco z trezoru.
+     */
+    public function test_odznak_kose_nepocita_trezor_se_zamcenym_trezorem(): void
+    {
+        $this->fotka(['trashed_at' => now()->subDay()]);
+        $this->fotka(['trashed_at' => now()->subDay(), 'is_hidden' => true], 2);
+
+        $zamceno = $this->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT.trash');
+        $this->assertSame('1', $zamceno);
+
+        $odemceno = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->getJson('/api/data/knihovna')->assertOk()->json('data.NAVCNT.trash');
+        $this->assertSame('2', $odemceno);
+    }
+
     /** Vrácení z koše vrátí položku do knihovny. */
     public function test_vraceni_z_kose_vrati_polozku(): void
     {

@@ -783,6 +783,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->all();
     }
 
+    /** Odemčený trezor v tomhle sezení — stejná podmínka jako v `System`. */
+    private function trezorOtevreny(): bool
+    {
+        return (int) session('vault_unlocked_until', 0) > CarbonImmutable::now()->timestamp;
+    }
+
     /**
      * Strom alb v levém sloupci.
      *
@@ -1212,8 +1218,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'x-lide' => Person::withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)->count(),
                 'x-uklid' => $chybi + $nalezy,
+                // Jako seznam koše (`System::kos`): fotka z trezoru jen s odemčeným
+                // trezorem, jinak by rozdíl mezi odznakem a seznamem prozradil trezor.
                 'trash' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-                    ->where('gallery_space_id', $prostor->id)->whereNotNull('trashed_at')->count(),
+                    ->where('gallery_space_id', $prostor->id)->whereNotNull('trashed_at')
+                    ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
+                    ->count(),
                 'shared' => Tabulky::je('shared_links') ? DB::table('shared_links')
                     ->where('gallery_space_id', $prostor->id)->where('is_active', true)
                     ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
