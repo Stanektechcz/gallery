@@ -134,31 +134,35 @@ class IntegrationConnectionController extends Controller
             'Zadejte adresu, uživatele a heslo aplikace oddělené svislítkem: adresa|uzivatel|heslo');
 
         [$url, $user, $pass] = $parts;
-        abort_unless(str_starts_with($url, 'https://'), 422,
+        abort_unless(str_starts_with(strtolower($url), 'https://'), 422,
             'Adresa musí začínat https:// — přes http by heslo cestovalo otevřeně.');
+        $url = rtrim($url, '/');
 
         $space = $this->space($request);
         abort_unless(app(StorageResolver::class)->mayManage($space, $request->user()->id), 403,
             'Úložiště prostoru může připojit jen vlastník tarifu.');
 
-        $connection = StorageConnection::updateOrCreate(
+        // Nejdřív ověřit, pak uložit. Dřív se údaje přepsaly předem a nepovedený
+        // pokus (překlep v hesle) smazal i dosavadní, funkční připojení. Ověření
+        // také odmítne adresu, která nevede na veřejný server — viz WebDavClient.
+        $overeni = app(WebDavClient::class)->overUdaje($url, $user, $pass);
+        abort_unless($overeni['ok'], 422, 'Připojení se nepodařilo ověřit: '.($overeni['error'] ?? ''));
+
+        StorageConnection::updateOrCreate(
             ['provider' => 'webdav', 'gallery_space_id' => $space->id],
             [
                 'owner_user_id' => $request->user()->id,
-                'account_email' => $user,
+                'account_email' => mb_substr($user, 0, 255),
                 'encrypted_access_token' => Crypt::encryptString(json_encode([
-                    'url' => rtrim($url, '/'), 'user' => $user, 'pass' => $pass,
+                    'url' => $url, 'user' => $user, 'pass' => $pass,
                 ])),
                 'connection_status' => StorageConnection::STATUS_HEALTHY,
+                'last_successful_request_at' => now(),
+                'last_error_at' => null,
+                'last_error_code' => null,
+                'last_error_message' => null,
             ],
         );
-
-        $probe = app(WebDavClient::class)->probe($connection);
-
-        if (! $probe['ok']) {
-            $connection->delete();
-            abort(422, 'Připojení se nepodařilo ověřit: '.$probe['error']);
-        }
 
         return response()->json(['provider' => 'webdav', 'account' => $user], 201);
     }

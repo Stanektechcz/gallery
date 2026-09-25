@@ -2,6 +2,7 @@
 
 namespace App\Services\Recipes;
 
+use App\Support\VerejnaAdresa;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 
@@ -78,25 +79,19 @@ class RecipeImportService
         ];
     }
 
+    /** Samotné posouzení je sdílené s úložištěm WebDAV — viz `VerejnaAdresa`. */
     private function assertPublicHost(string $host): void
     {
         if (filter_var($host, FILTER_VALIDATE_IP)) {
-            if (! $this->isPublicIp($host)) {
+            if (! VerejnaAdresa::jeVerejnaIp($host)) {
                 throw ValidationException::withMessages(['url' => 'Odkazy do lokální nebo neveřejné sítě nelze importovat.']);
             }
 
             return;
         }
-        $records = dns_get_record($host, DNS_A | DNS_AAAA) ?: [];
-        $ips = collect($records)->map(fn (array $record) => $record['ip'] ?? $record['ipv6'] ?? null)->filter()->all();
-        if ($ips === [] || collect($ips)->contains(fn (string $ip) => ! $this->isPublicIp($ip))) {
+        if (! VerejnaAdresa::jeVerejnyHostitel($host)) {
             throw ValidationException::withMessages(['url' => 'Odkaz nevede na ověřitelný veřejný web.']);
         }
-    }
-
-    private function isPublicIp(string $ip): bool
-    {
-        return filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) !== false;
     }
 
     private function firstRecipe(string $html): ?array

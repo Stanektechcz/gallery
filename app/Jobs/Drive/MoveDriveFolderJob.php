@@ -3,7 +3,7 @@
 namespace App\Jobs\Drive;
 
 use App\Models\Album;
-use App\Models\StorageConnection;
+use App\Services\Storage\DriveConnectionResolver;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -40,9 +40,9 @@ class MoveDriveFolderJob implements ShouldQueue
             return;
         }
 
-        $connection = StorageConnection::where('owner_user_id', $album->gallerySpace->owner->id)
-            ->where('connection_status', 'healthy')
-            ->first();
+        // Jen Google Disk dvojice — viz CreateDriveFolderJob.
+        $connection = app(DriveConnectionResolver::class)
+            ->forSpace((int) $album->gallery_space_id, $album->gallerySpace?->owner_id);
 
         if (! $connection) {
             $this->release(300);
@@ -51,7 +51,7 @@ class MoveDriveFolderJob implements ShouldQueue
         }
 
         try {
-            $provider = new GoogleDriveStorageProvider($connection);
+            $provider = app(GoogleDriveStorageProvider::class, ['connection' => $connection]);
             $provider->moveFolder($album->drive_folder_id, $this->newParentDriveFolderId);
             $album->update([
                 'drive_parent_folder_id' => $this->newParentDriveFolderId,

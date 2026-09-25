@@ -3,7 +3,7 @@
 namespace App\Jobs\Drive;
 
 use App\Models\Album;
-use App\Models\StorageConnection;
+use App\Services\Storage\DriveConnectionResolver;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
@@ -44,11 +44,11 @@ class CreateDriveFolderJob implements ShouldBeUnique, ShouldQueue
             return;
         } // Already created
 
-        $owner = $album->gallerySpace->owner;
-
-        $connection = StorageConnection::where('owner_user_id', $owner->id)
-            ->where('connection_status', 'healthy')
-            ->first();
+        // Jen Google Disk dvojice tohoto prostoru. Dřív se bralo první „zdravé"
+        // připojení vlastníka bez ohledu na poskytovatele — token Dropboxu
+        // či OneDrivu tak odcházel do API Googlu a složka nevznikla.
+        $connection = app(DriveConnectionResolver::class)
+            ->forSpace((int) $album->gallery_space_id, $album->gallerySpace?->owner_id);
 
         if (! $connection) {
             Log::warning("No healthy storage connection for album #{$album->id} Drive folder creation");
@@ -57,7 +57,7 @@ class CreateDriveFolderJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $provider = new GoogleDriveStorageProvider($connection);
+        $provider = app(GoogleDriveStorageProvider::class, ['connection' => $connection]);
 
         try {
             $parentFolderId = $album->parent?->drive_folder_id ?? $connection->root_folder_id;

@@ -99,6 +99,12 @@ class StorageResolver
      * The person who holds the plan. Everybody in the space stores their photographs in
      * whatever that account provides, so moving it is not a decision to leave with whoever
      * happens to open the screen.
+     *
+     * Vlastník podle `gallery_spaces.owner_id` (i bez řádku členství), nebo člen
+     * s rolí `owner` v členství — spoluvlastník dvojice. Dřív se `owner_id`
+     * přehlížel a bez člena s rolí `owner` rozhodovalo `users.role = owner`,
+     * které má každý zaregistrovaný účet — i host galerie. Editor ani host
+     * úložiště nespravují.
      */
     public function mayManage(GallerySpace $space, ?int $userId): bool
     {
@@ -106,9 +112,13 @@ class StorageResolver
             return false;
         }
 
-        $owner = $space->members()->wherePivot('role', 'owner')->first()
-            ?? $space->members()->where('users.role', 'owner')->first();
+        if ((int) $space->owner_id === $userId) {
+            return true;
+        }
 
-        return $owner?->id === $userId;
+        return $space->members()
+            ->where('users.id', $userId)
+            ->wherePivot('role', 'owner')
+            ->exists();
     }
 }

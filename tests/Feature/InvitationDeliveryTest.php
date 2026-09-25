@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -16,6 +17,9 @@ class InvitationDeliveryTest extends TestCase
     {
         Notification::fake();
         $admin = User::factory()->create(['role' => 'admin', 'is_active' => true]);
+        // Zvát smí jen správce vlastní galerie — účet bez galerie ne (viz RequireAdminRole).
+        $space = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $admin->id, 'is_default' => true]);
+        $space->members()->syncWithoutDetaching([$admin->id => ['role' => 'owner']]);
 
         $this->actingAs($admin)->post('/admin/users/invite', [
             'name' => 'Partnerka', 'email' => 'partnerka@example.test', 'role' => 'partner',

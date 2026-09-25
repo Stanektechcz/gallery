@@ -59,7 +59,7 @@ Immich není použit v žádné podobě (backend, frontend, API, knihovna, konte
 2. Browser → PUT /api/v1/uploads/{uuid}/chunks/{n} (chunk-by-chunk)
 3. IndexedDB — ukládá stav fronty (přežije refresh)
 4. Browser → POST /api/v1/uploads/{uuid}/complete
-5. AssembleUploadChunksJob → sestavení + validace
+5. UploadController::complete → sestavení + validace (hned v požadavku)
 6. CalculateMediaHashesJob → SHA-256, MD5
 7. ExtractMediaMetadataJob → EXIF (ExifTool)
 8. GenerateImageVariantsJob → WebP varianty (Intervention Image)

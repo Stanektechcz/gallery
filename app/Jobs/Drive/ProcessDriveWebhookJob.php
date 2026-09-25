@@ -42,23 +42,16 @@ class ProcessDriveWebhookJob implements ShouldQueue
         }
 
         try {
-            $provider = new GoogleDriveStorageProvider($connection);
+            $provider = app(GoogleDriveStorageProvider::class, ['connection' => $connection]);
             $pageToken = $channel->page_token ?? $provider->getStartPageToken();
 
             $result = $provider->listChanges($pageToken);
 
+            // Každá změna zvlášť. Dřív jedna nepřijatá (název přes 255 znaků) shodila
+            // celou dávku, značka stránky se neposunula a každé další upozornění
+            // narazilo na tutéž změnu znovu — Disk se přestal synchronizovat úplně.
             foreach ($result['changes'] as $change) {
-                DriveChange::create([
-                    'storage_connection_id' => $this->storageConnectionId,
-                    'change_type' => $this->state,
-                    'file_id' => $change['file_id'],
-                    'file_name' => $change['file']['name'] ?? null,
-                    'removed' => $change['removed'] ?? false,
-                    'trashed' => $change['file']['trashed'] ?? false,
-                    'change_payload' => $change,
-                    'processed_status' => 'pending',
-                    'change_time' => $change['time'] ?? null,
-                ]);
+                $this->ulozZmenu($change);
             }
 
             // Update page token
@@ -75,5 +68,43 @@ class ProcessDriveWebhookJob implements ShouldQueue
                 'error' => $e->getMessage(),
             ]);
         }
+    }
+
+    /**
+     * Uloží jednu změnu; co databáze nepřijme, zaznamená do logu a přeskočí.
+     *
+     * Řetězce se zkracují na délku sloupců — Disk dovolí delší názvy, než
+     * `drive_changes` unese, a MySQL by je odmítl (SQLite v testech ne).
+     *
+     * @param  array<string, mixed>  $change
+     */
+    private function ulozZmenu(array $change): void
+    {
+        $soubor = is_array($change['file'] ?? null) ? $change['file'] : [];
+
+        try {
+            DriveChange::create([
+                'storage_connection_id' => $this->storageConnectionId,
+                'change_type' => mb_substr($this->state, 0, 30),
+                'file_id' => $this->zkrat($change['file_id'] ?? null),
+                'file_name' => $this->zkrat($soubor['name'] ?? null),
+                'removed' => (bool) ($change['removed'] ?? false),
+                'trashed' => (bool) ($soubor['trashed'] ?? false),
+                'change_payload' => $change,
+                'processed_status' => 'pending',
+                'change_time' => $change['time'] ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            Log::warning('Drive webhook: změnu se nepodařilo uložit, přeskočena', [
+                'connection' => $this->storageConnectionId,
+                'file_id' => $this->zkrat($change['file_id'] ?? null),
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function zkrat(mixed $hodnota): ?string
+    {
+        return is_scalar($hodnota) ? mb_substr((string) $hodnota, 0, 255) : null;
     }
 }
