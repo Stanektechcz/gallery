@@ -54,8 +54,15 @@ class SendPlanningFollowupsCommand extends Command
             DB::table('event_tasks')->where('id', $task->id)->update(['last_reminded_at' => now(), 'updated_at' => now()]);
             $sent++;
         }
-        $gifts = DB::table('gift_ideas')->whereIn('gallery_space_id', $spaceIds)->whereNotNull('due_date')->whereNotIn('status', ['purchased', 'archived'])->where(fn ($q) => $q->whereNull('last_reminded_at')->orWhere('last_reminded_at', '<', now()->subDay()))->limit(max(0, $limit - $sent))->get();
+        // `cursor()`, ne `limit($limit - $sent)->get()`: jestli je dárek dnes
+        // due, se pozná až tady podle jeho vlastních `reminder_days` — pevný
+        // SQL limit před tím ořízl frontu podle pořadí řádků, ne podle toho,
+        // co je due, a dárek za hranicí limitu se nepřipomněl nikdy.
+        $gifts = DB::table('gift_ideas')->whereIn('gallery_space_id', $spaceIds)->whereNotNull('due_date')->whereNotIn('status', ['purchased', 'archived'])->where(fn ($q) => $q->whereNull('last_reminded_at')->orWhere('last_reminded_at', '<', now()->subDay()))->orderBy('id')->cursor();
         foreach ($gifts as $gift) {
+            if ($sent >= $limit) {
+                break;
+            }
             $days = array_map('intval', json_decode($gift->reminder_days ?: '[]', true) ?: []);
             $remaining = (int) Cas::dnes()->diffInDays(Carbon::parse($gift->due_date)->startOfDay(), false);
             if (! in_array($remaining, $days, true)) {

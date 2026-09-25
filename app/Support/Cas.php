@@ -69,4 +69,18 @@ final class Cas
     {
         return CarbonImmutable::now(self::pasmo());
     }
+
+    /**
+     * Půlnoc dvojice jako okamžik v UTC — pro `WHERE created_at >= …` a další
+     * porovnání s okamžiky, které databáze ukládá v UTC.
+     *
+     * `dnes()` dá jen datum (jako půlnoc UTC, kvůli řazení se sloupci typu
+     * DATE); tahle metoda dá skutečný okamžik, kdy dnešek v Praze začal — v
+     * létě 22:00 UTC předchozího dne, v zimě 23:00. Bez ní zůstávaly mimo
+     * „dnešek" okamžiky z prvních dvou hodin po půlnoci v Praze.
+     */
+    public static function pulnocUtc(): CarbonImmutable
+    {
+        return self::ted()->startOfDay()->setTimezone('UTC');
+    }
 }

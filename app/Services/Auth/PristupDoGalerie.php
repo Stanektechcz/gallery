@@ -2,7 +2,9 @@
 
 namespace App\Services\Auth;
 
+use App\Models\GallerySpace;
 use App\Models\User;
+use Illuminate\Support\Collection;
 
 /**
  * Smí tenhle účet do aplikace dvojice?
@@ -48,5 +50,26 @@ class PristupDoGalerie
         }
 
         return null;
+    }
+
+    /**
+     * Členové prostoru, kteří tvoří samotnou dvojici — bez hostů a bez účtů,
+     * kterým byl přístup odebraný.
+     *
+     * Sdílené na jednom místě, protože upozornění dvojice (výzva Zároveň,
+     * vzpomínky, výročí) tuhle podmínku potřebují každé zvlášť a lišila se
+     * příkaz od příkazu — host nebo odebraný účet tak dostával upozornění na
+     * obsah, ke kterému nesmí.
+     *
+     * @return Collection<int, User>
+     */
+    public function dvojice(GallerySpace $prostor): Collection
+    {
+        return $prostor->members->filter(function (User $clen) use ($prostor) {
+            $dvojice = (int) $prostor->owner_id === (int) $clen->id
+                || in_array((string) $clen->pivot->role, self::ROLE_DVOJICE, true);
+
+            return $dvojice && $this->proc($clen) === null;
+        })->values();
     }
 }

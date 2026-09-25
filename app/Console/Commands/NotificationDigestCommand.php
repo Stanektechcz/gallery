@@ -42,7 +42,12 @@ class NotificationDigestCommand extends Command
             return self::SUCCESS;
         }
 
-        $od = Cas::dnes();
+        // `Cas::dnes()` dá datum jako půlnoc UTC (kvůli řazení s DATE sloupci);
+        // pro porovnání s `created_at` (skutečný okamžik v UTC) je potřeba
+        // opravdová půlnoc Prahy — jinak zůstávalo mimo souhrn všechno mezi
+        // půlnocí a druhou ráno pražského času.
+        $od = Cas::pulnocUtc();
+        $denPraha = Cas::dnes();
         $posláno = 0;
 
         foreach (User::all() as $user) {
@@ -64,7 +69,7 @@ class NotificationDigestCommand extends Command
                 continue;
             }
 
-            $klic = "digest:sent:{$user->id}:".$od->toDateString();
+            $klic = "digest:sent:{$user->id}:".$denPraha->toDateString();
             if (! Cache::add($klic, true, now()->addHours(20))) {
                 continue;
             }

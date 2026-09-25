@@ -7,6 +7,8 @@ use App\Models\DailyMomentEntry;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
+use App\Support\Cas;
 use Illuminate\Support\Carbon;
 
 /**
@@ -25,6 +27,8 @@ use Illuminate\Support\Carbon;
  */
 class DailyMomentService
 {
+    public function __construct(private readonly PristupDoGalerie $pristup) {}
+
     /** Never before breakfast, never after bed. */
     private const EARLIEST_HOUR = 9;
 
@@ -42,10 +46,15 @@ class DailyMomentService
     public function todayFor(GallerySpace $space, ?Carbon $now = null): DailyMoment
     {
         $now ??= Carbon::now();
-        $date = $now->copy()->startOfDay();
+
+        // Den dvojice se počítá v Praze, ne v UTC — jinak vychází "dnešek" a
+        // celé okno 9-21 h o dvě hodiny jinde (v létě 11-23 h) a mezi půlnocí
+        // a druhou ráno pražského času patří ještě ke včerejšku.
+        $prahaNow = $now->copy()->setTimezone(Cas::pasmo());
+        $date = $prahaNow->copy()->startOfDay();
 
         $existing = DailyMoment::where('gallery_space_id', $space->id)
-            ->whereDate('moment_date', $date)
+            ->whereDate('moment_date', $date->toDateString())
             ->first();
 
         if ($existing) {
@@ -54,8 +63,8 @@ class DailyMomentService
 
         return DailyMoment::create([
             'gallery_space_id' => $space->id,
-            'moment_date' => $date,
-            'notify_at' => $this->drawTime($date, $now),
+            'moment_date' => $date->toDateString(),
+            'notify_at' => $this->drawTime($date, $prahaNow),
             'window_minutes' => self::WINDOW_MINUTES,
         ]);
     }
@@ -66,6 +75,10 @@ class DailyMomentService
      * A space whose first read happens at eight in the evening cannot be given a
      * quarter past ten in the morning — the prompt would arrive already expired. In
      * that case it is drawn from what is left of the day instead.
+     *
+     * `$date` and `$now` are both in the couple's timezone (Prague); the result is
+     * converted to UTC, which is what the database column and the rest of the app
+     * expect an instant to be stored as.
      */
     private function drawTime(Carbon $date, Carbon $now): Carbon
     {
@@ -79,7 +92,7 @@ class DailyMomentService
         if ($earliest->greaterThanOrEqualTo($latest)) {
             // Nothing sensible left today: a few minutes from now, so the day is not
             // simply skipped.
-            return $now->copy()->addMinutes(5);
+            return $now->copy()->addMinutes(5)->setTimezone('UTC');
         }
 
         // Floored to whole minutes on purpose: Carbon hands back a float, and the moment
@@ -87,7 +100,7 @@ class DailyMomentService
         // now — that float has a fraction random_int must not be given.
         $span = (int) floor($earliest->diffInMinutes($latest));
 
-        return $earliest->copy()->addMinutes(random_int(0, max(0, $span)));
+        return $earliest->copy()->addMinutes(random_int(0, max(0, $span)))->setTimezone('UTC');
     }
 
     /**
@@ -128,7 +141,8 @@ class DailyMomentService
             'waiting_on_you' => $mine === null && $others->isNotEmpty(),
             'others' => $mine ? $others->map(fn ($entry) => $this->entryPayload($entry))->values()->all() : [],
             'others_count' => $others->count(),
-            'members_count' => $space->members()->count(),
+            // Jen dvojice — host by v tomhle počtu vypadal jako další partner.
+            'members_count' => $this->pristup->dvojice($space)->count(),
             'streak' => $this->streak($space, $user, $now),
         ];
     }

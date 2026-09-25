@@ -74,6 +74,9 @@ class MemoryGeneratorService
             $media = MediaItem::withoutGlobalScopes()
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('deleted_at')
+                // Trezor a koš nejsou „vzpomínka" — schované nebo smazané fotky sem
+                // nepatří, ani do karty, ani do upozornění, ani jejich uuid klientovi.
+                ->whereNull('trashed_at')->where('is_hidden', false)
                 ->whereDate('taken_at', $then->toDateString())
                 ->orderByDesc('is_favorite')->orderBy('id')
                 ->limit(12)->get();
@@ -120,7 +123,10 @@ class MemoryGeneratorService
         $events = CalendarEvent::withoutGlobalScopes()
             ->where('gallery_space_id', $space->id)
             ->whereNull('deleted_at')
-            ->whereRaw('strftime(\'%m-%d\', starts_at) = ?', [$day->format('m-d')])
+            // whereMonth/whereDay fungují na MySQL i SQLite; `strftime()` je jen SQLite
+            // a na produkční MySQL by tenhle dotaz padal každé ráno pro každý prostor.
+            ->whereMonth('starts_at', $day->month)
+            ->whereDay('starts_at', $day->day)
             ->whereDate('starts_at', '<', $day->toDateString())
             ->orderByDesc('starts_at')->limit(5)->get();
 
@@ -134,6 +140,7 @@ class MemoryGeneratorService
             $media = MediaItem::withoutGlobalScopes()
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('deleted_at')
+                ->whereNull('trashed_at')->where('is_hidden', false)
                 ->whereDate('taken_at', $event->starts_at->toDateString())
                 ->limit(8)->get();
 
@@ -178,11 +185,14 @@ class MemoryGeneratorService
             $albums = Album::withoutGlobalScopes()
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('deleted_at')
-                ->whereHas('media', fn ($query) => $query->whereDate('taken_at', $then->toDateString()))
+                ->whereHas('media', fn ($query) => $query->whereDate('taken_at', $then->toDateString())
+                    ->whereNull('trashed_at')->where('is_hidden', false))
                 ->limit(3)->get();
 
             foreach ($albums as $album) {
-                $media = $album->media()->whereDate('taken_at', $then->toDateString())->limit(8)->get();
+                $media = $album->media()->whereDate('taken_at', $then->toDateString())
+                    ->whereNull('trashed_at')->where('is_hidden', false)
+                    ->limit(8)->get();
                 if ($media->isEmpty()) {
                     continue;
                 }

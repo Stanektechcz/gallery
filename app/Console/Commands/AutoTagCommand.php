@@ -34,69 +34,93 @@ class AutoTagCommand extends Command
     public function handle(): int
     {
         $zapsat = (bool) $this->option('apply');
+        $limit = (int) $this->option('limit');
 
-        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+        $pridano = 0;
+        // Kolik položek dostalo aspoň jeden nový štítek — `--limit` počítá
+        // tohle, ne kolik řádků se prohlédlo.
+        $zpracovano = 0;
+
+        /*
+         * `chunkById`, ne `limit($limit)->get()` bez řazení.
+         *
+         * Pevný `limit()` bez řazení a bez podmínky „už zpracováno" ořízl
+         * frontu na prvních (v libovolném pořadí) 2000 položek — a protože se
+         * žádná neoznačovala jako hotová, každý běh sáhl na stejnou frontu.
+         * Cokoli za hranicí limitu se tak štítků nedočkalo nikdy. `chunkById`
+         * prochází podle `id` bez mezní SQL `LIMIT` a limit se uplatní až na
+         * skutečně doplněné položky.
+         */
+        MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereNull('trashed_at')
+            // Trezor není vzpomínka ani veřejný archiv — schovaná fotka nemá
+            // dostávat štítky, které pak visí i na jejím uuid.
+            ->where('is_hidden', false)
             ->when($this->option('space'), fn ($q, $id) => $q->where('gallery_space_id', $id))
             ->whereNotNull('taken_at')
             ->with('tags:id,name')
-            ->limit((int) $this->option('limit'))
-            ->get();
+            ->chunkById(200, function ($media) use ($zapsat, $limit, &$pridano, &$zpracovano) {
+                foreach ($media as $item) {
+                    if ($zpracovano >= $limit) {
+                        return false;
+                    }
 
-        $pridano = 0;
+                    $navrhy = $this->tagsFor($item);
+                    if (! $navrhy) {
+                        continue;
+                    }
 
-        foreach ($media as $item) {
-            $navrhy = $this->tagsFor($item);
-            if (! $navrhy) {
-                continue;
-            }
+                    // Porovnává se slug, ne jméno: „jídlo" a „jidlo" jsou v této tabulce
+                    // z principu tentýž štítek, takže podle jmen by se navrhoval znovu
+                    // a hlásil by se jako přidaný, i když by se nic nepřidalo.
+                    $uzMa = $item->tags->pluck('name')->map(fn ($n) => Str::slug($n) ?: mb_strtolower($n))->all();
+                    $nove = array_values(array_filter($navrhy, fn ($t) => ! in_array(Str::slug($t) ?: mb_strtolower($t), $uzMa, true)));
 
-            // Porovnává se slug, ne jméno: „jídlo" a „jidlo" jsou v této tabulce
-            // z principu tentýž štítek, takže podle jmen by se navrhoval znovu
-            // a hlásil by se jako přidaný, i když by se nic nepřidalo.
-            $uzMa = $item->tags->pluck('name')->map(fn ($n) => Str::slug($n) ?: mb_strtolower($n))->all();
-            $nove = array_values(array_filter($navrhy, fn ($t) => ! in_array(Str::slug($t) ?: mb_strtolower($t), $uzMa, true)));
+                    if (! $nove) {
+                        continue;
+                    }
 
-            if (! $nove) {
-                continue;
-            }
+                    $zpracovano++;
 
-            $this->line('  '.mb_strimwidth($item->original_filename ?? ('#'.$item->id), 0, 32, '…')
-                .'  +'.implode(', +', $nove));
+                    $this->line('  '.mb_strimwidth($item->original_filename ?? ('#'.$item->id), 0, 32, '…')
+                        .'  +'.implode(', +', $nove));
 
-            if ($zapsat) {
-                foreach ($nove as $jmeno) {
-                    // Slug si model nedoplňuje sám a sloupec je povinný, takže se počítá
-                    // tady — jinak první nový štítek spadne na omezení databáze.
-                    $slug = Str::slug($jmeno) ?: mb_strtolower($jmeno);
+                    if ($zapsat) {
+                        foreach ($nove as $jmeno) {
+                            // Slug si model nedoplňuje sám a sloupec je povinný, takže se počítá
+                            // tady — jinak první nový štítek spadne na omezení databáze.
+                            $slug = Str::slug($jmeno) ?: mb_strtolower($jmeno);
 
-                    // Hledá se podle slugu, ne podle jména. `tags` má jednoznačný index
-                    // na `(gallery_space_id, slug)` a „jídlo" se slugem shoduje s „jidlo";
-                    // hledání podle jména by existující štítek nenašlo, pokusilo by se
-                    // založit druhý se stejným slugem a celý příkaz by spadl na omezení
-                    // databáze uprostřed dávky. Zůstane jméno, které dorazilo první.
-                    $tag = Tag::firstOrCreate(
-                        ['gallery_space_id' => $item->gallery_space_id, 'slug' => $slug],
-                        [
-                            'name' => $jmeno,
-                            'depth' => 0,
-                            'created_by' => $item->uploaded_by ?? $item->owner_user_id,
-                        ],
-                    );
+                            // Hledá se podle slugu, ne podle jména. `tags` má jednoznačný index
+                            // na `(gallery_space_id, slug)` a „jídlo" se slugem shoduje s „jidlo";
+                            // hledání podle jména by existující štítek nenašlo, pokusilo by se
+                            // založit druhý se stejným slugem a celý příkaz by spadl na omezení
+                            // databáze uprostřed dávky. Zůstane jméno, které dorazilo první.
+                            $tag = Tag::firstOrCreate(
+                                ['gallery_space_id' => $item->gallery_space_id, 'slug' => $slug],
+                                [
+                                    'name' => $jmeno,
+                                    'depth' => 0,
+                                    'created_by' => $item->uploaded_by ?? $item->owner_user_id,
+                                ],
+                            );
 
-                    // tagged_by zůstává null: štítek přidal systém, ne člověk, a vydávat
-                    // ho za ruční práci by zmátlo každého, kdo se ptá, kdo to tam dal.
-                    DB::table('media_tag')->insertOrIgnore([
-                        'media_item_id' => $item->id,
-                        'tag_id' => $tag->id,
-                        'tagged_by' => null,
-                        'created_at' => now(),
-                    ]);
+                            // tagged_by zůstává null: štítek přidal systém, ne člověk, a vydávat
+                            // ho za ruční práci by zmátlo každého, kdo se ptá, kdo to tam dal.
+                            DB::table('media_tag')->insertOrIgnore([
+                                'media_item_id' => $item->id,
+                                'tag_id' => $tag->id,
+                                'tagged_by' => null,
+                                'created_at' => now(),
+                            ]);
+                        }
+                    }
+
+                    $pridano += count($nove);
                 }
-            }
 
-            $pridano += count($nove);
-        }
+                return true;
+            });
 
         $this->newLine();
         $this->info($pridano === 0

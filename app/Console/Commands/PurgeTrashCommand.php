@@ -47,7 +47,16 @@ class PurgeTrashCommand extends Command
         $smazano = 0;
         $bajtu = 0;
 
-        $fronta->with('variants')->each(function (MediaItem $media) use ($nasucho, &$smazano, &$bajtu) {
+        /*
+         * `lazyById`, ne `each()`.
+         *
+         * `each()` stránkuje podle odsazení (offset): jenže tenhle callback
+         * řádky mažou, takže druhá stránka začíná tam, kde by bez mazání
+         * začínala třetí — polovina fronty se tak přeskočila. `lazyById`
+         * stránkuje podle primárního klíče větších řádků, který mazání
+         * neposouvá.
+         */
+        $fronta->with('variants')->lazyById()->each(function (MediaItem $media) use ($nasucho, &$smazano, &$bajtu) {
             if ($nasucho) {
                 $this->line('  '.$media->uuid.'  '.$media->original_filename);
                 $smazano++;

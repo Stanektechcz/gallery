@@ -434,4 +434,97 @@ class PlanningExpansionTest extends TestCase
         $this->assertDatabaseHas('gift_ideas', ['id' => $gift['id']]);
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
     }
+
+    /**
+     * Připomínka výročí chodí jen dvojici, ne hostům.
+     *
+     * `gallery_space_user` se dřív četlo přímo (`pluck('user_id')`), takže
+     * host (role `viewer`) dostal upozornění na sdílené výročí páru, ke
+     * kterému nemá vidět nic než odkazy, co mu někdo pošle.
+     */
+    public function test_relationship_milestone_reminder_vynechava_hosta(): void
+    {
+        $host = User::factory()->create(['role' => 'guest']);
+        $this->space->members()->attach($host->id, ['role' => 'viewer', 'joined_at' => now()]);
+
+        $this->postJson('/api/v1/relationship-milestones', [
+            'gallery_space_id' => $this->space->id, 'title' => 'Naše výročí',
+            'occurred_on' => $this->dnes()->subYears(2)->toDateString(),
+            'visibility' => 'shared', 'remind_annually' => true,
+        ])->assertCreated();
+
+        $this->artisan(SendRelationshipMilestoneRemindersCommand::class)->assertSuccessful();
+
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->partner->id]);
+        $this->assertDatabaseMissing('notifications', ['notifiable_id' => $host->id]);
+        $this->assertSame(2, DB::table('notifications')->count());
+    }
+
+    /**
+     * `--limit` omezuje odeslané připomínky, ne prohlédnuté řádky.
+     *
+     * Fronta se řadila podle `occurred_on` a ořízla `limit()` už v SQL, dřív
+     * než se u řádku vůbec spočítalo, jestli je dnes due. Staré výročí, které
+     * není due nikdy (jeho výroční den nesedí na žádný z `reminder_days`),
+     * tak s `--limit=1` navždy zabíralo jediné místo a novější výročí, které
+     * due dnes je, se nepřipomnělo nikdy.
+     */
+    public function test_relationship_milestone_limit_pocita_odeslane_ne_prohlednute(): void
+    {
+        // Nikdy due: výroční den je +15 dní od dneška, což není v [7, 1, 0].
+        DB::table('relationship_milestones')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'title' => 'Stará poznámka', 'kind' => 'milestone', 'occurred_on' => $this->dnes()->subYears(10)->addDays(15)->toDateString(),
+            'visibility' => 'shared', 'remind_annually' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+        // Due dnes (výročí přesně dnes, o rok mladší datum, takže řazením podle
+        // `occurred_on` vzestupně sedí až za tou starou poznámkou).
+        DB::table('relationship_milestones')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'title' => 'Naše výročí', 'kind' => 'milestone', 'occurred_on' => $this->dnes()->subYears(1)->toDateString(),
+            'visibility' => 'shared', 'remind_annually' => true, 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->artisan(SendRelationshipMilestoneRemindersCommand::class, ['--limit' => 1])->assertSuccessful();
+
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $this->owner->id]);
+        $this->assertDatabaseHas('relationship_milestones', ['title' => 'Naše výročí', 'last_reminded_on' => $this->dnes()->toDateString()]);
+        $this->assertDatabaseHas('relationship_milestones', ['title' => 'Stará poznámka', 'last_reminded_on' => null]);
+    }
+
+    /**
+     * `--limit` u dárků taky počítá odeslané připomínky, ne prohlédnuté řádky.
+     *
+     * Stejná past jako u výročí: `limit($limit - $sent)` ořízl frontu dřív,
+     * než se u dárku spočítalo, kolik dní zbývá do termínu. Dárek, který
+     * nikdy není due (jeho `reminder_days` neobsahuje žádný možný zbytek),
+     * s nízkým limitem navždy zabíral místo dárku, který due je.
+     */
+    public function test_gift_reminder_limit_pocita_odeslane_ne_prohlednute(): void
+    {
+        // Nejbližší termín, ale nikdy due (prázdné reminder_days) — má nejnižší
+        // `due_date` i `id`, takže by v obou možných řazeních obsadil jediné
+        // místo pod starým `limit($limit - $sent)`.
+        DB::table('gift_ideas')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'title' => 'Nikdy due', 'due_date' => $this->dnes()->toDateString(),
+            'reminder_days' => json_encode([]), 'status' => 'idea',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        // Termín o týden později, ale zrovna dnes je z jeho reminder_days due.
+        DB::table('gift_ideas')->insert([
+            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id,
+            'title' => 'Due dnes', 'due_date' => $this->dnes()->addDays(7)->toDateString(),
+            'reminder_days' => json_encode([7]), 'status' => 'idea',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->artisan(SendPlanningFollowupsCommand::class, ['--limit' => 1])->assertSuccessful();
+
+        $dueDnes = DB::table('gift_ideas')->where('title', 'Due dnes')->first();
+        $this->assertNotNull($dueDnes->last_reminded_at, 'Dárek due dnes se měl připomenout i s limitem 1.');
+        $nikdyDue = DB::table('gift_ideas')->where('title', 'Nikdy due')->first();
+        $this->assertNull($nikdyDue->last_reminded_at);
+    }
 }

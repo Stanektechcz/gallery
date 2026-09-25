@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\GallerySpace;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\AutomationRegistryService;
 use App\Support\Cas;
 use Carbon\Carbon;
@@ -17,10 +18,11 @@ class SendRelationshipMilestoneRemindersCommand extends Command
 
     protected $description = 'Send annual milestone and birthday reminders to the appropriate partner(s).';
 
-    public function handle(AutomationRegistryService $automations): int
+    public function handle(AutomationRegistryService $automations, PristupDoGalerie $pristup): int
     {
         $today = Carbon::instance(Cas::dnes());
         $sent = 0;
+        $limit = max(1, (int) $this->option('limit'));
         $spaces = GallerySpace::query()->get()->keyBy('id');
         $spaceIds = $spaces->filter(fn (GallerySpace $space) => $automations->enabled($space, AutomationRegistryService::RELATIONSHIP_MILESTONES))->keys()->all();
         if (! $spaceIds) {
@@ -30,12 +32,30 @@ class SendRelationshipMilestoneRemindersCommand extends Command
         }
         $spaces->whereIn('id', $spaceIds)->each(fn (GallerySpace $space) => $automations->markRan($space, AutomationRegistryService::RELATIONSHIP_MILESTONES));
 
+        /*
+         * `cursor()`, ne `limit($limit)->get()`.
+         *
+         * Podmínka „je dnes zrovna výročí" se počítá až tady v PHP (dny do
+         * dalšího výročí, vlastní `reminder_days` prostoru) — do SQL nejde
+         * přenést. Pevný `limit()` před tímhle výpočtem by ale ořízl frontu
+         * podle `occurred_on`, ne podle toho, co je dnes due: staré záznamy,
+         * které nejsou due nikdy tento den, by první stovku navždy
+         * zabíraly a novější výročí by se nikdy nepřipomnělo. `--limit` teď
+         * omezuje počet skutečně odeslaných připomínek, ne počet řádků,
+         * které se prohlídnou.
+         */
         $milestones = DB::table('relationship_milestones')->whereIn('gallery_space_id', $spaceIds)
             ->where('remind_annually', true)
             ->where(fn ($query) => $query->whereNull('last_reminded_on')->orWhere('last_reminded_on', '!=', $today->toDateString()))
-            ->orderBy('occurred_on')->limit((int) $this->option('limit'))->get();
+            ->orderBy('occurred_on')->cursor();
+
+        $pripomenuto = 0;
 
         foreach ($milestones as $milestone) {
+            if ($pripomenuto >= $limit) {
+                break;
+            }
+
             $next = Carbon::parse($milestone->occurred_on)->year($today->year)->startOfDay();
             if ($next->lt($today)) {
                 $next->addYear();
@@ -50,9 +70,12 @@ class SendRelationshipMilestoneRemindersCommand extends Command
                 continue;
             }
 
+            $pripomenuto++;
+
+            // Jen dvojice — host a odebraný účet o soukromém výročí páru nemá vědět.
             $recipientIds = $milestone->visibility === 'private'
                 ? [$milestone->created_by]
-                : DB::table('gallery_space_user')->where('gallery_space_id', $milestone->gallery_space_id)->pluck('user_id')->all();
+                : $pristup->dvojice($spaces->get($milestone->gallery_space_id))->pluck('id')->all();
             $when = $days === 0 ? 'dnes' : ($days === 1 ? 'zítra' : "za {$days} dní");
             foreach (array_unique($recipientIds) as $recipientId) {
                 if ($user = User::find($recipientId)) {

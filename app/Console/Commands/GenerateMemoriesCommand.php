@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\GallerySpace;
 use App\Models\GeneratedMemory;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Memories\MemoryGeneratorService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
@@ -29,7 +30,7 @@ class GenerateMemoriesCommand extends Command
 
     protected $description = 'Vytvoří vzpomínky pro dnešek a zítřek a upozorní na tu nejsilnější';
 
-    public function handle(MemoryGeneratorService $generator): int
+    public function handle(MemoryGeneratorService $generator, PristupDoGalerie $pristup): int
     {
         if (! Schema::hasTable('generated_memories')) {
             $this->error('Chybí tabulka generated_memories. Spusťte migrace.');
@@ -51,7 +52,7 @@ class GenerateMemoriesCommand extends Command
             }
 
             if (! $this->option('no-notify')) {
-                $notified += $this->notify($space, $day);
+                $notified += $this->notify($space, $day, $pristup);
             }
         }
 
@@ -61,7 +62,7 @@ class GenerateMemoriesCommand extends Command
     }
 
     /** One notification per space per day, about the card most worth opening. */
-    private function notify(GallerySpace $space, Carbon $day): int
+    private function notify(GallerySpace $space, Carbon $day, PristupDoGalerie $pristup): int
     {
         $best = GeneratedMemory::where('gallery_space_id', $space->id)
             ->whereDate('occurs_on', $day->toDateString())
@@ -74,7 +75,8 @@ class GenerateMemoriesCommand extends Command
             return 0;
         }
 
-        $members = $space->members()->get();
+        // Jen dvojice — host a odebraný účet o cizích vzpomínkách nemá vědět.
+        $members = $pristup->dvojice($space);
         if ($members->isEmpty()) {
             return 0;
         }

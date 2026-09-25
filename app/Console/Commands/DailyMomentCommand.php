@@ -5,7 +5,9 @@ namespace App\Console\Commands;
 use App\Models\DailyMoment;
 use App\Models\GallerySpace;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Moments\DailyMomentService;
+use App\Support\Cas;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -28,9 +30,11 @@ class DailyMomentCommand extends Command
 
     protected $description = 'Rozešle dnešní výzvu Zároveň, jakmile nastane její čas.';
 
-    public function handle(DailyMomentService $moments): int
+    public function handle(DailyMomentService $moments, PristupDoGalerie $pristup): int
     {
-        $now = Carbon::now();
+        // Den a okno si z tohohle okamžiku počítá `DailyMomentService` sám v
+        // pásmu Praha; tady jde jen o to nebrat holé UTC.
+        $now = Carbon::instance(Cas::ted());
 
         $spaces = GallerySpace::query()
             ->when($this->option('space'), fn ($query, $id) => $query->whereKey($id))
@@ -58,7 +62,9 @@ class DailyMomentCommand extends Command
                 continue;
             }
 
-            foreach ($space->members as $member) {
+            // Jen dvojice — host vidí jen sdílené odkazy a odebranému účtu se
+            // o obsahu prostoru nic neposílá (viz `PristupDoGalerie::dvojice()`).
+            foreach ($pristup->dvojice($space) as $member) {
                 $member->notify(new GalleryNotification(
                     // Named to the "area.action" convention the rest of the app uses, which
                     // is also what files it under Galerie a vzpomínky rather than Ostatní.

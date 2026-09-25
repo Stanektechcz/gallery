@@ -90,6 +90,7 @@ class CasovaPasmaPrikazuTest extends TestCase
         $soubory = collect([
             app_path('Services/Obsah'),
             app_path('Services/Provoz'),
+            app_path('Services/Moments'),
             app_path('Http/Controllers/Api/Galerie'),
             app_path('Models'),
         ])->flatMap(fn (string $slozka) => File::allFiles($slozka))
@@ -105,6 +106,42 @@ class CasovaPasmaPrikazuTest extends TestCase
 
         $this->assertSame([], $prehresky,
             "Den, týden, měsíc a rok dvojice se berou přes `App\\Support\\Cas`:\n".implode("\n", $prehresky));
+    }
+
+    /**
+     * `strftime()` je funkce SQLite — na MySQL (produkce) spadne pokaždé.
+     *
+     * `Services/Obsah/Knihovna.php` z toho stejného důvodu počítá rok v PHP,
+     * ne v SQL, a `Http/Controllers/Api/*Controller.php` na to větví podle
+     * `getDriverName()`. Kontrola proto povolí jen řádek, který zmiňuje
+     * SQLite (větvení nebo komentář k němu) vedle `strftime(` — jinde jde
+     * o dotaz, který na MySQL vždy vyhodí chybu.
+     */
+    public function test_strftime_je_jen_v_radcich_ktere_vetvi_podle_driveru(): void
+    {
+        $prehresky = [];
+
+        foreach (File::allFiles(app_path()) as $soubor) {
+            $radky = preg_split('/\R/', (string) file_get_contents($soubor->getPathname()));
+
+            foreach ($radky as $i => $radek) {
+                if (! str_contains($radek, 'strftime(')) {
+                    continue;
+                }
+
+                // Větvení i komentář k němu smí zmiňovat SQLite o řádek vedle
+                // (`$driver === 'sqlite' ? … : …` na jednom řádku, nebo
+                // dvouřádkový komentář vysvětlující proč se v PHP nepoužívá).
+                $okoli = implode(' ', array_slice($radky, max(0, $i - 1), 3));
+
+                if (stripos($okoli, 'sqlite') === false) {
+                    $prehresky[] = '  '.str_replace(app_path().DIRECTORY_SEPARATOR, '', $soubor->getPathname()).':'.($i + 1);
+                }
+            }
+        }
+
+        $this->assertSame([], $prehresky,
+            "strftime() je SQLite-only a na MySQL v produkci spadne; větvit podle getDriverName() nebo použít whereMonth()/whereDay():\n".implode("\n", $prehresky));
     }
 
     /**
