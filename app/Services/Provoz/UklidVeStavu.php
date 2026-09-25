@@ -207,7 +207,7 @@ class UklidVeStavu
             ->get(['id', 'uuid']);
 
         foreach ($skupiny as $skupina) {
-            $uvolneno += $this->sluc($skupina, $vitezove[$skupina->uuid] ?? null);
+            $uvolneno += $this->sluc($skupina, $vitezove[$skupina->uuid] ?? null, $prostor);
         }
 
         return round($uvolneno, 1);
@@ -217,11 +217,18 @@ class UklidVeStavu
      * @param  string|int|null  $vitez  identifikátor vybrané kopie (starší klient posílal pořadí)
      * @return float uvolněné MB
      */
-    private function sluc(object $skupina, $vitez): float
+    private function sluc(object $skupina, $vitez, GallerySpace $prostor): float
     {
         $radky = DB::table('duplicate_group_items as p')
             ->join('media_items as m', 'm.id', '=', 'p.media_item_id')
             ->where('p.duplicate_group_id', $skupina->id)
+            // Jen fotky prostoru, který slučuje. Starší hledání duplicit dávalo
+            // do jednoho nálezu i fotky jiných dvojic, a sloučení je posílalo
+            // do koše — po třiceti dnech je pak úklid koše smazal nadobro.
+            // Stejné podmínky jako seznam v `Knihovna::duplicity()`, ať se
+            // slučuje přesně to, co obrazovka ukázala.
+            ->where('m.gallery_space_id', $prostor->id)
+            ->where('m.is_hidden', false)
             ->whereNull('m.trashed_at')
             ->orderByDesc('m.size_bytes')
             // Pevný doplněk řazení: dvě stejně velké kopie by se jinak mohly

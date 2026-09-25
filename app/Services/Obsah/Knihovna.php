@@ -1049,6 +1049,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $polozky = DB::table('duplicate_group_items as p')
             ->join('media_items as m', 'm.id', '=', 'p.media_item_id')
             ->whereIn('p.duplicate_group_id', $skupiny->pluck('id'))
+            // Nález patří prostoru, ale starší hledání duplicit do něj zapisovalo
+            // i fotky jiných dvojic — ty se tu nesmí ukázat ani s názvem, ani
+            // s místem. Fotka z trezoru sem nepatří z téhož důvodu.
+            ->where('m.gallery_space_id', $prostor->id)
+            ->where('m.is_hidden', false)
             ->whereNull('m.trashed_at')
             ->orderByDesc('m.size_bytes')
             // Pevný doplněk řazení — musí sedět s `UklidVeStavu::sluc()`, jinak
