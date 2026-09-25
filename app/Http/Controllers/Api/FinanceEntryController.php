@@ -4,7 +4,6 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\FinanceCategory;
-use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Partner;
 use App\Models\Transaction;
@@ -205,9 +204,9 @@ class FinanceEntryController extends Controller
             ? FinanceCategory::where('gallery_space_id', $space->id)->where('uuid', $data['category'])->first()
             : null;
 
-        $cesta = ! empty($data['trip'])
-            ? FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $data['trip'])->first()
-            : null;
+        // Jen cesta, kterou uživatel smí upravovat — jinak platba jde do cizího
+        // (třeba soukromého) rozpočtu, do kterého formulář vůbec nenabízí zápis.
+        $cesta = $this->finance->editovatelnaCesta($space, $data['trip'] ?? null, $request->user()->id);
 
         $refundace = ! empty($data['refund_of'])
             ? Transaction::where('gallery_space_id', $space->id)->where('uuid', $data['refund_of'])->first()

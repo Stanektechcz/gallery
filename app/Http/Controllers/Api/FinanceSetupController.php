@@ -864,9 +864,10 @@ class FinanceSetupController extends Controller
         ]);
 
         $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $data['wallet_uuid'])->firstOrFail();
-        $cesta = ! empty($data['trip_uuid'])
-            ? FinanceProject::where('gallery_space_id', $space->id)->where('uuid', $data['trip_uuid'])->first()
-            : null;
+
+        // Předpis se do transakcí propisuje pořád dokola — bez ověření editovatelnosti
+        // by generátor sázel platby do cizí (třeba soukromé) cesty každý měsíc znovu.
+        $cesta = $this->finance->editovatelnaCesta($space, $data['trip_uuid'] ?? null, $request->user()->id, 'trip_uuid');
 
         $predpis = FinanceRecurring::create([
             'gallery_space_id' => $space->id,

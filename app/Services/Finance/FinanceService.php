@@ -8,8 +8,10 @@ use App\Models\FinanceProject;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Výpočty modulu Rozpočet.
@@ -43,7 +45,10 @@ class FinanceService
             ->with('partner:id,name')
             ->get();
 
+        // Jen zapsané pohyby — stejně jako `LedgerService::walletBalances`. Rozepsaný
+        // (`draft`) záznam ještě není jistý a zůstatek by ukazoval jinak než galerie.
         $pohyby = Transaction::where('gallery_space_id', $space->id)
+            ->zapsane()
             ->when($kDatu, fn ($q) => $q->whereDate('occurred_at', '<=', $kDatu))
             ->get(['wallet_from_id', 'wallet_to_id', 'amount_from', 'amount_to', 'fee_amount', 'fee_currency', 'fee_included', 'currency_from', 'currency_to']);
 
@@ -663,6 +668,59 @@ class FinanceService
     public function prepare(GallerySpace $space): void
     {
         FinanceCategory::nachystej($space->id);
+    }
+
+    /**
+     * Cesta, ke které smí uživatel přiřadit platbu — podle uuid z formuláře.
+     *
+     * Vidět cestu (`FinanceAccess::viditelne`) nestačí: přiřazením platby se mění
+     * její čerpání, takže se navíc vyžaduje právo ji upravovat (`smiUpravit`). Bez
+     * druhé podmínky by šlo přiřadit platbu i k cizí cestě nasdílené jen ke čtení.
+     *
+     * Používají to všechna místa, kde se `trip`/`trip_uuid` píše do knihy nebo
+     * rozpočtu — jedna kopie pravidla, aby se čtyři kopie časem nerozešly.
+     *
+     * @throws ValidationException
+     */
+    public function editovatelnaCesta(GallerySpace $space, ?string $uuid, int $userId, string $pole = 'trip'): ?FinanceProject
+    {
+        if (empty($uuid)) {
+            return null;
+        }
+
+        return $this->overCestu(
+            FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip')->where('uuid', $uuid),
+            $userId, $pole,
+        );
+    }
+
+    /** Totéž jako {@see self::editovatelnaCesta()}, ale podle vnitřního čísla. */
+    public function editovatelnaCestaId(GallerySpace $space, ?int $id, int $userId, string $pole = 'trip_uuid'): ?FinanceProject
+    {
+        if (empty($id)) {
+            return null;
+        }
+
+        return $this->overCestu(
+            FinanceProject::where('gallery_space_id', $space->id)->where('kind', 'trip')->where('id', $id),
+            $userId, $pole,
+        );
+    }
+
+    /**
+     * @param  Builder<FinanceProject>  $dotaz  cesta omezená na prostor, kind a uuid/id
+     *
+     * @throws ValidationException
+     */
+    private function overCestu(Builder $dotaz, int $userId, string $pole): FinanceProject
+    {
+        $cesta = FinanceAccess::viditelne($dotaz, 'trip', $userId)->first();
+
+        if (! $cesta || ! FinanceAccess::smiUpravit('trip', $cesta->id, $cesta->owner_user_id, $userId)) {
+            throw ValidationException::withMessages([$pole => 'Tuhle cestu k platbě přiřadit nemůžete.']);
+        }
+
+        return $cesta;
     }
 
     private function druhPenezenky(string $kind): string

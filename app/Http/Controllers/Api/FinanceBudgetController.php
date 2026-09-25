@@ -315,6 +315,7 @@ class FinanceBudgetController extends Controller
     private function data(Request $request, bool $uprava = false): array
     {
         $pravidlo = $uprava ? 'sometimes' : 'required';
+        $space = $this->space($request);
 
         $data = $request->validate([
             'name' => "{$pravidlo}|string|max:160",
@@ -326,7 +327,7 @@ class FinanceBudgetController extends Controller
             'reserve_amount' => 'nullable|numeric|min:0|max:999999999.99',
             // Obrazovka posílá `trip_uuid` (níž); tohle pole bez ověření
             // přijalo i cestu jiné galerie.
-            'finance_project_id' => ['nullable', 'integer', Rule::exists('finance_projects', 'id')->where('gallery_space_id', $this->space($request)->id)],
+            'finance_project_id' => ['nullable', 'integer', Rule::exists('finance_projects', 'id')->where('gallery_space_id', $space->id)],
             'alert_thresholds' => 'nullable|string|max:40',
             'income_adds' => 'sometimes|boolean',
             'auto_balance' => 'sometimes|boolean',
@@ -344,12 +345,20 @@ class FinanceBudgetController extends Controller
         }
 
         // Obrazovka zná cesty podle uuid, ne podle id — vnitřní čísla nemá kam vzít
-        // a posílat je do prohlížeče by znamenalo vystavit pořadí v databázi.
+        // a posílat je do prohlížeče by znamenalo vystavit pořadí v databázi. Ať
+        // cesta přijde jako uuid nebo přímo jako id, musí to být cesta, kterou
+        // uživatel smí upravovat — rozpočet z ní jinak čerpá útraty, ke kterým
+        // by se nedostal.
         if ($request->filled('trip_uuid')) {
-            $data['finance_project_id'] = FinanceProject::where('gallery_space_id', $this->space($request)->id)
-                ->where('uuid', $request->input('trip_uuid'))->value('id');
+            $data['finance_project_id'] = $this->finance->editovatelnaCesta(
+                $space, $request->input('trip_uuid'), $request->user()->id, 'trip_uuid',
+            )?->id;
         } elseif ($request->exists('trip_uuid')) {
             $data['finance_project_id'] = null;
+        } elseif (! empty($data['finance_project_id'])) {
+            $data['finance_project_id'] = $this->finance->editovatelnaCestaId(
+                $space, (int) $data['finance_project_id'], $request->user()->id, 'finance_project_id',
+            )->id;
         }
 
         if (! empty($data['amount']) && ! empty($data['reserve_amount'])
