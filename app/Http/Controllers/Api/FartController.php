@@ -7,6 +7,7 @@ use App\Models\Fart;
 use App\Models\FartRating;
 use App\Models\GallerySpace;
 use App\Models\VoiceNote;
+use App\Rules\RozsahTimestamp;
 use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -64,7 +65,9 @@ class FartController extends Controller
             'gallery_space_id' => 'nullable|integer',
             'title' => 'nullable|string|max:180',
             'occasion' => 'nullable|string|max:120',
-            'happened_at' => 'nullable|date',
+            // MySQL `TIMESTAMP` (na rozdíl od SQLite v testech) mimo 1970–2038
+            // zápis odmítne — bez kontroly by to byla 500, ne 422.
+            'happened_at' => ['nullable', 'date', new RozsahTimestamp],
             'duration_ms' => 'nullable|integer|between:100,120000',
             'audio' => 'nullable|file|max:10240|'.AudioUploads::rule(),
             // Attach an existing recording rather than making a new one.

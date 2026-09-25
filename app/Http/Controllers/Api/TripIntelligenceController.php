@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Rules\RozsahTimestamp;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripBudgetAdvisorService;
 use App\Services\Planning\TripPartnerFinanceService;
@@ -11,6 +12,7 @@ use App\Services\Planning\TripPreparationTimelineService;
 use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -265,8 +267,21 @@ class TripIntelligenceController extends Controller
     public function storeTrackPoint(Request $request, int $tripId): JsonResponse
     {
         $this->trip($request->user(), $tripId);
-        $data = $request->validate(['latitude' => 'required|numeric|between:-90,90', 'longitude' => 'required|numeric|between:-180,180', 'recorded_at' => 'nullable|date']);
-        $id = DB::table('trip_track_points')->insertGetId($data + ['trip_id' => $tripId, 'user_id' => $request->user()->id, 'recorded_at' => $data['recorded_at'] ?? now(), 'created_at' => now(), 'updated_at' => now()]);
+        $data = $request->validate([
+            'latitude' => 'required|numeric|between:-90,90',
+            'longitude' => 'required|numeric|between:-180,180',
+            // MySQL `TIMESTAMP` mimo 1970–2038 zápis odmítne (SQLite v testech
+            // přijme cokoli) — bez kontroly by to byla 500, ne 422.
+            'recorded_at' => ['nullable', 'date', new RozsahTimestamp],
+        ]);
+        // Řetězec s „Z" nebo posunem MySQL sloupec `datetime`/`timestamp`
+        // pravděpodobně odmítne — ukládá se proto přepočtený na UTC v jeho
+        // vlastním tvaru, ne surový vstup z prohlížeče.
+        $zaznamenano = isset($data['recorded_at']) ? Carbon::parse($data['recorded_at'])->utc()->format('Y-m-d H:i:s') : now();
+        $id = DB::table('trip_track_points')->insertGetId(
+            collect($data)->except('recorded_at')->all()
+            + ['trip_id' => $tripId, 'user_id' => $request->user()->id, 'recorded_at' => $zaznamenano, 'created_at' => now(), 'updated_at' => now()]
+        );
 
         return response()->json(DB::table('trip_track_points')->find($id), 201);
     }

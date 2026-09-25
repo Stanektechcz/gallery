@@ -196,7 +196,10 @@ class AdminController extends Controller
 
         abort_if($clen->id === $prostor->owner_id, 422, 'Vlastníkovi nejde odebrat přístup.');
 
-        $this->zasahy->nastavPristup($prostor, $request->user(), $clen->id, (bool) $data['active']);
+        // Obrazovka po zásahu hlásí, že přístup je změněný — nesmí to hlásit
+        // o zásahu, který se neprovedl (stejně jako `role()`/`transfer()` výš).
+        abort_unless($this->zasahy->nastavPristup($prostor, $request->user(), $clen->id, (bool) $data['active']), 422,
+            'Přístup se nepodařilo změnit.');
 
         return $this->prehled($prostor);
     }
@@ -388,10 +391,17 @@ class AdminController extends Controller
             $this->omezProvoznuUlohu($request, 'mirror-backlog');
         }
 
+        // Žádná obnova tu neprobíhá — aplikace zkušební stažení ze zálohy
+        // neumí. Tlačítko dřív bez ohledu na to zapisovalo do protokolu
+        // „obnova ověřena“, což majiteli i auditu lhalo. Dokud skutečný test
+        // obnovy neexistuje, se riziko nezmění a nic se nezapíše — vrátí se
+        // jen poctivé vysvětlení, že obnovu je nutné vyzkoušet ručně.
+        abort_if($riziko === 'r3', 422,
+            'Automatický test obnovy zatím neexistuje — zkušební obnovu proveďte ručně podle nasazovací dokumentace.');
+
         $popis = match ($riziko) {
             'r1' => $this->zaloznKopie($prostor),
             'r2' => $this->vysypKos($prostor),
-            'r3' => 'Obnova ověřena — zkušební stažení proběhlo',
             default => abort(404, 'Takové riziko administrace nezná.'),
         };
 

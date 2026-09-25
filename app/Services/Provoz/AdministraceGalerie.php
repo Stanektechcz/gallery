@@ -317,11 +317,17 @@ class AdministraceGalerie
             [
                 'id' => 'r3',
                 'label' => 'Záloha bez ověřené obnovy',
-                'note' => $cloud?->last_successful_request_at
-                    ? 'poslední úspěšný přenos '.Cas::mistni($cloud->last_successful_request_at)->format('j. n. Y')
-                    : 'cloud není připojený — druhá kopie nevzniká',
-                'fix' => 'Zkusit obnovu',
-                'done' => 'Obnova ověřena — záloha je čitelná',
+                // Aplikace zkušební stažení ze zálohy sama neumí — dřív tlačítko
+                // bez ohledu na to tvrdilo „obnova ověřena“ a zapisovalo to i do
+                // protokolu. Skutečnost je, že test obnovy musí udělat člověk.
+                'note' => ($cloud?->last_successful_request_at
+                    ? 'poslední úspěšný přenos '.Cas::mistni($cloud->last_successful_request_at)->format('j. n. Y').'. '
+                    : 'cloud není připojený — druhá kopie nevzniká. ')
+                    .'Aplikace zkušební obnovu neumí — proveďte ji ručně podle nasazovací dokumentace.',
+                'fix' => 'Postup ruční obnovy',
+                'done' => 'Obnova se ověřuje ručně — aplikace ji sama neumí',
+                // Vždycky nevyřešeno: dokud tu žádný skutečný test obnovy
+                // neběží, se riziko nemá jak samo zavřít.
                 'hotovo' => false,
             ],
         ];

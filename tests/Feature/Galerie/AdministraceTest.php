@@ -11,6 +11,7 @@ use App\Models\PersonalAccessToken;
 use App\Models\ScheduledTaskRun;
 use App\Models\SpaceSubscription;
 use App\Models\User;
+use App\Services\Provoz\AdministraceZasahy;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -254,6 +255,26 @@ class AdministraceTest extends TestCase
 
         $this->app['auth']->forgetGuards();
         $this->withHeader('Authorization', 'Bearer '.$token)->getJson('/api/state')->assertUnauthorized();
+    }
+
+    /**
+     * Odmítnutý zásah se nehlásí jako úspěch.
+     *
+     * `access()` dřív vracelo `->assertOk()` bez ohledu na to, co
+     * `nastavPristup()` vrátilo — obrazovka by tak mohla hlásit úspěch
+     * u zásahu, který se ve skutečnosti neprovedl. Stejné pravidlo jako
+     * u `role()`/`transfer()` výš.
+     */
+    public function test_odmitnuty_pristup_vraci_422_a_nehlasi_uspech(): void
+    {
+        $this->partialMock(AdministraceZasahy::class, function ($mock) {
+            $mock->shouldReceive('nastavPristup')->once()->andReturn(false);
+        });
+
+        $this->postJson('/api/admin/users/'.$this->makinka->id.'/access', ['active' => false])
+            ->assertStatus(422);
+
+        $this->assertTrue($this->makinka->fresh()->is_active, 'Odmítnutý zásah nesmí přístup skutečně změnit.');
     }
 
     public function test_predani_vlastnictvi_udela_z_predchoziho_spravce(): void
@@ -627,6 +648,31 @@ class AdministraceTest extends TestCase
     public function test_nezname_riziko_neprojde(): void
     {
         $this->postJson('/api/admin/risks/r9/fix')->assertNotFound();
+    }
+
+    /**
+     * „Zkusit obnovu" (r3) nesmí tvrdit, že obnovu ověřila, když nic neproběhlo.
+     *
+     * Aplikace zkušební stažení ze zálohy neumí — dřív tlačítko bez ohledu na
+     * to zapsalo do protokolu i do odpovědi „Obnova ověřena“.
+     */
+    public function test_riziko_r3_netvrdi_overenou_obnovu(): void
+    {
+        $odpoved = $this->postJson('/api/admin/risks/r3/fix');
+
+        $odpoved->assertStatus(422);
+        $this->assertStringNotContainsString('ověřena', (string) $odpoved->json('message'));
+
+        // Žádný zásah se neprovedl, tak se nemá co zapsat do protokolu.
+        $this->assertSame(0, AuditLog::where('action', 'admin.risk')->count());
+    }
+
+    /** Stejná poctivost i cestou přes stav (starší klient posílá jen záměr). */
+    public function test_riziko_r3_pres_stav_nezapise_falesny_audit(): void
+    {
+        $this->patchJson('/api/state', ['data' => ['admRisk' => ['r3' => true]]])->assertOk();
+
+        $this->assertSame(0, AuditLog::where('action', 'admin.risk')->count());
     }
 
     // ——— protokol ———

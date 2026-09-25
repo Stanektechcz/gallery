@@ -231,7 +231,12 @@ class AdminVeStavu
                 'r1' => $this->spustKopii($kdo),
                 // Nevratné — editor tudy nevysype (stejně jako `AdminController::fixRisk`).
                 'r2' => $this->mazani->smiTrvaleMazat($prostor, $kdo) ? $this->vysypKos($prostor) : null,
-                'r3' => 'Obnova ověřena — zkušební stažení proběhlo',
+                // Žádná obnova tu neprobíhá — starší klient posílá jen záměr
+                // (`admRisk.r3 = true`), ale aplikace zkušební stažení ze zálohy
+                // neumí. Zápis „obnova ověřena“ by lhal stejně jako u
+                // `AdminController::fixRisk`, takže se tu z r3 nic neprovede
+                // a do protokolu se nic nezapíše.
+                'r3' => null,
                 default => null,
             };
 

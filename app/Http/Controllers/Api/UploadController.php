@@ -13,6 +13,7 @@ use App\Models\MediaItem;
 use App\Models\UploadChunk;
 use App\Models\UploadSession;
 use App\Notifications\GalleryNotification;
+use App\Rules\RozsahTimestamp;
 use App\Services\Billing\EntitlementService;
 use App\Services\ExifExtractorService;
 use App\Services\Media\FilenameMetadataService;
@@ -184,9 +185,13 @@ class UploadController extends Controller
             'sha256' => $validated['sha256'] ?? null,
             // Okamžik v UTC. Přetypování `datetime` by pásmo z řetězce zahodilo
             // a „+02:00" by se uložilo jako by to bylo UTC.
-            'client_modified_at' => empty($validated['client_modified_at'])
-                ? null
-                : Carbon::parse($validated['client_modified_at'])->utc(),
+            //
+            // Datum poslední úpravy je hodnota souboru z prohlížeče, ne něco,
+            // co uživatel vyplňuje — chybný čas na fotoaparátu nebo špatně
+            // nastavené hodiny v telefonu nemají zablokovat nahrání. Mimo
+            // rozsah sloupce `TIMESTAMP` (MySQL by na rozdíl od SQLite v testech
+            // zápis odmítl) se proto tiše zahodí, ne validuje na 422.
+            'client_modified_at' => $this->normalizovanyCasSouboru($validated['client_modified_at'] ?? null),
             'status' => 'pending',
             'expires_at' => now()->addDays(7),
         ]);
@@ -280,6 +285,24 @@ class UploadController extends Controller
     }
 
     /** Součet přijatých bloků kromě `$index` — ten se právě nahrazuje. */
+    /**
+     * Datum poslední úpravy souboru mimo rozsah `TIMESTAMP` se zahodí.
+     *
+     * Jde o metadata z prohlížeče (mtime souboru), ne o hodnotu, kterou by měl
+     * kdo validovat proti uživateli — mimo rozsah se prostě neuloží, upload
+     * kvůli tomu nespadne.
+     */
+    private function normalizovanyCasSouboru(?string $syrovy): ?Carbon
+    {
+        if (empty($syrovy)) {
+            return null;
+        }
+
+        $kdy = Carbon::parse($syrovy)->utc();
+
+        return RozsahTimestamp::vRozsahu($kdy) ? $kdy : null;
+    }
+
     private function bajtyOstatnichBloku(UploadSession $session, int $index): int
     {
         return (int) UploadChunk::where('upload_session_id', $session->id)
