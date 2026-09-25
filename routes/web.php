@@ -56,9 +56,15 @@ Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('l
  * Ochrana proti CSRF útočníka nezastaví — token si vezme z přihlašovací
  * stránky stejně jako prohlížeč. Deset za minutu je dvojnásobek toho,
  * co udělá člověk s překlepem, a zlomek toho, co potřebuje slovník.
+ *
+ * Vlastní předpona počítadla (viz sdílené odkazy níž): bez ní se přihlášení
+ * dělilo o jedno počítadlo s obnovou hesla i pozvánkou, a kdo heslo desetkrát
+ * nezadal, dostal 429 i na „zapomenuté heslo" — přesně tam, kam ho obrazovka
+ * posílá. Ne `prihlaseni`: tu má přihlášení aplikace (`routes/galerie.php`,
+ * 20 za minutu) a společný klíč by si oba limity navzájem ukusovaly.
  */
 Route::post('/login', [AuthenticatedSessionController::class, 'store'])
-    ->middleware('throttle:10,1')->name('login.store');
+    ->middleware('throttle:10,1,prihlaseni-web')->name('login.store');
 
 // Reached signed out, holding nothing but an id in the session.
 Route::get('/login/overeni', [TwoFactorController::class, 'challenge'])->name('two-factor.challenge');
@@ -71,17 +77,17 @@ Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name
 // Invitation-only registration
 Route::get('/invite/{token}', [InvitationController::class, 'show'])->name('invitation.show');
 Route::post('/invite/{token}', [InvitationController::class, 'accept'])
-    ->middleware('throttle:10,1')->name('invitation.accept');
+    ->middleware('throttle:10,1,pozvanka')->name('invitation.accept');
 
 // Password reset
 Route::get('/forgot-password', [PasswordResetController::class, 'request'])->name('password.request');
 // Limit i na odeslání: bez něj jde cizí schránku zaplavit a zároveň
 // zjišťovat, které adresy u nás účet mají.
 Route::post('/forgot-password', [PasswordResetController::class, 'email'])
-    ->middleware('throttle:5,1')->name('password.email');
+    ->middleware('throttle:5,1,zapomenute-heslo')->name('password.email');
 Route::get('/reset-password/{token}', [PasswordResetController::class, 'reset'])->name('password.reset');
 Route::post('/reset-password', [PasswordResetController::class, 'update'])
-    ->middleware('throttle:10,1')->name('password.update');
+    ->middleware('throttle:10,1,obnova-hesla')->name('password.update');
 
 // Public marketing site. Both pages read the same catalogue the app bills from.
 Route::get('/sluzba', fn () => Inertia::render('Landing/Index'))->name('landing');
