@@ -16,6 +16,7 @@ use App\Models\FinanceSettings;
 use App\Models\GallerySpace;
 use App\Models\Transaction;
 use App\Models\Wallet;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Finance;
 use App\Services\Obsah\FinanceRozbory;
 use App\Support\Cas;
@@ -102,8 +103,9 @@ class FinanceAkceController extends Controller
         }
 
         $den = Carbon::parse($t->occurred_at);
+        $start = $this->dalsiTermin($den);
 
-        DB::transaction(function () use ($t, $prostor, $request, $ucet, $castka, $den) {
+        DB::transaction(function () use ($t, $prostor, $request, $ucet, $castka, $den, $start) {
             $predpis = FinanceRecurring::create([
                 'gallery_space_id' => $prostor->id,
                 'name' => $t->description ?: ($t->counterparty ?: 'Pravidelná platba'),
@@ -115,7 +117,7 @@ class FinanceAkceController extends Controller
                 'finance_project_id' => $t->finance_project_id,
                 'payer_partner_id' => $t->payer_partner_id,
                 'day_of_month' => $den->day,
-                'starts_on' => $den->toDateString(),
+                'starts_on' => $start->toDateString(),
                 'created_by' => $request->user()->id,
                 'is_active' => true,
             ]);
@@ -124,6 +126,36 @@ class FinanceAkceController extends Controller
         });
 
         return $this->hotovo($prostor, 'Opakuje se každý měsíc '.$den->day.'. dne · další platba se objeví v Nadcházejících');
+    }
+
+    /**
+     * Od kdy předpis z platby poběží: až po dnešku, ne ode dne té platby.
+     *
+     * Generátor dopisuje všechno od `starts_on` (u zpětně založeného předpisu
+     * to tak být má), takže nájem z června označený „Opakovat" v září by
+     * dopsal červenec, srpen i září, které z účtu nikdy neodešly. Hláška
+     * přitom slibuje jen další platbu. Stejně jako `pridatPlatbu` se proto
+     * začíná nejbližším termínem po dnešku — dnešní termín ne, ten by se
+     * zapsal hned a nebyl by „v Nadcházejících". Platba s datem v budoucnu
+     * je sama svým termínem, předpis tedy začíná jí.
+     */
+    private function dalsiTermin(Carbon $den): Carbon
+    {
+        // Dnešek dvojice (Praha), jako proměnlivý Carbon — níž se mění na místě.
+        $dnes = Carbon::parse(Cas::dnes()->toDateString());
+
+        if ($den->copy()->startOfDay()->greaterThan($dnes)) {
+            return $den->copy()->startOfDay();
+        }
+
+        $zitra = $dnes->copy()->addDay();
+        $start = $zitra->copy()->day(min($den->day, $zitra->daysInMonth));
+        if ($start->lessThan($zitra)) {
+            $start = $zitra->copy()->startOfMonth()->addMonthNoOverflow();
+            $start->day(min($den->day, $start->daysInMonth));
+        }
+
+        return $start;
     }
 
     /**
@@ -146,25 +178,40 @@ class FinanceAkceController extends Controller
             return $this->chyba('Rozdělit do kategorií jde jen výdaj.');
         }
 
-        $celkem = abs((float) $t->amount_from);
-        $soucet = round(array_sum(array_map(fn ($c) => (float) $c['castka'], $data['casti'])), 2);
+        // Počítá se v celých haléřích, a to z částek, jak se opravdu uloží.
+        // Nezaokrouhlené součty s tolerancí 0,01 pustily 10,03 jako 5,01 + 5,01
+        // a haléř z knihy zmizel. Pořadí částí je pevné (0, 1, …), ať haléře
+        // i kategorie sedí na tutéž část.
+        $casti = array_values($data['casti']);
+        $halere = array_map(fn ($c) => (int) round((float) $c['castka'] * 100), $casti);
 
-        if (abs($soucet - $celkem) > 0.01) {
+        if (in_array(0, $halere, true)) {
             throw ValidationException::withMessages([
-                'casti' => 'Části dávají '.$soucet.', platba má '.$celkem.'. Rozdíl musí být nula.',
+                'casti' => 'Každá část musí mít aspoň haléř.',
+            ]);
+        }
+
+        $celkem = (int) round(abs((float) $t->amount_from) * 100);
+        $soucet = array_sum($halere);
+
+        if ($soucet !== $celkem) {
+            throw ValidationException::withMessages([
+                'casti' => 'Části dávají '.number_format($soucet / 100, 2, '.', '').', platba má '
+                    .number_format($celkem / 100, 2, '.', '').'. Rozdíl musí být nula.',
             ]);
         }
 
         $kategorie = [];
-        foreach ($data['casti'] as $c) {
+        foreach ($casti as $c) {
             $kategorie[] = $this->kategorie($prostor, $c['kategorie']);
         }
 
-        DB::transaction(function () use ($t, $data, $kategorie) {
+        DB::transaction(function () use ($t, $casti, $kategorie, $halere) {
             $puvodniSdileni = $t->shares()->exists();
 
-            foreach ($data['casti'] as $i => $c) {
-                $castka = round((float) $c['castka'], 2);
+            foreach (array_keys($casti) as $i) {
+                // Tytéž haléře, které prošly kontrolou součtu.
+                $castka = $halere[$i] / 100;
 
                 if ($i === 0) {
                     $t->update(['amount_from' => $castka, 'category_id' => $kategorie[0]->id]);
@@ -663,7 +710,12 @@ class FinanceAkceController extends Controller
             'komu' => ['required', 'string', 'max:120', 'different:od'],
         ]);
 
-        $clenove = $prostor->members()->get(['users.id', 'users.name']);
+        // Jen dvojice — host galerie (viewer/contributor) do vyrovnání nepatří.
+        // Vlastník je vlastník, i kdyby mu v členství zůstala výchozí role.
+        $clenove = $prostor->members()
+            ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                ->orWhere('users.id', (int) $prostor->owner_id))
+            ->get(['users.id', 'users.name']);
         $najdi = fn (string $jmeno) => $clenove->first(fn ($u) => mb_strtolower(trim($u->name)) === mb_strtolower(trim($jmeno))
             || mb_strtolower(Str::before(trim($u->name), ' ')) === mb_strtolower(trim($jmeno)));
 
@@ -672,6 +724,12 @@ class FinanceAkceController extends Controller
 
         if ($od === null || $komu === null) {
             return $this->chyba('Vyrovnání je jen mezi vámi dvěma.');
+        }
+
+        // `different:od` porovnává jen text: „Makinka" a „makinka" (nebo celé
+        // jméno a křestní) jsou tatáž osoba a vyrovnání sama se sebou nic neznamená.
+        if ((int) $od->id === (int) $komu->id) {
+            return $this->chyba('Vyrovnání je mezi dvěma lidmi — vyberte, kdo komu platí.');
         }
 
         BudgetSettlement::create([

@@ -161,6 +161,58 @@ class ImportVypisuTest extends TestCase
         $this->assertSame(2, Transaction::where('gallery_space_id', $this->prostor->id)->count());
     }
 
+    /**
+     * Řádek, který bankovní modul už zná, se do knihy dostane i z dalšího výpisu.
+     *
+     * Kniha brala jen pohyby, které tenhle import v bankovním modulu nově
+     * založil. Eurová platba nahraná napřed na korunový účet (a tam vynechaná
+     * kvůli měně) pak v delším výpisu na eurový účet tiše chyběla — modul ji
+     * měl za duplikát a do knihy nikdy nedošla.
+     */
+    public function test_znamy_radek_z_banky_dojde_do_knihy_z_dalsiho_vypisu(): void
+    {
+        $koruny = $this->ucet('Společný účet');
+        $a = "CARD_PAYMENT,Current,2026-09-07 10:00:00,2026-09-07 10:00:00,Café de Paris,-12.00,0.00,EUR,COMPLETED,50\n";
+        $b = "CARD_PAYMENT,Current,2026-09-08 10:00:00,2026-09-08 10:00:00,Boulangerie,-4.50,0.00,EUR,COMPLETED,45.5\n";
+
+        $this->nahraj($koruny, self::HLAVICKA.$a)->assertOk()->assertJsonPath('zapsano', 0)->assertJsonPath('jinaMena', 1);
+
+        $eura = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Eurový účet',
+            'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true, 'sort_order' => 1,
+        ]);
+
+        $this->nahraj($eura, self::HLAVICKA.$a.$b)->assertStatus(201)->assertJsonPath('zapsano', 2);
+
+        $this->assertSame(['Boulangerie', 'Café de Paris'], Transaction::where('wallet_from_id', $eura->id)
+            ->where('currency_from', 'EUR')->orderBy('description')->pluck('description')->all());
+
+        // A znovu nic nezdvojí.
+        $this->nahraj($eura, self::HLAVICKA.$a.$b)->assertOk()->assertJsonPath('zapsano', 0);
+        $this->assertSame(2, Transaction::count());
+    }
+
+    /**
+     * Platbu z výpisu, kterou dvojice v knize smazala, další výpis nevzkřísí.
+     *
+     * Smazání je rozhodnutí („tohle sem nepatří"), ne chyba — i když je
+     * řádek ve výpisu pořád.
+     */
+    public function test_smazana_platba_z_vypisu_se_nevrati(): void
+    {
+        $ucet = $this->ucet('Společný účet');
+        $radek = "CARD_PAYMENT,Current,2026-09-05 12:00:00,2026-09-05 14:22:10,Albert,-432.50,0.00,CZK,COMPLETED,10000\n";
+
+        $this->nahraj($ucet, self::HLAVICKA.$radek)->assertStatus(201);
+        Transaction::sole()->delete();
+
+        $this->nahraj($ucet, self::HLAVICKA.$radek
+            ."CARD_PAYMENT,Current,2026-09-08 09:00:00,2026-09-08 09:00:00,Lékárna,-312.00,0.00,CZK,COMPLETED,9688\n")
+            ->assertStatus(201)->assertJsonPath('zapsano', 1);
+
+        $this->assertSame(['Lékárna'], Transaction::pluck('description')->all());
+    }
+
     public function test_bez_uctu_rekne_kam_ho_zalozit(): void
     {
         $this->postJson('/api/finance/import', ['vypis' => $this->soubor(self::HLAVICKA)])

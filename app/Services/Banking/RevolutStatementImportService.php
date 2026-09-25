@@ -37,8 +37,18 @@ class RevolutStatementImportService
 
     public function __construct(private readonly BankTransactionClassifier $classifier, private readonly TripBankReconciliationService $reconciliation) {}
 
-    public function import(GallerySpace $space, User $user, UploadedFile $file): array
+    /**
+     * @param  list<int>|null  $pohyby  Vyplní se id bankovních pohybů všech řádků výpisu —
+     *                                  nově založených i těch, které modul už znal
+     *                                  (duplikát). Kniha plateb (ImportVypisuController)
+     *                                  podle toho bere každý řádek, ne jen nové; jinak
+     *                                  by řádek jednou vynechaný kvůli měně účtu do knihy
+     *                                  z delšího výpisu nikdy nedošel. U souboru, který
+     *                                  už byl celý zpracovaný, zůstane `null`.
+     */
+    public function import(GallerySpace $space, User $user, UploadedFile $file, ?array &$pohyby = null): array
     {
+        $pohyby = null;
         $sha = hash_file('sha256', $file->getRealPath());
         $extension = strtolower($file->getClientOriginalExtension());
         abort_unless(in_array($extension, ['csv', 'xls', 'xlsx'], true), 422, 'Nahrajte výpis Revolut ve formátu CSV, XLS nebo XLSX.');
@@ -78,6 +88,7 @@ class RevolutStatementImportService
             $firstAccount = null;
             $fallbackOccurrences = [];
             $firstFailure = null;
+            $rowTransactionIds = [];
             foreach ($rows as $index => $row) {
                 try {
                     if ($this->emptyRow($row)) {
@@ -103,8 +114,10 @@ class RevolutStatementImportService
                     // making the same row stable across overlapping statement exports.
                     $external = trim((string) ($mapped['transaction_id'] ?? '')) ?: "{$canonical}|{$occurrence}";
                     $externalHash = hash('sha256', $external);
-                    if (BankTransaction::where('bank_account_id', $account->id)->where('external_id_hash', $externalHash)->exists()) {
+                    $knownId = BankTransaction::where('bank_account_id', $account->id)->where('external_id_hash', $externalHash)->value('id');
+                    if ($knownId !== null) {
                         $counts['duplicate']++;
+                        $rowTransactionIds[] = (int) $knownId;
 
                         continue;
                     }
@@ -112,7 +125,7 @@ class RevolutStatementImportService
                         'transaction_type' => $mapped['type'] ?? null]);
                     $balance = $this->number($mapped['balance'] ?? null);
                     $fee = $this->number($mapped['fee'] ?? null);
-                    BankTransaction::create(['bank_account_id' => $account->id, 'bank_import_id' => $import->id,
+                    $created = BankTransaction::create(['bank_account_id' => $account->id, 'bank_import_id' => $import->id,
                         'external_id_hash' => $externalHash, 'encrypted_external_id' => $mapped['transaction_id'] ?? null,
                         'status' => $this->status($mapped['state'] ?? null), 'direction' => $amount < 0 ? 'debit' : 'credit',
                         'amount' => $amount, 'currency' => $currency, 'fee_amount' => $fee, 'balance_after' => $balance,
@@ -121,6 +134,7 @@ class RevolutStatementImportService
                         'category' => $classification['category'], 'trip_action' => $classification['trip_action'], 'is_internal_transfer' => $classification['is_internal_transfer'],
                         'is_refund' => $classification['is_refund'], 'is_fee' => $classification['is_fee'],
                         'is_cash_withdrawal' => $classification['is_cash_withdrawal'], 'provider_payload' => ['source' => 'revolut_statement', 'row' => $headerRow + $index + 2]]);
+                    $rowTransactionIds[] = (int) $created->id;
                     if ($balance !== null) {
                         BankBalanceSnapshot::firstOrCreate(['bank_account_id' => $account->id,
                             'snapshot_key' => hash('sha256', "import:{$sha}:{$index}")], ['booked_balance' => $balance,
@@ -143,6 +157,7 @@ class RevolutStatementImportService
                 'rows_total' => $counts['total'], 'rows_imported' => $counts['imported'], 'rows_duplicate' => $counts['duplicate'],
                 'rows_failed' => $counts['failed'], 'period_from' => $dates->min()?->toDateString(), 'period_to' => $dates->max()?->toDateString(),
                 'error_summary' => $counts['failed'] ? "{$counts['failed']} řádků nebylo možné načíst. První chyba: ".mb_substr((string) $firstFailure, 0, 700) : null]);
+            $pohyby = array_values(array_unique($rowTransactionIds));
             $links = 0;
             $warnings = [];
             try {

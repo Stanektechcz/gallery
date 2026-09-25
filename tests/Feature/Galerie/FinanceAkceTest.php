@@ -101,6 +101,46 @@ class FinanceAkceTest extends TestCase
         $this->postJson('/api/finance/transakce/'.$t->uuid.'/opakovat')->assertStatus(422);
     }
 
+    /**
+     * „Opakovat" u starší platby nedopíše měsíce, které nikdy neproběhly.
+     *
+     * Předpis začínal dnem té platby a generátor dopisuje všechno od začátku
+     * předpisu — nájem z června označený v září tak přidal červenec, srpen
+     * i září, které z účtu nikdy neodešly.
+     */
+    public function test_opakovani_starsi_platby_nedopise_zmeskane_mesice(): void
+    {
+        $t = $this->vydaj('Nájem', 15000, '2026-06-05');
+
+        $this->postJson('/api/finance/transakce/'.$t->uuid.'/opakovat')->assertOk();
+        app(RecurringService::class)->generovat($this->prostor);
+
+        $predpis = FinanceRecurring::sole();
+        $this->assertSame([$t->id], Transaction::withTrashed()->where('recurring_id', $predpis->id)->pluck('id')->all(),
+            'Do dneška zůstane jen původní platba.');
+
+        // Další splátka přijde až po dnešku — a pak opravdu přijde.
+        app(RecurringService::class)->generovat($this->prostor, Carbon::parse('2026-10-06'));
+        $this->assertSame(['2026-06-05', '2026-10-05'], Transaction::where('recurring_id', $predpis->id)
+            ->orderBy('occurred_at')->pluck('occurred_at')->map(fn ($d) => Carbon::parse($d)->toDateString())->all());
+    }
+
+    /** Platba z tohoto měsíce: další splátka je ta příští, nic se nezdvojí. */
+    public function test_opakovani_platby_z_tohoto_mesice_da_pristi_mesic(): void
+    {
+        $t = $this->vydaj('Nájem', 15000, '2026-09-05');
+
+        $this->postJson('/api/finance/transakce/'.$t->uuid.'/opakovat')->assertOk();
+        $predpis = FinanceRecurring::sole();
+
+        app(RecurringService::class)->generovat($this->prostor);
+        $this->assertSame(1, Transaction::where('recurring_id', $predpis->id)->count());
+
+        app(RecurringService::class)->generovat($this->prostor, Carbon::parse('2026-10-05'));
+        $this->assertSame(['2026-09-05', '2026-10-05'], Transaction::where('recurring_id', $predpis->id)
+            ->orderBy('occurred_at')->pluck('occurred_at')->map(fn ($d) => Carbon::parse($d)->toDateString())->all());
+    }
+
     public function test_rozdeleni_do_kategorii_sedi_do_halere(): void
     {
         FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Potraviny', 'kind' => 'expense', 'is_active' => true]);
@@ -119,6 +159,52 @@ class FinanceAkceTest extends TestCase
 
         $castky = Transaction::where('gallery_space_id', $this->prostor->id)->pluck('amount_from')->map(fn ($c) => (float) $c)->sort()->values()->all();
         $this->assertSame([300.0, 700.0], $castky);
+    }
+
+    /**
+     * Rozdíl se hlídá v celých haléřích, ne s tolerancí.
+     *
+     * Porovnání nezaokrouhlených čísel s rezervou 0,01 pustilo 10,03 jako
+     * 5,01 + 5,01 — haléř se ztratil a zůstatek účtu se tiše pohnul.
+     */
+    public function test_rozdeleni_neztrati_haler(): void
+    {
+        FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Potraviny', 'kind' => 'expense', 'is_active' => true]);
+        FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Drogerie', 'kind' => 'expense', 'is_active' => true]);
+        $t = $this->vydaj('Albert', 10.03);
+
+        $this->postJson('/api/finance/transakce/'.$t->uuid.'/rozdelit', ['casti' => [
+            ['kategorie' => 'Potraviny', 'castka' => 5.01],
+            ['kategorie' => 'Drogerie', 'castka' => 5.01],
+        ]])->assertStatus(422);
+
+        // Část, která se zaokrouhlí na nulu, není část.
+        $this->postJson('/api/finance/transakce/'.$t->uuid.'/rozdelit', ['casti' => [
+            ['kategorie' => 'Potraviny', 'castka' => 10.03],
+            ['kategorie' => 'Drogerie', 'castka' => 0.004],
+        ]])->assertStatus(422);
+
+        $this->assertSame(1, Transaction::count());
+        $this->assertEquals(10.03, (float) $t->fresh()->amount_from);
+    }
+
+    public function test_rozdeleni_na_tretiny_sedi_presne(): void
+    {
+        foreach (['Potraviny', 'Drogerie', 'Domácnost'] as $nazev) {
+            FinanceCategory::create(['gallery_space_id' => $this->prostor->id, 'name' => $nazev, 'kind' => 'expense', 'is_active' => true]);
+        }
+        $t = $this->vydaj('Albert', 100);
+
+        $this->postJson('/api/finance/transakce/'.$t->uuid.'/rozdelit', ['casti' => [
+            ['kategorie' => 'Potraviny', 'castka' => 33.34],
+            ['kategorie' => 'Drogerie', 'castka' => 33.33],
+            ['kategorie' => 'Domácnost', 'castka' => 33.33],
+        ]])->assertOk();
+
+        $halere = Transaction::where('gallery_space_id', $this->prostor->id)->pluck('amount_from')
+            ->sum(fn ($c) => (int) round((float) $c * 100));
+        $this->assertSame(10000, $halere);
+        $this->assertSame(3, Transaction::count());
     }
 
     public function test_planovana_platba_a_preskoceni_terminu(): void
@@ -261,6 +347,29 @@ class FinanceAkceTest extends TestCase
 
         $this->assertSame([], $this->getJson('/api/data/finance')->json('data.BUD.paid'));
         $this->postJson('/api/finance/vyrovnani', ['castka' => 1, 'od' => 'Makinka', 'komu' => 'Cizinec'])->assertStatus(422);
+    }
+
+    /** „Makinka" a „makinka" je tatáž osoba — vyrovnání sama se sebou nedává smysl. */
+    public function test_vyrovnani_se_sebou_samym_neprojde(): void
+    {
+        $this->rozpocet();
+
+        $this->postJson('/api/finance/vyrovnani', ['castka' => 400, 'od' => 'Makinka', 'komu' => 'makinka'])->assertStatus(422);
+        $this->postJson('/api/finance/vyrovnani', ['castka' => 400, 'od' => 'Makinka', 'komu' => 'Makinka Kubíčková'])->assertStatus(422);
+
+        $this->assertSame(0, DB::table('budget_settlements')->count());
+    }
+
+    /** Host galerie není strana vyrovnání dvojice. */
+    public function test_vyrovnani_s_hostem_neprojde(): void
+    {
+        $this->rozpocet();
+        $host = User::factory()->create(['name' => 'Bára Hostová']);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        $this->postJson('/api/finance/vyrovnani', ['castka' => 400, 'od' => 'Bára', 'komu' => 'Adrian'])->assertStatus(422);
+
+        $this->assertSame(0, DB::table('budget_settlements')->count());
     }
 
     public function test_novy_rucni_ucet(): void

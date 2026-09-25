@@ -82,6 +82,18 @@ class ObsahPlanovaniTest extends TestCase
      *
      * „Přidat do plánu" dřív zakládal úkol bez data — ve dni se neobjevil.
      */
+    /** Akce „pro oba" zve dvojici, ne hosty galerie. */
+    public function test_akce_pro_oba_nepozve_hosta(): void
+    {
+        $host = User::factory()->create(['name' => 'Bára']);
+        $this->prostor->members()->attach($host->id, ['role' => 'viewer']);
+
+        $this->postJson('/api/kalendar/udalost', ['nazev' => 'Večeře u rodičů', 'datum' => '2026-09-19', 'cas' => '18:30'])->assertStatus(201);
+
+        $ucastnici = CalendarEvent::where('title', 'Večeře u rodičů')->sole()->participants()->pluck('users.id')->sort()->values()->all();
+        $this->assertSame([$this->adri->id, $this->maki->id], $ucastnici);
+    }
+
     public function test_akce_z_telefonu_padne_na_vybrany_den(): void
     {
         CarbonImmutable::setTestNow('2026-09-16 12:00:00');

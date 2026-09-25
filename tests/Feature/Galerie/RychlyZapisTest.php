@@ -72,6 +72,21 @@ class RychlyZapisTest extends TestCase
         $this->assertSame(2, DB::table('shared_todos')->where('gallery_space_id', $this->prostor->id)->where('status', 'open')->count());
     }
 
+    /** Úkol podle křestního jména dostane jen někdo z dvojice, ne host se stejným jménem. */
+    public function test_ukol_nedostane_host(): void
+    {
+        $this->prostor->members()->detach($this->maki->id);
+        // Host přibyl dřív než partnerka — má nižší id i dřívější členství.
+        $host = User::factory()->create(['name' => 'Makinka Hostová']);
+        $this->prostor->members()->attach($host->id, ['role' => 'viewer']);
+        $partnerka = User::factory()->create(['name' => 'Makinka Nová']);
+        $this->prostor->members()->attach($partnerka->id, ['role' => 'editor']);
+
+        $this->postJson('/api/rychle/ukol', ['nazev' => 'Odvézt kolo do servisu', 'kdo' => 'Makinka zítra'])->assertStatus(201);
+
+        $this->assertSame($partnerka->id, (int) DB::table('shared_todos')->where('title', 'Odvézt kolo do servisu')->value('assigned_to'));
+    }
+
     /** Bez prostoru se nezapisuje nikam. */
     public function test_bez_prostoru_nic(): void
     {

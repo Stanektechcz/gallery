@@ -74,6 +74,20 @@ class DomaciPraceTest extends TestCase
         $this->assertSame('týdně', $spolu->every);
     }
 
+    /** Práce „pro druhého" nepřipadne hostovi, i když přibyl do galerie dřív než partner. */
+    public function test_prace_pro_druheho_nepripadne_hostovi(): void
+    {
+        $this->prostor->members()->detach($this->maki->id);
+        $host = User::factory()->create(['name' => 'Bára']);
+        $this->prostor->members()->attach($host->id, ['role' => 'viewer']);
+        $partnerka = User::factory()->create(['name' => 'Eliška']);
+        $this->prostor->members()->attach($partnerka->id, ['role' => 'editor']);
+
+        $this->postJson('/api/domacnost/prace', ['nazev' => 'Vysát', 'kdo' => 'druhy'])->assertStatus(201);
+
+        $this->assertSame($partnerka->id, HouseChore::where('name', 'Vysát')->value('assigned_to'));
+    }
+
     public function test_stejna_prace_dvakrat_ani_nesmysl_neprojdou(): void
     {
         $this->postJson('/api/domacnost/prace', ['nazev' => 'Vysát'])->assertStatus(201);

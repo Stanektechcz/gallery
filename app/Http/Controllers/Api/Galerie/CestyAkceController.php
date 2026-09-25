@@ -266,13 +266,27 @@ class CestyAkceController extends Controller
         $zacatek = CarbonImmutable::parse('2000-01-01 '.$radek->starts_at);
         $novy = $zacatek->addMinutes($minut);
 
-        if (! $novy->isSameDay($zacatek)) {
+        // Konec se posouvá o totéž a hlídá se stejně: dřív se kontroloval jen
+        // začátek, takže 22:30–23:45 o hodinu dál dalo 23:30–00:45 — konec
+        // před začátkem. Bod, který už přes půlnoc vede (konec časem dřív než
+        // začátek), končí až další den; jeho konec nesmí ten den opustit.
+        $konec = null;
+        $novyKonec = null;
+        if ($radek->ends_at) {
+            $konec = CarbonImmutable::parse('2000-01-01 '.$radek->ends_at);
+            if ($konec->lessThan($zacatek)) {
+                $konec = $konec->addDay();
+            }
+            $novyKonec = $konec->addMinutes($minut);
+        }
+
+        if (! $novy->isSameDay($zacatek) || ($novyKonec !== null && ! $novyKonec->isSameDay($konec))) {
             return response()->json(['ok' => false, 'zprava' => 'Posunout přes půlnoc nejde — přesuňte bod do jiného dne.'], 422);
         }
 
         DB::table('trip_activities')->where('id', $radek->id)->update([
             'starts_at' => $novy->format('H:i:s'),
-            'ends_at' => $radek->ends_at ? CarbonImmutable::parse('2000-01-01 '.$radek->ends_at)->addMinutes($minut)->format('H:i:s') : null,
+            'ends_at' => $novyKonec?->format('H:i:s'),
             'updated_at' => now(),
         ]);
 

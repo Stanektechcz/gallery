@@ -18,6 +18,7 @@ use App\Support\SpaceContext;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
 
@@ -84,16 +85,14 @@ class ImportVypisuController extends Controller
 
         // Přečte, odduplikuje a uloží do bankovního modulu; chybu ve výpisu
         // vrací jako 422 se srozumitelnou větou.
-        $vysledek = $this->vypisy->import($prostor, $request->user(), $request->file('vypis'));
+        $idPohybu = null;
+        $vysledek = $this->vypisy->import($prostor, $request->user(), $request->file('vypis'), $idPohybu);
 
         $import = BankImport::where('gallery_space_id', $prostor->id)
             ->where('uuid', $vysledek['import']['uuid'] ?? '')
             ->firstOrFail();
 
-        $pohyby = BankTransaction::where('bank_import_id', $import->id)
-            ->orderBy('booked_at')
-            ->orderBy('id')
-            ->get();
+        $pohyby = $this->pohyby($import, $idPohybu);
 
         $mena = strtoupper((string) ($ucet->currency ?: 'CZK'));
         $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0, 'zarazeno' => 0];
@@ -119,6 +118,11 @@ class ImportVypisuController extends Controller
 
                 $klic = Uuid::uuid5(self::PROSTOR_KLICU, 'banka:'.$pohyb->id)->toString();
 
+                // I smazaná platba se počítá jako „už v knize". Smazání je
+                // rozhodnutí dvojice (třeba „tenhle převod sem nepatří") a další
+                // výpis se stejným řádkem ho nemá potichu vrátit. Klíč je navíc
+                // na bankovní pohyb, ne na účet — platba zapsaná na jiný účet
+                // téže měny se tak nezapíše podruhé; přesunout jde v Transakcích.
                 $uz = Transaction::withTrashed()->withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)
                     ->where('client_key', $klic)
@@ -188,6 +192,36 @@ class ImportVypisuController extends Controller
             'uz' => $pocty['uz'],
             'jinaMena' => $pocty['mena'],
         ] + $this->obsahPoAkci($this->obsah, $prostor), $pocty['zapsano'] ? 201 : 200);
+    }
+
+    /**
+     * Bankovní pohyby, které do knihy posoudit: každý řádek výpisu.
+     *
+     * Dřív jen pohyby, které tenhle import v bankovním modulu nově založil.
+     * Řádek, který modul už znal (duplikát), zůstal připsaný k dřívějšímu
+     * importu — a když ho kniha tehdy vynechala (jiná měna účtu), do knihy
+     * se už nedostal nikdy. Kniha má vlastní odduplikování podle klíče
+     * z pohybu, takže posoudit znovu i známé řádky nic nezdvojí.
+     *
+     * Soubor, který už byl celý zpracovaný, služba nečte znovu (`$id` je
+     * `null`) — pak zbývají pohyby, které založil ten dřívější import.
+     *
+     * @param  list<int>|null  $id
+     * @return Collection<int, BankTransaction>
+     */
+    private function pohyby(BankImport $import, ?array $id): Collection
+    {
+        if ($id === null) {
+            return BankTransaction::where('bank_import_id', $import->id)
+                ->orderBy('booked_at')->orderBy('id')->get();
+        }
+
+        // Po dávkách — dlouhý výpis má tisíce řádků a SQLite i MySQL mají
+        // strop počtu parametrů v jednom dotazu.
+        return collect($id)->chunk(500)
+            ->flatMap(fn ($davka) => BankTransaction::whereIn('id', $davka->all())->get())
+            ->sortBy([['booked_at', 'asc'], ['id', 'asc']])
+            ->values();
     }
 
     /**

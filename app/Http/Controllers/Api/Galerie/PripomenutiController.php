@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Notifications\NotificationPreferenceService;
 use App\Services\Notifications\WebPushService;
 use App\Services\Provoz\PauzaDvojice;
@@ -40,8 +41,16 @@ class PripomenutiController extends Controller
         $podekovani = ($data['druh'] ?? null) === 'podekovani';
         $ja = $request->user();
 
+        // „Druhý" je člen dvojice, ne kdokoli v prostoru: host galerie
+        // (viewer/contributor) by jinak dostal připomínku dvojice do telefonu.
+        // Vlastník je vlastník, i kdyby mu v členství zůstala výchozí role.
         /** @var User|null $druhy */
-        $druhy = $prostor->members()->where('users.id', '!=', $ja->id)->first();
+        $druhy = $prostor->members()
+            ->where('users.id', '!=', $ja->id)
+            ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                ->orWhere('users.id', (int) $prostor->owner_id))
+            ->orderBy('users.id')
+            ->first();
 
         if ($druhy === null) {
             return response()->json(['ok' => false, 'zprava' => 'V galerii zatím není nikdo, komu připomínku poslat.'], 422);

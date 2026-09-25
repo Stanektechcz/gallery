@@ -7,6 +7,7 @@ use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -75,6 +76,57 @@ class RucniPlatbaTest extends TestCase
         $this->postJson('/api/platby/rucne', ['popis' => 'Benzín', 'castka' => 1200, 'klic' => 'tel-1'])->assertOk();
 
         $this->assertSame(1, Transaction::where('gallery_space_id', $this->prostor->id)->count());
+    }
+
+    /**
+     * Klíč dárku („dar-" + uuid, 40 znaků) se do sloupce `uuid` nevejde.
+     *
+     * `client_key` je na MySQL char(36); delší klíč ve striktním režimu
+     * shodil zápis na 500. Uloží se z něj odvozené uuid — pořád jedno
+     * na jeden klíč, takže opakované odeslání platbu nezdvojí.
+     */
+    public function test_dlouhy_klic_darku_se_ulozi_jako_uuid(): void
+    {
+        $this->ucet('Společný účet', 0);
+        $klic = 'dar-'.Str::uuid();
+
+        $this->postJson('/api/platby/rucne', ['popis' => 'Dárek', 'castka' => 800, 'kategorie' => 'Dárky', 'klic' => $klic])->assertStatus(201);
+
+        $platba = Transaction::sole();
+        $this->assertTrue(Str::isUuid((string) $platba->client_key), 'Klíč se musí vejít do sloupce uuid.');
+        $this->assertLessThanOrEqual(36, strlen((string) $platba->client_key));
+
+        $this->postJson('/api/platby/rucne', ['popis' => 'Dárek', 'castka' => 800, 'kategorie' => 'Dárky', 'klic' => $klic])
+            ->assertOk()->assertJsonPath('zprava', 'Platba už je zapsaná')->assertJsonPath('platba', $platba->uuid);
+        $this->assertSame(1, Transaction::count());
+    }
+
+    /** Dva souběžné pokusy se stejným klíčem: druhý narazí na unikát a vrátí první, ne 500. */
+    public function test_soubezne_odeslani_vrati_uz_zapsanou_platbu(): void
+    {
+        $ucet = $this->ucet('Společný účet', 0);
+        $prvni = null;
+
+        // Souběh: mezi kontrolou klíče a zápisem stihne stejnou platbu zapsat druhý požadavek.
+        Transaction::creating(function (Transaction $t) use (&$prvni, $ucet) {
+            if ($prvni !== null || $t->client_key === null) {
+                return;
+            }
+
+            $prvni = Transaction::withoutEvents(fn () => Transaction::create([
+                'uuid' => (string) Str::uuid(), 'client_key' => $t->client_key,
+                'gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => now()->toDateString(),
+                'wallet_from_id' => $ucet->id, 'amount_from' => 1200, 'currency_from' => 'CZK',
+                'description' => 'Benzín', 'state' => 'approved', 'created_by' => $this->adri->id,
+            ]));
+        });
+
+        $this->postJson('/api/platby/rucne', ['popis' => 'Benzín', 'castka' => 1200, 'klic' => 'tel-souběh'])
+            ->assertOk()
+            ->assertJsonPath('zprava', 'Platba už je zapsaná')
+            ->assertJsonPath('platba', fn ($uuid) => $prvni !== null && $uuid === $prvni->uuid);
+
+        $this->assertSame(1, Transaction::count());
     }
 
     public function test_bez_uctu_rekne_kam_ho_zalozit(): void

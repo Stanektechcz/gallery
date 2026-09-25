@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\HouseChore;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Domacnost;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -100,8 +101,12 @@ class DomaciPraceController extends Controller
 
     private function druhy(GallerySpace $prostor, int $ja): ?int
     {
+        // Druhý z dvojice, ne host galerie (viewer/contributor) — ten práce
+        // v domácnosti nedostává. Vlastník je vlastník i s výchozí rolí.
         $id = $prostor->members()
             ->where('users.id', '!=', $ja)
+            ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                ->orWhere('users.id', (int) $prostor->owner_id))
             ->orderBy('users.id')
             ->value('users.id');
 

@@ -69,6 +69,17 @@ class ObsahRozhodovaniTest extends TestCase
     }
 
     /** Prázdné „kdo" znamená oba — a to je jediný stav, který není riziko. */
+    /** Host galerie v krytí domácnosti nefiguruje — jeho jméno znamená „oba". */
+    public function test_kryti_domacnosti_nezapise_hosta(): void
+    {
+        $host = User::factory()->create(['name' => 'Bára']);
+        $this->prostor->members()->attach($host->id, ['role' => 'viewer']);
+
+        $this->postJson('/api/zaznamy/bus', ['name' => 'Jak se přepíná bojler', 'who' => 'Bára'])->assertOk();
+
+        $this->assertNull(DB::table('couple_bus_items')->where('name', 'Jak se přepíná bojler')->value('owner_user_id'));
+    }
+
     public function test_bez_jmena_to_umi_oba(): void
     {
         $this->postJson('/api/zaznamy/bus', ['name' => 'Kde je hasicí přístroj'])->assertOk();

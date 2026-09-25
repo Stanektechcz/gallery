@@ -56,6 +56,32 @@ class PripomenutiTest extends TestCase
             ->assertJsonPath('zprava', 'Připomínka odešla do telefonu — Makinka');
     }
 
+    /**
+     * Host galerie není „ten druhý".
+     *
+     * Druhý člen se bral jako kdokoli v prostoru kromě mě — host (viewer),
+     * který přibyl dřív než partner, tak dostal připomínku dvojice do telefonu.
+     */
+    public function test_pripominka_nejde_hostovi(): void
+    {
+        $prostor = GallerySpace::sole();
+        $prostor->members()->detach($this->maki->id);
+        $host = User::factory()->create(['name' => 'Bára Hostová']);
+        $prostor->members()->attach($host->id, ['role' => 'viewer']);
+        $partnerka = User::factory()->create(['name' => 'Eliška Nová']);
+        $prostor->members()->attach($partnerka->id, ['role' => 'editor']);
+
+        $push = Mockery::mock(WebPushService::class);
+        $push->shouldReceive('sendToUser')->once()
+            ->withArgs(fn (User $komu) => $komu->is($partnerka))
+            ->andReturn(1);
+        $this->app->instance(WebPushService::class, $push);
+
+        $this->postJson('/api/pripomenout', ['text' => 'Vezmeš cestou chleba?'])
+            ->assertOk()
+            ->assertJsonPath('zprava', 'Připomínka odešla do telefonu — Eliška');
+    }
+
     /** Bez zapnutých upozornění se neřekne „odesláno". */
     public function test_bez_odberu_rekne_pravdu(): void
     {

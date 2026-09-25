@@ -6,6 +6,7 @@ use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Mechanismy;
 use App\Services\Obsah\Rozhodovani;
 use App\Support\Cas;
@@ -355,7 +356,12 @@ class ZaznamController extends Controller
             return null;
         }
 
-        $lide = $prostor->members()->pluck('users.id', 'users.name')->all();
+        // Jen dvojice: host galerie (viewer/contributor) v krytí domácnosti
+        // nefiguruje, jeho jméno znamená „oba". Vlastník je vlastník i s výchozí rolí.
+        $lide = $prostor->members()
+            ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                ->orWhere('users.id', (int) $prostor->owner_id))
+            ->pluck('users.id', 'users.name')->all();
 
         return $lide[$jmeno] ?? null;
     }

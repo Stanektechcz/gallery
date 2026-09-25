@@ -12,8 +12,10 @@ use App\Models\Wallet;
 use App\Services\Obsah\Finance;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Ramsey\Uuid\Uuid;
 
 /**
  * Ruční platba z rychlého zápisu.
@@ -32,6 +34,9 @@ class RucniPlatbaController extends Controller
     use UrcujePar;
     use VraciObsah;
 
+    /** Jmenný prostor pro klíče ručních plateb — stálý, ať klíč vyjde vždy stejně. */
+    private const PROSTOR_KLICU = '5c2f7e1a-8d43-4b6e-a1f9-2e7d0c9b4a63';
+
     public function __construct(private readonly Finance $obsah) {}
 
     public function __invoke(Request $request): JsonResponse
@@ -48,11 +53,10 @@ class RucniPlatbaController extends Controller
             'klic' => ['nullable', 'string', 'max:64'],
         ]);
 
-        if (! empty($data['klic'])) {
-            $uz = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
-                ->where('gallery_space_id', $prostor->id)
-                ->where('client_key', $data['klic'])
-                ->first();
+        $klic = ! empty($data['klic']) ? $this->klic($data['klic']) : null;
+
+        if ($klic !== null) {
+            $uz = $this->podleKlice($prostor, $klic, $data['klic']);
 
             if ($uz) {
                 return $this->odpoved($prostor, 'Platba už je zapsaná', $uz);
@@ -83,25 +87,68 @@ class RucniPlatbaController extends Controller
                 ->value('id')
             : null;
 
-        $platba = Transaction::create([
-            'gallery_space_id' => $prostor->id,
-            'type' => $prijem ? 'income' : 'expense',
-            'occurred_at' => Cas::dnes()->toDateString(),
-            'wallet_from_id' => $prijem ? null : $ucet->id,
-            'wallet_to_id' => $prijem ? $ucet->id : null,
-            'amount_from' => $prijem ? null : $castka,
-            'currency_from' => $prijem ? null : $ucet->currency,
-            'amount_to' => $prijem ? $castka : null,
-            'currency_to' => $prijem ? $ucet->currency : null,
-            'description' => trim($data['popis']),
-            'category_id' => $kategorie,
-            'client_key' => $data['klic'] ?? null,
-            'state' => 'approved',
-            'created_by' => $request->user()->id,
-        ]);
+        try {
+            $platba = Transaction::create([
+                'gallery_space_id' => $prostor->id,
+                'type' => $prijem ? 'income' : 'expense',
+                'occurred_at' => Cas::dnes()->toDateString(),
+                'wallet_from_id' => $prijem ? null : $ucet->id,
+                'wallet_to_id' => $prijem ? $ucet->id : null,
+                'amount_from' => $prijem ? null : $castka,
+                'currency_from' => $prijem ? null : $ucet->currency,
+                'amount_to' => $prijem ? $castka : null,
+                'currency_to' => $prijem ? $ucet->currency : null,
+                'description' => trim($data['popis']),
+                'category_id' => $kategorie,
+                'client_key' => $klic,
+                'state' => 'approved',
+                'created_by' => $request->user()->id,
+            ]);
+        } catch (UniqueConstraintViolationException $e) {
+            // Souběh: fronta offline odeslala týž zápis dvakrát naráz a druhý
+            // pokus prošel kontrolou dřív, než první stihl zapsat. Unikát
+            // (prostor, klíč) ho zastavil — vrátí se platba, která už je.
+            $uz = $klic !== null ? $this->podleKlice($prostor, $klic, $data['klic']) : null;
+
+            if ($uz === null) {
+                throw $e;
+            }
+
+            return $this->odpoved($prostor, 'Platba už je zapsaná', $uz);
+        }
 
         return $this->odpoved($prostor, ($prijem ? 'Příjem' : 'Platba').' zapsána na účet '.$ucet->name
             .($kategorie ? '' : ' — zařaďte ji do kategorie'), $platba, 201);
+    }
+
+    /**
+     * Klíč klienta → hodnota do sloupce `client_key`.
+     *
+     * Sloupec je `uuid` (na MySQL char(36)), klient ale posílá i delší klíče —
+     * dárek třeba „dar-" + uuid, 40 znaků, a striktní MySQL takový zápis
+     * shodil na 500. Uloží se proto uuid5 odvozené z klíče, stejně jako
+     * u plateb z výpisu (`ImportVypisuController`): týž klíč dá vždy totéž uuid.
+     */
+    private function klic(string $klic): string
+    {
+        return Uuid::uuid5(self::PROSTOR_KLICU, 'rucne:'.$klic)->toString();
+    }
+
+    /**
+     * Platba se stejným klíčem.
+     *
+     * Hledá se i podle klíče tak, jak přišel — platby zapsané před odvozováním
+     * nesou klíč klienta přímo a opakované odeslání z fronty offline po
+     * nasazení je nesmí zdvojit. Delší klíč se do sloupce nikdy nevešel.
+     */
+    private function podleKlice(GallerySpace $prostor, string $klic, string $puvodni): ?Transaction
+    {
+        $klice = mb_strlen($puvodni) <= 36 ? [$klic, $puvodni] : [$klic];
+
+        return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('client_key', $klice)
+            ->first();
     }
 
     private function odpoved(GallerySpace $prostor, string $zprava, Transaction $platba, int $kod = 200): JsonResponse

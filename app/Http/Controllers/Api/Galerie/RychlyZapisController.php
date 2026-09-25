@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Denik;
 use App\Services\Obsah\Planovani;
 use App\Services\Planning\SharedTodoService;
@@ -75,7 +76,15 @@ class RychlyZapisController extends Controller
         $prirazeno = null;
 
         if ($kdo !== '') {
-            foreach ($prostor->members()->get(['users.id', 'users.name']) as $clen) {
+            // Jen dvojice — host galerie se stejným křestním jménem úkol nedostane.
+            // Vlastník je vlastník i s výchozí rolí.
+            $dvojice = $prostor->members()
+                ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                    ->orWhere('users.id', (int) $prostor->owner_id))
+                ->orderBy('users.id')
+                ->get(['users.id', 'users.name']);
+
+            foreach ($dvojice as $clen) {
                 $krestni = mb_strtolower(Str::before(trim((string) $clen->name), ' '));
 
                 if ($krestni !== '' && str_starts_with($kdo, $krestni)) {
