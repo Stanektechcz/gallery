@@ -110,6 +110,11 @@ class NahravkyHostuTest extends TestCase
         // sousedních souborů výš.
         touch(Storage::disk('local')->path($cerstvy), now()->getTimestamp());
 
+        // Exporty a složené nahrávky úklid hledá přímo pod `storage_path()`,
+        // mimo falešný disk — ať test nesahá do skutečného `storage/app`.
+        $prazdnyKoren = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uklid-hoste-'.Str::random(10);
+        $this->app->useStoragePath($prazdnyKoren);
+
         $this->artisan('gallery:clean-temp')->assertExitCode(0);
 
         Storage::disk('local')->assertMissing($sirotek);
