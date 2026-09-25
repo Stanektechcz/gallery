@@ -8843,7 +8843,9 @@ class Component extends DCLogic {
       if (got && so) {
         const res = await this.bioAsk('webauthn/login', this.bioCredJson(got));
         ok = !!(res && res.token);
-        if (ok) window.GALERIE_API_TOKEN = res.token;
+        // Otisk mění token mimo `signIn` — `load()` si od serveru řekne, čí
+        // je, a datová vrstva sama pozná přepnutí účtu (`prevezmiUcet`).
+        if (ok) { window.GALERIE_API_TOKEN = res.token; if (window.GalerieApi) window.GalerieApi.load(); }
       }
       this.setState({ lockBioBusy: false });
       if (ok) this.lockOpen('Odemčeno otiskem · ' + (L.WHO[who] || ''));

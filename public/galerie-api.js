@@ -158,9 +158,27 @@
 
   // Server řekl, komu patří aktuální token. Cizí čekající zápis se zahodí —
   // neodejde pod nikým jiným; zápis bez autora (vznikl, když to karta nevěděla) se přivlastní.
+  /*
+   * Přihlášení jiným účtem nesmí zdědit kopii toho předchozího.
+   *
+   * Přihlášení na tomtéž zařízení jiným účtem (dvojice si ho půjčuje, „Jiný
+   * účet" na zamčené obrazovce) nechávalo `data`/`rev` v paměti i kopii
+   * v localStorage a v cache workeru po tom prvním — offline pak dostal
+   * druhý účet jeho `/api/state` i `/api/data/*`. Známý předchozí účet, který
+   * se liší od nově přihlášeného, nebo neznámý předchozí, ale s už
+   * existující kopií (typicky otisk prstu — mění token mimo `signIn`), se
+   * bere jako přepnutí účtu: kopie i mezipaměť se zahodí a paměť se vyprázdní
+   * dřív, než volající stihne načíst čerstvá data a poslat je odběratelům.
+   * Týž účet se nedotkne ničeho — ani rozepsaného zápisu nového účtu.
+   */
   function prevezmiUcet(id) {
-    if (id === undefined || id === null || id === '') return;
+    if (id === undefined || id === null || id === '') return false;
     var novy = String(id);
+    var jinyUcet = kdo ? kdo !== novy : Object.keys(data).length > 0;
+    if (jinyUcet) {
+      zahodKopieDat();
+      data = {}; rev = 0; lastError = null;
+    }
     if (pendingUcet && pendingUcet !== novy) {
       pending = {}; pendingUcet = null; poJednom = false; odmitnutyToken = undefined;
     }
@@ -169,6 +187,7 @@
     kdoToken = window.GALERIE_API_TOKEN || null;
     try { localStorage.setItem('galerie.ucet', novy); } catch (e) {}
     writeLocal();
+    return jinyUcet;
   }
   function teloZapisu(patch, ucet) {
     var t = { data: patch, rev: rev };
@@ -827,7 +846,10 @@
             try { localStorage.setItem('galerie.token', b.token); } catch (e) {}
             // Co čekalo na přihlášení, odejde hned — ale jen když se přihlásil
             // týž účet. Jinak by jeho zápis odešel pod ní (`prevezmiUcet` ho zahodí).
-            if (b.user) prevezmiUcet(b.user.id);
+            // Odpověď na přihlášení stav dvojice nenese — po přepnutí účtu se
+            // proto hned načte znovu, ať odběratelé nevykreslí prázdno ani
+            // zbytek toho předchozího.
+            if (b.user && prevezmiUcet(b.user.id)) self.load();
             if (Object.keys(pending).length) schedule(450);
           }
           return b;

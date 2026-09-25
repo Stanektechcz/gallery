@@ -366,9 +366,29 @@ JS,
         return r;
 JS,
 
+            /*
+             * Do paměti jen to, co offline režim doopravdy potřebuje.
+             *
+             * Worker ukládal kopii **každé** úspěšné odpovědi pod `/api/` — i ZIP
+             * archivu celého alba (`GalerieApi.download('alba/{id}/archiv')`),
+             * dokumentů, avatarů a dalších binárních adres. Zůstávaly v paměti
+             * do odhlášení nebo nasazení a s každým stažením rostly o desítky
+             * megabajtů, které offline režim nikdy nečte.
+             *
+             * Vyjmenovat, co se ukládat **nemá**, by šlo jen dokola — binárních
+             * adres pod `/api/` přibývá (dokumenty, avatary, exporty, ics,
+             * stahování rezervací, ZIP alba i knihy…) a nová by mezerou v seznamu
+             * snadno proklouzla. Bezpečnější je vyjmenovat naopak to málo, co
+             * offline aplikace čte: stav dvojice, jeho skupiny a mechanismy.
+             */
             "  // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.\n  if (url.pathname.indexOf('/api/') >= 0) {" => <<<'JS'
   // Soubory (náhledy, originály, obrázky z chatu, nahrávky) nechat prohlížeči a jeho HTTP paměti.
   if (/\/api\/(media|chat)\/[^/]+\/(thumb|raw|nahled|obrazek|video)$|\/api\/v1\/voice-notes\/[^/]+\/stream$|^\/files\//.test(url.pathname)) return;
+  // Do paměti jen povolený seznam datových adres — zbytek pod /api/ (ZIP archiv
+  // alba, dokumenty, avatary, exporty, streamy, stahování…) jde vždycky přímo
+  // do sítě a workerova paměť ho nikdy nedrží. `admin` a `storage` načítá
+  // hlavička při startu; bez kopie by offline panel spadl na čísla z ukázky.
+  if (!/^\/api\/(state|data(\/[^/]+)?|mechanisms|admin|storage)$/.test(url.pathname)) return;
   // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.
   if (url.pathname.indexOf('/api/') >= 0) {
 JS,

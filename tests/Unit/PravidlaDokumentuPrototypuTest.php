@@ -924,4 +924,47 @@ class PravidlaDokumentuPrototypuTest extends TestCase
         $this->assertNotEmpty($doruc, 'GalerieApi.dorucNeodeslane() se nenašla.');
         $this->assertStringContainsString('if (Object.keys(pending).length) schedule(', $doruc[1]);
     }
+
+    /**
+     * Přihlášení jiným účtem nesmí zdědit kopii toho předchozího.
+     *
+     * Přihlášení jiným účtem na stejném zařízení (dvojice si ho půjčuje,
+     * „Jiný účet" na zamčené obrazovce) nechávalo `data`/`rev` v paměti
+     * a kopii v localStorage i v cache workeru po tom prvním — offline pak
+     * dostal druhý účet jeho `/api/state` i `/api/data/*`. Přepnutí účtu
+     * (`prevezmiUcet`) proto samo zahodí kopii a vyprázdní paměť dřív, než
+     * odběratelé uvidí cokoli — a `signIn` po přepnutí hned načte čerstvá
+     * data, protože odpověď na přihlášení stav dvojice nenese.
+     */
+    public function test_prihlaseni_jinym_uctem_zahodi_kopii_predchoziho(): void
+    {
+        $api = (string) file_get_contents(dirname(__DIR__, 2).'/public/galerie-api.js');
+
+        preg_match('/function prevezmiUcet\(id\) \{\n(.*?)\n  \}\n/s', $api, $telo);
+        $this->assertNotEmpty($telo, 'GalerieApi: prevezmiUcet(id) se nenašla.');
+        $telo = $telo[1];
+
+        // Pozná přepnutí: známý účet, který se liší, i neznámý s existující kopií.
+        $this->assertStringContainsString('var jinyUcet = kdo ? kdo !== novy : Object.keys(data).length > 0;', $telo);
+        // Kopii zahodí a paměť vyprázdní, než se cokoli přepíše novými daty.
+        $this->assertStringContainsString('if (jinyUcet) {', $telo);
+        $this->assertStringContainsString('zahodKopieDat();', $telo);
+        $this->assertStringContainsString('data = {}; rev = 0;', $telo);
+        // Volající pozná, jestli šlo o přepnutí (aby si řekl o čerstvá data).
+        $this->assertStringContainsString('return jinyUcet;', $telo);
+
+        // signIn odpověď stav dvojice nenese — po přepnutí si ho hned dotáhne.
+        $this->assertStringContainsString('if (b.user && prevezmiUcet(b.user.id)) self.load();', $api);
+
+        // Otisk (WebAuthn) mění token mimo signIn — obě rozvržení si po něm
+        // řeknou serveru, čí je, ať datová vrstva pozná přepnutí sama.
+        foreach (['galerie-desktop.dc.html', 'galerie-mobil.dc.html'] as $nazev) {
+            $dokument = self::dokument($nazev);
+            $this->assertStringContainsString(
+                'if (ok) { window.GALERIE_API_TOKEN = res.token; if (window.GalerieApi) window.GalerieApi.load(); }',
+                $dokument,
+                $nazev
+            );
+        }
+    }
 }

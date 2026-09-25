@@ -279,7 +279,7 @@ class DoruceniTest extends TestCase
         $this->assertStringContainsString('if (ucet) t.ucet = ucet;', $api);
         $this->assertStringContainsString('if (!Object.keys(pending).length) pendingUcet = kdoTed();', $api);
         $this->assertStringContainsString("if (pendingUcet && pendingUcet !== novy) {\n      pending = {};", $api);
-        $this->assertStringContainsString('if (b.user) prevezmiUcet(b.user.id);', $api);
+        $this->assertStringContainsString('if (b.user && prevezmiUcet(b.user.id)) self.load();', $api);
         $this->assertStringContainsString('if ((window.GALERIE_API_TOKEN || null) === tokenCteni) prevezmiUcet(b.ucet);', $api);
         $this->assertStringContainsString("if (mode === 'http' && pendingUcet && tokenBezUctu() && overUcet()) return;", $api);
         $this->assertStringContainsString('if (e && e.jinyUcet) {', $api);
@@ -351,6 +351,53 @@ class DoruceniTest extends TestCase
 
         $api = File::get(public_path('galerie-api.js'));
         $this->assertStringContainsString("return n.indexOf('galerie-data-') === 0;", $api);
+    }
+
+    /**
+     * Paměť workera drží jen povolené datové adresy, ne každé stažení.
+     *
+     * Worker ukládal kopii **každé** úspěšné odpovědi pod `/api/` — i ZIP archiv
+     * celého alba (`GalerieApi.download('alba/{id}/archiv')`), dokumenty
+     * integrací, avatary a další binární adresy — a držel ji až do odhlášení
+     * nebo nasazení. Paměť tak rostla o desítky megabajtů, které offline režim
+     * nikdy nečte. Povolený seznam nechává jen to, co offline aplikace
+     * doopravdy potřebuje: stav dvojice, jeho skupiny a mechanismy.
+     */
+    public function test_worker_uklada_jen_povolene_datove_adresy(): void
+    {
+        $worker = (string) $this->get('/sw.js')->assertOk()->getContent();
+
+        $this->assertStringContainsString(
+            'if (!/^\\/api\\/(state|data(\\/[^/]+)?|mechanisms|admin|storage)$/.test(url.pathname)) return;',
+            $worker
+        );
+        // Náhrada musí stát před blokem, který ukládá do paměti — jinak by se nepoužila.
+        $this->assertLessThan(
+            strpos($worker, "if (url.pathname.indexOf('/api/') >= 0) {"),
+            strpos($worker, 'test(url.pathname)) return;')
+        );
+
+        // Vytáhnout regex ze served workeru a ověřit ho přímo — vyjmenované
+        // adresy prochází, binární a exportní adresy ne.
+        preg_match("/if \(!(\\/.*?\\/)\\.test\\(url\\.pathname\\)\\) return;/", $worker, $m);
+        $this->assertNotEmpty($m, 'Regex povoleného seznamu se v serveru workeru nenašel.');
+        $regex = '#'.trim($m[1], '/').'#';
+
+        // `admin` a `storage` čte hlavička při startu — offline by jinak panel ukázal ukázku.
+        foreach (['/api/state', '/api/data', '/api/data/pribeh', '/api/mechanisms', '/api/admin', '/api/storage'] as $povolena) {
+            $this->assertSame(1, preg_match($regex, $povolena), $povolena.' má projít filtrem (smí se ukládat).');
+        }
+        foreach ([
+            '/api/alba/11111111-1111-1111-1111-111111111111/archiv',
+            '/api/v1/dokumenty/11111111-1111-1111-1111-111111111111',
+            '/api/v1/avatar/11111111-1111-1111-1111-111111111111',
+            '/api/v1/exports/1/download',
+            '/api/v1/books/11111111-1111-1111-1111-111111111111/export/zip',
+            '/api/v1/calendar/ics-export',
+            '/api/media/11111111-1111-1111-1111-111111111111/raw',
+        ] as $binarni) {
+            $this->assertSame(0, preg_match($regex, $binarni), $binarni.' nesmí projít filtrem (neukládá se).');
+        }
     }
 
     /**
