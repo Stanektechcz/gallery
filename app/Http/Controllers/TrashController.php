@@ -46,10 +46,9 @@ class TrashController extends Controller
     public function restore(Request $request, string $uuid): JsonResponse
     {
         $space = $this->prostorDvojice($request);
-        $media = MediaItem::where('uuid', $uuid)
-            ->where('gallery_space_id', $space->id)
-            ->whereNotNull('trashed_at')
-            ->firstOrFail();
+        // Přes `vKosi()`: se zamčeným trezorem skrytá položka „neexistuje".
+        // Dřív ji vrátil z koše každý, kdo znal její uuid.
+        $media = $this->vKosi($space)->where('uuid', $uuid)->firstOrFail();
 
         $media->update(['trashed_at' => null, 'purge_after' => null]);
         AuditLog::record('media.restore', $media);
@@ -62,9 +61,9 @@ class TrashController extends Controller
         $space = $this->prostorDvojice($request);
         $uuids = $request->validate(['uuids' => 'required|array|max:200', 'uuids.*' => 'string'])['uuids'];
 
-        $count = MediaItem::where('gallery_space_id', $space->id)
+        // Skryté se zamčeným trezorem se přeskočí, jako by v seznamu nebyly.
+        $count = $this->vKosi($space)
             ->whereIn('uuid', $uuids)
-            ->whereNotNull('trashed_at')
             ->update(['trashed_at' => null, 'purge_after' => null]);
 
         return response()->json(['count' => $count]);
@@ -164,7 +163,7 @@ class TrashController extends Controller
     }
 
     /**
-     * Co koš ukazuje, s tím se smí nevratně pracovat — nic víc.
+     * Co koš ukazuje, s tím se smí pracovat (vracet i nevratně mazat) — nic víc.
      *
      * Jen položky opravdu v koši (dřív šlo trvale smazat i fotku z knihovny)
      * a skryté jen s odemčeným trezorem: „Vysypat koš" by jinak smazal
