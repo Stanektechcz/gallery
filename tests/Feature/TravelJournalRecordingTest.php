@@ -81,6 +81,28 @@ class TravelJournalRecordingTest extends TestCase
         $this->assertDatabaseMissing('album_story_blocks', ['album_id' => $this->albumId]);
     }
 
+    /**
+     * Hlasová vzpomínka zůstává jen v prohlížeči.
+     *
+     * `response()->file()` dělá odpověď veřejnou a `private` z hlaviček tiše
+     * přepsal na `public` — soukromou nahrávku tak mohla uložit i sdílená
+     * mezipaměť (proxy, CDN).
+     */
+    public function test_nahravka_se_neuklada_do_sdilene_mezipameti(): void
+    {
+        $entry = $this->post("/api/v1/trips/{$this->tripId}/journal-recordings", [
+            'recording' => UploadedFile::fake()->create('moment.webm', 32, 'audio/webm'),
+            'duration_ms' => 1000, 'visibility' => 'private',
+        ])->assertCreated()->json();
+
+        $hlavicka = (string) $this->get("/api/v1/trips/{$this->tripId}/journal/{$entry['id']}/recording")
+            ->assertOk()->headers->get('Cache-Control');
+
+        $this->assertStringContainsString('private', $hlavicka);
+        $this->assertStringContainsString('max-age=3600', $hlavicka);
+        $this->assertStringNotContainsString('public', $hlavicka);
+    }
+
     public function test_voice_upload_rejects_unsupported_files_and_read_only_writes(): void
     {
         $this->post("/api/v1/trips/{$this->tripId}/journal-recordings", ['recording' => UploadedFile::fake()->create('payload.exe', 2, 'application/octet-stream'), 'duration_ms' => 1000])->assertUnprocessable();

@@ -82,12 +82,17 @@ class TripJournalRecordingController extends Controller
             ->first(['recording.*']);
         abort_unless($recording && Storage::disk($recording->disk)->exists($recording->path), 404);
 
+        /*
+         * `setPrivate()` až po sestavení odpovědi: `response()->file()` ji dělá
+         * veřejnou a `private` z hlaviček tiše přepsal na `public` — soukromou
+         * nahrávku by tak mohla uložit i sdílená mezipaměť (proxy, CDN).
+         */
         return response()->file(Storage::disk($recording->disk)->path($recording->path), [
             'Content-Type' => $recording->mime_type,
             'Content-Disposition' => 'inline; filename="hlasova-vzpominka.'.pathinfo($recording->path, PATHINFO_EXTENSION).'"',
             'Cache-Control' => 'private, max-age=3600',
             'X-Content-Type-Options' => 'nosniff',
-        ]);
+        ])->setPrivate();
     }
 
     private function available(): void

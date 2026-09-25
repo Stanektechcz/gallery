@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use Illuminate\Database\Query\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -102,8 +103,11 @@ class PhotoBookController extends Controller
             'media_uuids.*' => 'string',
         ]);
 
+        // Trezor ani koš do knihy nepatří — viz `viditelne()`.
         $mediaItems = MediaItem::where('gallery_space_id', $space->id)
             ->whereIn('uuid', $v['media_uuids'])
+            ->where('is_hidden', false)
+            ->whereNull('trashed_at')
             ->get(['id', 'uuid']);
 
         $maxOrder = DB::table('photo_book_items')->where('photo_book_id', $book->id)->max('sort_order') ?? -1;
@@ -173,10 +177,10 @@ class PhotoBookController extends Controller
         $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
-        $rows = DB::table('photo_book_items')
+        $rows = $this->viditelne(DB::table('photo_book_items')
             ->join('media_items', 'media_items.id', '=', 'photo_book_items.media_item_id')
             ->where('photo_book_items.photo_book_id', $book->id)
-            ->where('media_items.gallery_space_id', $space->id)
+            ->where('media_items.gallery_space_id', $space->id))
             ->orderBy('photo_book_items.sort_order')
             ->get(['media_items.id', 'media_items.original_filename']);
 
@@ -220,10 +224,10 @@ class PhotoBookController extends Controller
         $book = $this->resolve($uuid, $request);
         $space = $request->user()->gallerySpaces()->first();
 
-        $rows = DB::table('photo_book_items')
+        $rows = $this->viditelne(DB::table('photo_book_items')
             ->join('media_items', 'media_items.id', '=', 'photo_book_items.media_item_id')
             ->where('photo_book_items.photo_book_id', $book->id)
-            ->where('media_items.gallery_space_id', $space->id)
+            ->where('media_items.gallery_space_id', $space->id))
             ->orderBy('photo_book_items.sort_order')
             ->get([
                 'media_items.uuid',
@@ -287,21 +291,45 @@ class PhotoBookController extends Controller
         return $book;
     }
 
+    /**
+     * Jen fotky, které smí z knihy ven: ne z trezoru a ne z koše.
+     *
+     * Fotka, která do trezoru odešla až po přidání do knihy, v ní zůstávala —
+     * se jménem a podepsaným náhledem na obrazovce knihy a s originálem
+     * v ZIPu, i se zamčeným trezorem. Kniha je na tisk a dárek, tedy ven,
+     * a archiv ven zamčení přežije; proto bez trezoru vždy, i s odemčeným —
+     * stejně jako export galerie a archiv alba. Řádek v knize zůstává: vrátí-li
+     * se fotka z trezoru nebo z koše, je v knize zase na svém místě.
+     *
+     * @param  Builder  $dotaz  dotaz se spojením na `media_items`
+     */
+    private function viditelne(Builder $dotaz): Builder
+    {
+        return $dotaz->where('media_items.is_hidden', false)->whereNull('media_items.trashed_at');
+    }
+
     private function enrichBook(object $book): array
     {
         $data = (array) $book;
 
+        // Počet jen toho, co kniha ukáže — jinak prozradí, kolik v ní leží z trezoru.
+        $data['item_count'] = $this->viditelne(DB::table('photo_book_items')
+            ->join('media_items', 'media_items.id', '=', 'photo_book_items.media_item_id')
+            ->where('photo_book_items.photo_book_id', $book->id))
+            ->count();
+
         // Cover thumbnail
         $cover = null;
         if ($book->cover_media_id) {
-            $m = MediaItem::with('variants')->find($book->cover_media_id);
+            $m = MediaItem::with('variants')->where('is_hidden', false)->whereNull('trashed_at')->find($book->cover_media_id);
             $cover = $m?->thumbnail_url;
         }
         if (! $cover) {
-            $firstId = DB::table('photo_book_items')
-                ->where('photo_book_id', $book->id)
-                ->orderBy('sort_order')
-                ->value('media_item_id');
+            $firstId = $this->viditelne(DB::table('photo_book_items')
+                ->join('media_items', 'media_items.id', '=', 'photo_book_items.media_item_id')
+                ->where('photo_book_items.photo_book_id', $book->id))
+                ->orderBy('photo_book_items.sort_order')
+                ->value('photo_book_items.media_item_id');
             if ($firstId) {
                 $m = MediaItem::with('variants')->find($firstId);
                 $cover = $m?->thumbnail_url;
@@ -314,9 +342,9 @@ class PhotoBookController extends Controller
 
     private function getItems(int $bookId): array
     {
-        $rows = DB::table('photo_book_items')
+        $rows = $this->viditelne(DB::table('photo_book_items')
             ->join('media_items', 'media_items.id', '=', 'photo_book_items.media_item_id')
-            ->where('photo_book_items.photo_book_id', $bookId)
+            ->where('photo_book_items.photo_book_id', $bookId))
             ->orderBy('photo_book_items.sort_order')
             ->get([
                 'photo_book_items.id',
