@@ -13,13 +13,14 @@ use Illuminate\Support\Facades\DB;
 /**
  * Večerní souhrn místo drobností během dne.
  *
- * Kdo si souhrn zapne, dostane jednu zprávu navečer a nízkoprioritní upozornění mu
- * během dne nechodí vůbec — o to jde. Souhrn, který přibude k pěti stávajícím
- * upozorněním, situaci zhoršuje.
+ * Kdo si souhrn zapne, dostane jednu zprávu navečer a nízkoprioritní upozornění se
+ * mu během dne jednotlivě neohlašují — o to jde. Souhrn, který přibude k pěti
+ * stávajícím upozorněním, situaci zhoršuje.
  *
- * Sbírá se z toho, co se opravdu stalo. Zastavená upozornění nikde nezůstala, takže
- * držet frontu čekajících textů by znamenalo další tabulku a další místo, kde se něco
- * rozejde; sečíst dnešek z databáze je spolehlivější.
+ * Drobnosti se přitom ukládají do schránky se značkou `digest`
+ * (`NotificationPreferenceService::patriDoSouhrnu`) — dřív je `via()` zahodilo
+ * a souhrn neměl co spočítat. Sčítá se tedy dnešek přímo z tabulky upozornění,
+ * žádná další fronta čekajících textů.
  */
 class NotificationDigestCommand extends Command
 {
@@ -56,13 +57,21 @@ class NotificationDigestCommand extends Command
             }
 
             // Nepřečtená upozornění z dneška, po kategoriích. Přečtené se nepřipomínají —
-            // člověk je viděl a souhrn není výpis historie.
+            // člověk je viděl a souhrn není výpis historie. Patří sem i drobnosti se
+            // značkou `digest`: ty se během dne jednotlivě neohlásily, jen uložily.
+            //
+            // Název kategorie podle `category`, ne `category_label`: to se do
+            // upozornění neukládá, a souhrn tak psal pokaždé jen „Ostatní (N)".
             $souhrn = DB::table('notifications')
+                ->where('notifiable_type', $user->getMorphClass())
                 ->where('notifiable_id', $user->id)
                 ->whereNull('read_at')
                 ->where('created_at', '>=', $od)
                 ->pluck('data')
-                ->map(fn ($json) => json_decode($json, true)['category_label'] ?? 'Ostatní')
+                ->map(fn ($json) => (array) json_decode((string) $json, true))
+                // Souhrn sám sebe nepočítá (třeba při druhém běhu s `--force`).
+                ->reject(fn (array $data) => ($data['type'] ?? null) === 'system.digest')
+                ->map(fn (array $data) => $preferences->metadata((string) ($data['type'] ?? ''), $data)['category_label'])
                 ->countBy();
 
             if ($souhrn->isEmpty()) {

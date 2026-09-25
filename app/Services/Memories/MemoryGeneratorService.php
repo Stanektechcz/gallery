@@ -120,9 +120,17 @@ class MemoryGeneratorService
 
         $cards = [];
 
+        // Bez `whereNull('deleted_at')`: `calendar_events` měkké mazání nemá (akce se
+        // maže natvrdo). SQLite neznámý sloupec v uvozovkách bere jako text, takže
+        // testy tiše nedostaly nic — produkční MySQL na tom padala a `gallery:memories`
+        // skončil výjimkou pro všechny prostory.
         $events = CalendarEvent::withoutGlobalScopes()
             ->where('gallery_space_id', $space->id)
-            ->whereNull('deleted_at')
+            // Karta i upozornění patří celému prostoru, takže jen společné akce: název
+            // soukromé akce jednoho (překvapení, dárek) by jinak dostal partner ráno
+            // v upozornění. Zrušená akce se nekonala — není na co vzpomínat.
+            ->where('is_private', false)
+            ->where('status', '!=', 'cancelled')
             // whereMonth/whereDay fungují na MySQL i SQLite; `strftime()` je jen SQLite
             // a na produkční MySQL by tenhle dotaz padal každé ráno pro každý prostor.
             ->whereMonth('starts_at', $day->month)

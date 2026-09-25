@@ -4,6 +4,7 @@ namespace App\Notifications;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Notifications\NotificationPreferenceService;
 use Illuminate\Notifications\Notification;
 
@@ -33,7 +34,9 @@ class GalleryNotification extends Notification
 
     public function toDatabase(object $notifiable): array
     {
-        $metadata = app(NotificationPreferenceService::class)->metadata($this->type, ['extra' => $this->extra, 'link' => $this->link]);
+        $predvolby = app(NotificationPreferenceService::class);
+        $kontext = ['extra' => $this->extra, 'link' => $this->link];
+        $metadata = $predvolby->metadata($this->type, $kontext);
 
         return [
             'type' => $this->type,
@@ -44,6 +47,9 @@ class GalleryNotification extends Notification
             'category' => $metadata['category'],
             'priority' => $metadata['priority'],
             'context_key' => $metadata['context_key'],
+            // Drobnost pro toho, kdo si zapnul souhrn: jen ve schránce, ohlásí ji
+            // večerní souhrn (`gallery:notification-digest`), ne tahle zpráva sama.
+            'digest' => $notifiable instanceof User && $predvolby->patriDoSouhrnu($notifiable, $this->type, $kontext),
         ];
     }
 
@@ -71,9 +77,9 @@ class GalleryNotification extends Notification
     /**
      * Upozornit jen vyjmenované účty.
      *
-     * `notifySpace()` níž píše všem členům prostoru — i hostům. U věcí, které
-     * patří jen dvojici (návrh smazat fotku), rozhoduje volající, komu přesně
-     * zpráva patří, a tady se jen doručí.
+     * `notifySpace()` níž píše celé dvojici kromě autora. Kde má zpráva jít
+     * jen někomu konkrétnímu (návrh smazat fotku), rozhoduje volající, komu
+     * přesně patří, a tady se jen doručí.
      *
      * @param  iterable<int>  $userIds
      */
@@ -101,7 +107,11 @@ class GalleryNotification extends Notification
     }
 
     /**
-     * Convenience: notify all members of a gallery space except the given user.
+     * Upozornit dvojici prostoru kromě autora.
+     *
+     * Jen dvojice (`PristupDoGalerie::dvojice`), ne všichni členové: host (divák,
+     * přispěvatel) by si jinak ve schránce přečetl jméno nahraného souboru, počty
+     * z bankovního importu nebo import kalendáře — obsah, který mu nepatří.
      */
     public static function notifySpace(
         GallerySpace $space,
@@ -111,7 +121,8 @@ class GalleryNotification extends Notification
         ?string $link = null,
         array $extra = [],
     ): void {
-        $members = $space->members()->where('users.id', '!=', $exceptUserId)->get();
+        $members = app(PristupDoGalerie::class)->dvojice($space)
+            ->reject(fn (User $member) => (int) $member->id === $exceptUserId);
         foreach ($members as $member) {
             $member->notify(new self($type, $message, $link, null, $extra + [
                 'gallery_space_id' => $space->id,

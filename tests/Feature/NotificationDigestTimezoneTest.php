@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
+use App\Notifications\GalleryNotification;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 use Tests\TestCase;
 
 /**
@@ -30,25 +30,20 @@ class NotificationDigestTimezoneTest extends TestCase
         ]);
 
         // 22:30 UTC dne 24. 9. je 00:30 v Praze dne 25. 9. — dnešek dvojice,
-        // i když je to ještě včerejší UTC datum.
-        DB::table('notifications')->insert([
-            'id' => (string) Str::uuid(),
-            'type' => 'App\\Notifications\\GalleryNotification',
-            'notifiable_type' => User::class,
-            'notifiable_id' => $user->id,
-            'data' => json_encode(['category_label' => 'Ostatní']),
-            'read_at' => null,
-            'created_at' => '2026-09-24 22:30:00',
-            'updated_at' => '2026-09-24 22:30:00',
-        ]);
+        // i když je to ještě včerejší UTC datum. Skutečné upozornění, ne ručně
+        // vložený řádek: ten dřív nesl `category_label`, které skutečná
+        // upozornění nemají, a zakrýval tak, že souhrn psal jen „Ostatní".
+        $this->travelTo(Carbon::parse('2026-09-24 22:30:00', 'UTC'));
+        $user->notify(new GalleryNotification('calendar.task.due_soon', 'Brzy je potřeba dokončit: Nákup.'));
+        $this->travelTo(Carbon::parse('2026-09-25 18:30:00', 'UTC'));
 
         $this->artisan('gallery:notification-digest')->assertSuccessful();
 
-        $this->assertDatabaseHas('notifications', [
-            'notifiable_id' => $user->id,
-            'type' => 'App\\Notifications\\GalleryNotification',
-        ]);
         $this->assertSame(2, DB::table('notifications')->where('notifiable_id', $user->id)->count(),
             'Souhrn se měl poslat jako druhá zpráva navíc k té z 00:30.');
+        $souhrn = DB::table('notifications')->where('notifiable_id', $user->id)->get()
+            ->map(fn ($radek) => json_decode($radek->data, true))
+            ->firstWhere('type', 'system.digest');
+        $this->assertStringContainsString('Plány a úkoly (1)', (string) ($souhrn['message'] ?? ''));
     }
 }

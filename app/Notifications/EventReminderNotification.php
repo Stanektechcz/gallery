@@ -39,6 +39,13 @@ class EventReminderNotification extends Notification
         ];
     }
 
+    /**
+     * Začátek se v e-mailu nepřevádí do Prahy — už v pražských hodinách je.
+     *
+     * `starts_at` se ukládá tak, jak ho člověk zadal (prototyp i kalendář posílají
+     * místní čas bez pásma; viz `App\Support\Cas::zHodin`). Převod `->timezone()`
+     * by akci v 18:00 ohlásil na 20:00.
+     */
     public function toMail(object $notifiable): MailMessage
     {
         return (new MailMessage)

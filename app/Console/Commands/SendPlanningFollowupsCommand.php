@@ -49,7 +49,10 @@ class SendPlanningFollowupsCommand extends Command
             if (! $recipient) {
                 continue;
             }
-            $when = Carbon::parse($task->due_at)->locale('cs')->translatedFormat('j. n. v H:i');
+            // `\v`: holé `v` je ve formátu PHP milisekundy („25. 9. 000 16:00").
+            // Bez převodu pásma — termín je zapsaný podle pražských hodin, stejně
+            // jako začátek akce, ze kterého se často odvozuje (viz `App\Support\Cas`).
+            $when = Carbon::parse($task->due_at)->format('j. n. \v H:i');
             $recipient->notify(new GalleryNotification('calendar.task.due_soon', "Brzy je potřeba dokončit: {$task->title} ({$task->event_title}) · termín {$when}", "/calendar/events/{$task->event_uuid}", '⏰'));
             DB::table('event_tasks')->where('id', $task->id)->update(['last_reminded_at' => now(), 'updated_at' => now()]);
             $sent++;

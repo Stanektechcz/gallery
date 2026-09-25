@@ -58,15 +58,20 @@ class PurgeTrashCommand extends Command
          */
         $fronta->with('variants')->lazyById()->each(function (MediaItem $media) use ($nasucho, &$smazano, &$bajtu) {
             if ($nasucho) {
-                $this->line('  '.$media->uuid.'  '.$media->original_filename);
+                // Jméno z trezoru ani do výpisu — výstup plánovače končí v logu.
+                $this->line('  '.$media->uuid.'  '.($media->is_hidden ? '(trezor)' : $media->original_filename));
                 $smazano++;
                 $bajtu += (int) $media->size_bytes;
 
                 return;
             }
 
-            AuditLog::record('media.purge', $media, [
+            // Jméno souboru jen mimo trezor, stejně jako `MazaniFotek::soubor()`:
+            // přehled „Dnes" jména z protokolu vypisuje, a jméno trezorové fotky
+            // by se tak ukázalo i se zamčeným trezorem.
+            AuditLog::record('media.purge', $media, ($media->is_hidden ? [] : [
                 'filename' => $media->original_filename,
+            ]) + [
                 'duvod' => 'lhůta koše',
             ]);
 

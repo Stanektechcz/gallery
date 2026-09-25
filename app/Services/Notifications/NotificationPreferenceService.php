@@ -130,24 +130,34 @@ class NotificationPreferenceService
         }
         $preferences = $this->preferences($user);
 
-        // Se zapnutým souhrnem drobnosti nechodí jednotlivě — sejdou se do jedné večerní
-        // zprávy. Smysl souhrnu je ubrat upozornění, ne přidat šesté k pěti stávajícím,
-        // takže se to, co do něj patří, tady zastaví.
-        if (($preferences['digest'] ?? false) && $meta['priority'] === 'low') {
-            return false;
-        }
-
+        /*
+         * Souhrn tady nic nezastavuje.
+         *
+         * Dřív se drobnost se zapnutým souhrnem vrátila `false` — jenže tahle metoda
+         * rozhoduje i o uložení do schránky, takže se drobnost vůbec neuložila a
+         * souhrn ji pak neměl odkud spočítat. Jestli jde jen do souhrnu, říká
+         * `patriDoSouhrnu()`; tady se posuzuje jen kategorie a priorita.
+         */
         return ($preferences['categories'][$meta['category']] ?? true)
             && $this->rank($meta['priority']) >= $this->rank($preferences['priority_floor']);
     }
 
     /**
-     * Co by se za dané období sešlo do souhrnu.
+     * Drobnost, která se jednotlivě neohlásí — jen se uloží a sejde se ve večerním souhrnu.
      *
-     * Sbírá se z toho, co se opravdu stalo, ne z odchycených upozornění: zastavená
-     * zpráva nikde nezůstala, a znovu ji vyrobit z databáze je spolehlivější než držet
-     * frontu čekajících textů.
+     * Smysl souhrnu je ubrat upozornění, ne přidat šesté k pěti stávajícím. Uloží se
+     * tedy jen do schránky (žádný push ani e-mail) se značkou `digest`, podle které
+     * ji souhrn spočítá. Prohlížeč sám ohlašuje jen důležité a kritické, takže nízká
+     * priorita zůstane v tichosti i tam.
+     *
+     * @param  array<string, mixed>  $data
      */
+    public function patriDoSouhrnu(User $user, string $type, array $data = []): bool
+    {
+        return $this->wantsDigest($user) && $this->metadata($type, $data)['priority'] === 'low';
+    }
+
+    /** Má si účet zapnutý večerní souhrn místo drobností během dne. */
     public function wantsDigest(User $user): bool
     {
         return (bool) ($this->preferences($user)['digest'] ?? false);
