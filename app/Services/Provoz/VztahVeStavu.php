@@ -13,6 +13,7 @@ use App\Models\CoupleVeto;
 use App\Models\CoupleVetoProposal;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
@@ -38,6 +39,12 @@ class VztahVeStavu
         'proms', 'nudges', 'patAuto',
     ];
 
+    /** Kolik připomínek smí přibýt jedním zápisem (viz zapisPripominky()). */
+    private const PRIPOMINEK_NARAZ = 5;
+
+    /** Nejdelší rozvaha před nákupem v hodinách — rok; `cools_until` je `timestamp`. */
+    private const ROZVAHA_NEJVIC_HODIN = 24 * 366;
+
     public function tykaSe(array $patch): bool
     {
         return array_intersect(self::SERVEROVE, array_keys($patch)) !== [];
@@ -55,7 +62,12 @@ class VztahVeStavu
             return;
         }
 
-        $jmena = array_flip($prostor->members()->pluck('users.name', 'users.id')->all());
+        $patch = Vejde::identifikatory($patch, ['decs', 'cools', 'proms', 'nudges', 'vetoProps']);
+
+        // Jen dvojice: host se jménem v seznamu by jinak mohl slibovat,
+        // žádat, navrhovat veto nebo o něčem rozhodnout za ně.
+        $jmena = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn ($clen) => [(string) $clen->name => (int) $clen->id])->all();
 
         if (is_array($patch['decs'] ?? null)) {
             $this->zapisRozhodnuti($patch['decs'], $prostor, $jmena, $kdo);
@@ -135,7 +147,8 @@ class VztahVeStavu
                 $s->update([
                     'what' => Vejde::do($r['what']),
                     'state' => in_array($stav, ['open', 'kept', 'broken'], true) ? $stav : $s->state,
-                    'due_label' => $r['due'] ?? $s->due_label,
+                    // `due_label` má 120 znaků; při založení se ořezávalo, při úpravě ne.
+                    'due_label' => isset($r['due']) ? Vejde::neboNic($r['due'], 120) : $s->due_label,
                     'due_on' => $this->terminSlibu($r, $s->due_on ? CarbonImmutable::parse($s->due_on) : null),
                     'settled_at' => in_array($stav, ['kept', 'broken'], true) ? ($s->settled_at ?? now()) : null,
                 ]);
@@ -229,7 +242,8 @@ class VztahVeStavu
                     'text' => Vejde::do($r['text']),
                     'kind' => Vejde::do($r['kind'] ?? $z->kind, 16),
                     'state' => $stav,
-                    'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
+                    // `note` má 500 znaků a z prohlížeče může přijít i pole.
+                    'note' => Vejde::neboNic($r['note'] ?? null, 500),
                     'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? ($z->closed_at ?? now()) : null,
                 ]);
 
@@ -253,7 +267,7 @@ class VztahVeStavu
                 'text' => Vejde::do($r['text']),
                 'kind' => Vejde::do($r['kind'] ?? 'cestou', 16),
                 'state' => $stav,
-                'note' => ($r['note'] ?? '') !== '' ? $r['note'] : null,
+                'note' => Vejde::neboNic($r['note'] ?? null, 500),
                 'closed_at' => in_array($stav, ['hotovo', 'odmitnuto'], true) ? now() : null,
             ]);
 
@@ -279,15 +293,27 @@ class VztahVeStavu
     private function zapisPripominky(CoupleNudge $z, int $kolik, ?User $kdo): void
     {
         $uz = $z->pripominky_count ?? $z->pripominky()->count();
-        $chybi = $kolik - (int) $uz;
 
-        for ($i = 0; $i < $chybi; $i++) {
-            CoupleNudgeReminder::create([
-                'couple_nudge_id' => $z->id,
-                'reminded_by' => $kdo?->id,
-                'created_at' => now(),
-            ]);
+        /*
+         * Nejvýš pár naráz.
+         *
+         * Číslo přichází z prohlížeče a nikdo ho nehlídal: `rem: 1000000`
+         * založilo milion řádků v transakci, která drží zámek stavu dvojice —
+         * a dokud neskončila, neuložil se nikomu z nich nic jiného. Jedno
+         * klepnutí je jedna připomínka; strop nad jedničkou je jen pro frontu
+         * v prohlížeči, která několik klepnutí bez sítě spojí do jednoho zápisu.
+         */
+        $chybi = min(self::PRIPOMINEK_NARAZ, $kolik - (int) $uz);
+
+        if ($chybi <= 0) {
+            return;
         }
+
+        CoupleNudgeReminder::insert(array_fill(0, $chybi, [
+            'couple_nudge_id' => $z->id,
+            'reminded_by' => $kdo?->id,
+            'created_at' => now(),
+        ]));
     }
 
     /**
@@ -300,7 +326,8 @@ class VztahVeStavu
      */
     private function zapisPravidla(array $mapa, GallerySpace $prostor): void
     {
-        $automatizovane = array_keys(array_filter($mapa));
+        // Text žádosti je v databázi ořezaný na šířku sloupce; klíče mapy taky.
+        $automatizovane = array_map(fn ($text) => Vejde::do($text), array_keys(array_filter($mapa)));
 
         CoupleNudge::where('gallery_space_id', $prostor->id)
             ->get()
@@ -338,7 +365,8 @@ class VztahVeStavu
             }
 
             $zaznam = $podle[$r['id']];
-            $novyStav = (string) ($r['status'] ?? $zaznam->status);
+            // `status` má 24 znaků — při založení se ořezával, při změně ne.
+            $novyStav = Vejde::do($r['status'] ?? '', 24) ?: $zaznam->status;
 
             /*
              * Změna stavu zakládá revizi.
@@ -377,13 +405,14 @@ class VztahVeStavu
             'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
             'gallery_space_id' => $prostor->id,
             'title' => Vejde::do($r['title']),
-            'decided_on' => $this->datum((string) ($r['date'] ?? '')) ?? CarbonImmutable::now(),
+            // Dnešek dvojice, ne UTC: po pražské půlnoci by UTC dalo včerejšek.
+            'decided_on' => $this->datum((string) ($r['date'] ?? '')) ?? Cas::dnes(),
             'together' => $spolecne,
             'decided_by' => $spolecne ? null : ($jmena[$kdo] ?? null),
             'status' => Vejde::do($r['status'] ?? 'platí', 24),
             'why' => array_values(array_filter((array) ($r['why'] ?? []))),
             'rejected' => array_values(array_filter((array) ($r['rejected'] ?? []))),
-            'review_note' => Vejde::neboNic($r['review'] ?? null),
+            'review_note' => Vejde::neboNic($r['review'] ?? null, 120),
         ]);
     }
 
@@ -426,13 +455,15 @@ class VztahVeStavu
                 continue;
             }
 
-            $hodin = (int) ($r['left'] ?? 72);
+            // Obří počet hodin by posunul `cools_until` za rok 2038, kam
+            // `timestamp` nesahá; nula a záporné číslo znamenají výchozích 72.
+            $hodin = Vejde::cislo($r['left'] ?? 72, 0, self::ROZVAHA_NEJVIC_HODIN);
 
             CoupleCoolingPurchase::create([
                 'client_id' => Vejde::do($r['id'], Vejde::KLIENT),
                 'gallery_space_id' => $prostor->id,
                 'what' => Vejde::do($r['what']),
-                'price' => (int) ($r['price'] ?? 0),
+                'price' => Vejde::cislo($r['price'] ?? 0, 0, Vejde::INT),
                 'requested_by' => $jmena[$r['who'] ?? ''] ?? null,
                 'opened_at' => now(),
                 'cools_until' => now()->addHours($hodin > 0 ? $hodin : 72),
@@ -461,7 +492,8 @@ class VztahVeStavu
     {
         $autor = $moje
             ? $kdo?->id
-            : $prostor->members()->where('users.id', '!=', $kdo?->id)->value('users.id');
+            // Druhý z dvojice, ne kterýkoli jiný člen — host by jinak mohl být „ten druhý".
+            : app(PristupDoGalerie::class)->dvojice($prostor)->first(fn ($clen) => (int) $clen->id !== (int) $kdo?->id)?->id;
 
         if (! $autor) {
             return;
@@ -479,7 +511,8 @@ class VztahVeStavu
 
             // Text je tu identifikátorem: prototyp body nečísluje a jediné, co
             // se na nich mění, je právě to, jestli je z podmínky přání.
-            $bod = $vDatabazi[$r['text']] ?? null;
+            // Ořezaný jako v databázi (a pole jako klíč by shodilo celý zápis).
+            $bod = $vDatabazi[Vejde::do($r['text'])] ?? null;
 
             if ($bod) {
                 $bod->update(['kind' => Vejde::do($r['kind'] ?? $bod->kind, 16)]);
@@ -529,7 +562,7 @@ class VztahVeStavu
                 'gallery_space_id' => $prostor->id,
                 'proposed_by' => $navrhl,
                 'text' => Vejde::do($r['text']),
-                'price' => (int) ($r['price'] ?? 0),
+                'price' => Vejde::cislo($r['price'] ?? 0, 0, Vejde::INT),
                 'proposed_on' => now(),
                 'outcome' => Vejde::neboNic($r['done'] ?? null, 16),
             ]);
@@ -558,9 +591,11 @@ class VztahVeStavu
                 continue;
             }
 
-            $kdo = $jmena[$r['who']] ?? null;
+            $kdo = is_scalar($r['who']) ? ($jmena[(string) $r['who']] ?? null) : null;
 
-            if (! $kdo || $zname->has($kdo.'|'.$r['text'])) {
+            // Porovnává se s tím, co leží v databázi — tedy s ořezaným textem.
+            // Dlouhé veto by se jinak nenašlo a založilo se znovu při každém zápisu.
+            if (! $kdo || $zname->has($kdo.'|'.Vejde::do($r['text']))) {
                 continue;
             }
 
@@ -577,11 +612,14 @@ class VztahVeStavu
     /** „14. 1. 2026" zpátky na datum; „dnes" je dnešek. */
     private function datum(string $text): ?CarbonImmutable
     {
+        // „Dnes" dvojice, ne serveru: v UTC je po pražské půlnoci ještě včera.
         if (trim($text) === 'dnes') {
-            return CarbonImmutable::now();
+            return Cas::dnes();
         }
 
-        if (! preg_match('/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/u', $text, $shoda)) {
+        // Tvar nestačí — „45. 13. 2026" by `createFromDate` tiše přetočil.
+        if (! preg_match('/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/u', $text, $shoda)
+            || ! checkdate((int) $shoda[2], (int) $shoda[1], (int) $shoda[3])) {
             return null;
         }
 

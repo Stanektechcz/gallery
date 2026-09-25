@@ -4,10 +4,11 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Sdileni;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
-use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -48,7 +49,9 @@ class KapsleVeStavu
             return [];
         }
 
-        $jmena = $prostor->members()->pluck('users.id', 'users.name')->all();
+        // Jen dvojice: kapsle „od hosta" by nesla podpis někoho, kdo do dvojice nepatří.
+        $jmena = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn ($clen) => [(string) $clen->name => (int) $clen->id])->all();
 
         $znama = DB::table('time_capsules')
             ->where('gallery_space_id', $prostor->id)
@@ -78,7 +81,8 @@ class KapsleVeStavu
      */
     private function zapecet(array $k, GallerySpace $prostor, User $uzivatel, array $jmena): void
     {
-        $nadpis = trim((string) ($k['title'] ?? ''));
+        // `title` má 255 znaků; delší by na MySQL shodil celý zápis stavu.
+        $nadpis = Vejde::do($k['title'] ?? '');
 
         if ($nadpis === '') {
             return;
@@ -89,7 +93,7 @@ class KapsleVeStavu
         DB::table('time_capsules')->insert([
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
-            'created_by' => $jmena[(string) ($k['from'] ?? '')] ?? $uzivatel->id,
+            'created_by' => (is_scalar($k['from'] ?? null) ? ($jmena[(string) $k['from']] ?? null) : null) ?? $uzivatel->id,
             'title' => $nadpis,
             'message' => Vejde::do($k['body'] ?? '', 5000),
             'deliver_at' => $kdy,
@@ -109,12 +113,14 @@ class KapsleVeStavu
      */
     private function termin(array $k): string
     {
-        $datum = (string) ($k['open'] ?? '');
+        // Skutečné datum, ne jen tvar: „2026-13-45" by MySQL odmítla.
+        $datum = Vejde::den($k['open'] ?? null);
 
-        if ($datum !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)) {
+        if ($datum !== null) {
             return $datum;
         }
 
-        return CarbonImmutable::now()->addYear()->toDateString();
+        // Rok ode dneška dvojice — v UTC je po pražské půlnoci ještě včera.
+        return Cas::dnes()->addYear()->toDateString();
     }
 }

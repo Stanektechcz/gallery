@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\WellbeingMood;
 use App\Support\Cas;
 use App\Support\Tabulky;
+use App\Support\Vejde;
 use Carbon\CarbonImmutable;
 
 /**
@@ -32,6 +33,13 @@ class ZdraviVeStavu
      * co partner uvidí, rozhoduje `cycle_settings.share_level`.
      */
     public const SERVEROVE = ['cycDays', 'klMood', 'cycShare', 'cycRemind', 'cycRemindDays', 'cycTrack'];
+
+    /** Meze zápisu dne — stejné jako v `CycleController`. */
+    private const BOLEST_NEJVIC = 10;
+
+    private const TEPLOTA_OD = 30.0;
+
+    private const TEPLOTA_DO = 45.0;
 
     public function tykaSe(array $patch): bool
     {
@@ -72,7 +80,11 @@ class ZdraviVeStavu
     private function zapisDny(array $dny, GallerySpace $prostor, User $kdo): void
     {
         foreach ($dny as $datum => $zapis) {
-            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', (string) $datum) || ! ($zapis === null || is_array($zapis))) {
+            // Skutečné datum, ne jen tvar: na „2026-13-45" Carbon vyhodí výjimku
+            // a s ní by spadl celý zápis stavu.
+            $datum = Vejde::den($datum);
+
+            if ($datum === null || ! ($zapis === null || is_array($zapis))) {
                 continue;
             }
 
@@ -116,13 +128,28 @@ class ZdraviVeStavu
                     'flow' => in_array($zapis['flow'] ?? 'none', CycleDay::FLOWS, true) ? $zapis['flow'] : 'none',
                     'symptoms' => array_values(array_filter((array) ($zapis['symptoms'] ?? []))),
                     'moods' => array_values(array_filter((array) ($zapis['moods'] ?? []))),
-                    'pain' => isset($zapis['pain']) && $zapis['pain'] !== null ? (int) $zapis['pain'] : null,
-                    'temperature' => isset($zapis['temp']) && $zapis['temp'] !== null ? (float) $zapis['temp'] : null,
-                    'note' => $zapis['note'] ?? null,
+                    // Stejné meze jako CycleController: bolest 0–10, teplota 30–45 °C.
+                    // `pain` je tinyint a `temperature` decimal(4,2) — 370 místo
+                    // 37,0 by na MySQL shodilo celý zápis, proto raději nic.
+                    'pain' => Vejde::cisloNeboNic($zapis['pain'] ?? null, 0, self::BOLEST_NEJVIC),
+                    'temperature' => $this->teplota($zapis['temp'] ?? null),
+                    'note' => Vejde::neboNic($zapis['note'] ?? null, 1000),
                     'is_cycle_start' => (bool) ($zapis['start'] ?? false),
                 ],
             );
         }
+    }
+
+    /** Teplota v °C, nebo `null`, když nedává smysl (a nevešla by se do sloupce). */
+    private function teplota(mixed $hodnota): ?float
+    {
+        if (! is_numeric($hodnota)) {
+            return null;
+        }
+
+        $teplota = (float) $hodnota;
+
+        return $teplota >= self::TEPLOTA_OD && $teplota <= self::TEPLOTA_DO ? round($teplota, 2) : null;
     }
 
     /**

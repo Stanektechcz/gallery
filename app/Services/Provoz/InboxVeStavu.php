@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
@@ -183,8 +184,10 @@ class InboxVeStavu
                 'state' => $stav,
                 // Název z patche, jinak ten uložený, jinak aspoň klíč — prázdný
                 // řádek v seznamu „Hotovo" nikomu nic neřekne.
-                'title' => $nazvy[$klic] ?? $drive?->title ?? $this->zKlice($klic),
-                'snoozed_until' => $stav === 'snoozed' ? now()->addDays(self::DNI)->toDateString() : null,
+                // `title` má 255 znaků; text řádku přichází z prohlížeče neořezaný.
+                'title' => Vejde::do($nazvy[$klic] ?? $drive?->title ?? $this->zKlice($klic)),
+                // Týden ode dneška dvojice — v UTC je po pražské půlnoci ještě včera.
+                'snoozed_until' => $stav === 'snoozed' ? Cas::dnes()->addDays(self::DNI)->toDateString() : null,
                 'resolved_at' => $stav === 'done' ? now() : null,
                 'by_user_id' => $uzivatel?->id,
                 'created_at' => $drive->created_at ?? now(),

@@ -7,6 +7,7 @@ use App\Models\HouseChore;
 use App\Models\HouseChoreLogEntry;
 use App\Models\HouseDue;
 use App\Models\HouseInventoryItem;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
@@ -59,7 +60,12 @@ class DomacnostVeStavu
             return;
         }
 
-        $jmena = array_flip($prostor->members()->pluck('users.name', 'users.id')->all());
+        $patch = Vejde::identifikatory($patch, ['chores', 'choreLog', 'dues', 'inv']);
+
+        // Jen dvojice: host se jménem v seznamu by jinak dostal práci, lhůtu
+        // nebo záznam o odvedené práci, jako by byl jeden z nich.
+        $jmena = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn ($clen) => [(string) $clen->name => (int) $clen->id])->all();
 
         // Nejdřív záznamy: z nich se pozná, kdy se která práce naposledy udělala.
         if (is_array($patch['choreLog'] ?? null)) {
@@ -99,7 +105,10 @@ class DomacnostVeStavu
         // `a` je ten, kdo píše — stejně jako v `Domacnost::dvojice()` a na obrazovce.
         // Podle zakladatele prostoru se oprava druhého člověka zapsala jemu.
         $ja = (int) (auth()->id() ?? $prostor->owner_id);
-        $lide = $prostor->members()->pluck('users.id')
+        // Jen dvojice. Se všemi členy mohl host s nižším id (pozvaný dřív,
+        // než se přidal partner) skončit jako „druhý" a oprava partnera by
+        // se zapsala jemu.
+        $lide = app(PristupDoGalerie::class)->dvojice($prostor)->pluck('id')
             ->map(fn ($id) => (int) $id)
             ->sortBy(fn (int $id) => [$id === $ja ? 0 : 1, $id])
             ->values()->all();
@@ -117,7 +126,8 @@ class DomacnostVeStavu
                 continue;
             }
 
-            $poznamka = trim((string) ($den['note'] ?? ''));
+            // `house_week.note` má 255 znaků (a pole by `(string)` shodilo).
+            $poznamka = Vejde::do($den['note'] ?? '');
             $opravy = [
                 $prvni => ($den['fixA'] ?? false) ? (float) ($den['a'] ?? 0) : null,
                 $druhy => ($den['fixM'] ?? false) ? (float) ($den['m'] ?? 0) : null,
@@ -199,9 +209,25 @@ class DomacnostVeStavu
                     ->where('name', $prvni['chore'] ?? '')->value('id'),
                 'chore_name' => Vejde::do($prvni['chore'] ?? 'Práce', 160),
                 'user_id' => $jmena[$prvni['who'] ?? ''] ?? null,
-                'minutes' => (int) ($prvni['mins'] ?? 0),
+                'minutes' => Vejde::cislo($prvni['mins'] ?? 0, 0, Vejde::SMALL),
                 'done_at' => now(),
             ]);
+        }
+
+        /*
+         * Starší klient bez `__odebrane` s prázdným seznamem.
+         *
+         * Bez pojistky by z dotazu níž zbylo „smaž každý záznam, který kdy
+         * vznikl tlačítkem" — stačilo jednou poslat nenačtený seznam a dvojice
+         * by přišla o celou historii odvedené práce (viz OdebraneVStavu::smiMazat()).
+         */
+        // Porovnává se ořezaným identifikátorem, tedy tím, co leží v `client_id`
+        // — jinak by se právě založený záznam s dlouhým id hned zase smazal.
+        $prisly = collect($radky)->pluck('id')->filter(fn ($i) => is_scalar($i) && $i !== '')
+            ->map(fn ($i) => Vejde::do($i, Vejde::KLIENT))->values()->all();
+
+        if (! OdebraneVStavu::smiMazat($odebrane, $prisly)) {
+            return;
         }
 
         /*
@@ -211,8 +237,6 @@ class DomacnostVeStavu
          * Maže se jen to, co tudy vzniklo (`client_id`) — historie z jiných
          * zdrojů zůstává.
          */
-        $prisly = collect($radky)->pluck('id')->filter()->map(fn ($i) => (string) $i)->all();
-
         HouseChoreLogEntry::where('gallery_space_id', $prostor->id)
             ->whereNotNull('client_id')
             ->whereNotIn('client_id', $prisly ?: [''])
@@ -253,7 +277,8 @@ class DomacnostVeStavu
             $p->update([
                 'assigned_to' => $jmena[$r['who'] ?? ''] ?? $p->assigned_to,
                 'rotate' => (bool) ($r['rotate'] ?? $p->rotate),
-                'day' => array_key_exists('day', $r) ? ($r['day'] ?: null) : $p->day,
+                // `house_chores.day` má čtyři znaky („po", „út"…).
+                'day' => array_key_exists('day', $r) ? Vejde::neboNic($r['day'], 4) : $p->day,
             ]);
         }
 
@@ -305,8 +330,8 @@ class DomacnostVeStavu
                 'every' => Vejde::do($r['every'] ?? 'týdně', 40),
                 'assigned_to' => $jmena[$r['who'] ?? ''] ?? null,
                 'rotate' => (bool) ($r['rotate'] ?? true),
-                'minutes' => (int) ($r['mins'] ?? 30),
-                'day' => ($r['day'] ?? null) ?: null,
+                'minutes' => Vejde::cislo($r['mins'] ?? 30, 0, Vejde::SMALL),
+                'day' => Vejde::neboNic($r['day'] ?? null, 4),
                 'icon' => Vejde::do($r['icon'] ?? 'ph-broom', 40),
                 'sort_order' => $poradi,
             ]);
@@ -354,6 +379,12 @@ class DomacnostVeStavu
             $this->zalozZavazek($r, $prostor, $jmena);
         }
 
+        // Starší klient s prázdným seznamem a bez `__odebrane` neříká, co
+        // vyřídil — bez pojistky by „vyřídil" všechny otevřené lhůty naráz.
+        if (! OdebraneVStavu::smiMazat($odebrane, $prisly)) {
+            return;
+        }
+
         // Vyřízené: byly v databázi, v seznamu už nejsou. Pozná se to podle
         // obou identifikátorů — v jednom sezení posílá klient ještě ten svůj.
         $vDatabazi
@@ -382,11 +413,12 @@ class DomacnostVeStavu
             'what' => Vejde::do($r['what'] ?? 'Závazek', 200),
             'kind' => Vejde::do($r['kind'] ?? 'lhůta', 24),
             'due_on' => $kdy,
-            'amount' => (int) ($r['amount'] ?? 0),
+            // `unsignedInteger`: záporná nebo obří částka by na MySQL shodila celý zápis.
+            'amount' => Vejde::cislo($r['amount'] ?? 0, 0, Vejde::INT),
             'user_id' => $jmena[$r['who'] ?? ''] ?? null,
             'note' => Vejde::neboNic($r['note'] ?? null),
             'delay_note' => Vejde::neboNic($r['delayNote'] ?? null),
-            'delay_cost' => isset($r['delayCost']) ? (int) $r['delayCost'] : null,
+            'delay_cost' => Vejde::cisloNeboNic($r['delayCost'] ?? null, 0, Vejde::INT),
             'change_note' => Vejde::neboNic($r['change'] ?? null),
         ]);
     }
@@ -452,11 +484,12 @@ class DomacnostVeStavu
                 'has_doc' => (bool) ($r['doc'] ?? false),
                 'needs_service' => (bool) ($r['service'] ?? false),
                 'service_next_on' => $this->datum((string) ($r['serviceNext'] ?? '')),
-                'service_price' => isset($r['servicePrice']) ? (int) $r['servicePrice'] : null,
-                'price' => isset($r['price']) ? (int) $r['price'] : null,
-                'life_years' => isset($r['life']) ? (int) $r['life'] : null,
-                'energy_per_year' => isset($r['energy']) ? (int) $r['energy'] : null,
-                'upkeep_per_year' => isset($r['upkeep']) ? (int) $r['upkeep'] : null,
+                // Rozsahy sloupců: ceny `unsignedInteger`, životnost `unsignedTinyInteger`.
+                'service_price' => Vejde::cisloNeboNic($r['servicePrice'] ?? null, 0, Vejde::INT),
+                'price' => Vejde::cisloNeboNic($r['price'] ?? null, 0, Vejde::INT),
+                'life_years' => Vejde::cisloNeboNic($r['life'] ?? null, 0, Vejde::TINY),
+                'energy_per_year' => Vejde::cisloNeboNic($r['energy'] ?? null, 0, Vejde::INT),
+                'upkeep_per_year' => Vejde::cisloNeboNic($r['upkeep'] ?? null, 0, Vejde::INT),
             ]);
         }
 
@@ -466,7 +499,10 @@ class DomacnostVeStavu
     /** „14. 10. 2026" zpátky na datum. Jiný tvar prototyp neposílá. */
     private function datum(string $text): ?CarbonImmutable
     {
-        if (! preg_match('/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/u', $text, $shoda)) {
+        // „45. 13. 2026" má tvar, ale neexistuje — `createFromDate` by ho
+        // tiše přetočil do února dalšího roku.
+        if (! preg_match('/(\d{1,2})\.\s*(\d{1,2})\.\s*(\d{4})/u', $text, $shoda)
+            || ! checkdate((int) $shoda[2], (int) $shoda[1], (int) $shoda[3])) {
             return null;
         }
 
@@ -477,7 +513,8 @@ class DomacnostVeStavu
     /** „3/2026" — záruka se píše měsícem a rokem; bere se poslední den měsíce. */
     private function mesic(string $text): ?CarbonImmutable
     {
-        if (! preg_match('~^(\d{1,2})/(\d{4})$~', trim($text), $shoda)) {
+        if (! preg_match('~^(\d{1,2})/(\d{4})$~', trim($text), $shoda)
+            || (int) $shoda[1] < 1 || (int) $shoda[1] > 12) {
             return null;
         }
 

@@ -465,7 +465,9 @@ class ObsahDomacnostTest extends TestCase
             ['id' => 'l1725', 'chore' => 'Rostliny', 'who' => 'Makinka', 'mins' => 10, 'when' => 'právě teď'],
         ]]])->assertOk();
 
-        $this->patchJson('/api/state', ['data' => ['choreLog' => []]])->assertOk();
+        // Prohlížeč řekne, co vzal zpět (`__odebrane`); prázdný seznam bez
+        // toho se od „nic jsem neodebral" nepozná a nemaže nic.
+        $this->patchJson('/api/state', ['data' => ['choreLog' => [], '__odebrane' => ['choreLog' => ['l1725']]]])->assertOk();
 
         $this->assertSame(0, HouseChoreLogEntry::where('gallery_space_id', $this->prostor->id)->count());
     }

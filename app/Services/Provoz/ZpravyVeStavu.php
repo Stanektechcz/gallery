@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Obsah\Zpravy;
 use App\Support\SpaceContext;
+use App\Support\Vejde;
 use Illuminate\Support\Str;
 
 /**
@@ -27,6 +28,12 @@ class ZpravyVeStavu
 
     /** Jak dlouho zpátky se stejná věta od téhož člověka považuje za tutéž. */
     private const DUPLICITA_MINUT = 5;
+
+    /** Nejdelší zpráva — jako `max:4000` v `ChatController`. */
+    private const NEJDELSI_ZPRAVA = 4000;
+
+    /** Šířka `chat_messages.attachment_ref`. */
+    private const ODKAZ_NEJVIC = 190;
 
     public function __construct(private readonly Zpravy $obsah) {}
 
@@ -92,7 +99,10 @@ class ZpravyVeStavu
             return;
         }
 
-        $text = trim((string) ($m['text'] ?? ''));
+        // Stejný strop jako `ChatController` (4000 znaků). Sloupec je šifrovaný
+        // `longText`, takže by se vešlo víc — ale zpráva vlepená přes stav
+        // nemá mít jiná pravidla než zpráva poslaná z chatu.
+        $text = Vejde::do($m['text'] ?? '', self::NEJDELSI_ZPRAVA);
 
         if ($text === '') {
             return;
@@ -100,7 +110,21 @@ class ZpravyVeStavu
 
         // Hlasovka nese identifikátor nahrávky. Bez něj by z ní zbyla
         // bublina „hlasovka · 0:12", pod kterou není co pustit.
-        $this->posli($text, $prostor, $uzivatel, trim((string) ($m['audio'] ?? '')) ?: null);
+        $this->posli($text, $prostor, $uzivatel, $this->nahravka($m['audio'] ?? null));
+    }
+
+    /**
+     * Identifikátor nahrávky, nebo `null`.
+     *
+     * `attachment_ref` má 190 znaků. Delší identifikátor se neořezává —
+     * useknutý by ukazoval na nahrávku, která neexistuje — ale zahodí:
+     * zpráva odejde bez přehrávače, místo aby shodila celý zápis stavu.
+     */
+    private function nahravka(mixed $odkaz): ?string
+    {
+        $odkaz = is_scalar($odkaz) ? trim((string) $odkaz) : '';
+
+        return $odkaz === '' || mb_strlen($odkaz) > self::ODKAZ_NEJVIC ? null : $odkaz;
     }
 
     private function posli(string $text, GallerySpace $prostor, User $uzivatel, ?string $nahravka = null): void

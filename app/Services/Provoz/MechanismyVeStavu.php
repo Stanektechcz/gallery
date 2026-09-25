@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Mechanismy;
 use App\Support\Cas;
 use App\Support\Tabulky;
@@ -21,8 +22,19 @@ use Illuminate\Support\Str;
  */
 class MechanismyVeStavu
 {
-    /** Klíče, které patří databázi. Do stavu se neukládají. */
-    public const SERVEROVE = ['favList', 'forgList', 'antiList', 'mlLoad', 'fam', 'truths', 'pauseLog', 'pausePlan'];
+    /**
+     * Klíče, které patří databázi. Do stavu se neukládají.
+     *
+     * `mlLoad`, `pauseLog` a `pausePlan` tu dřív byly taky — jenže převodník
+     * je nikam nezapisoval. Kontroler je proto ze zápisu vyhodil **a** ze
+     * stavu smazal (`zapomen()`), takže mentální zátěž, pravidla pauzy
+     * i historie pauz zmizely hned po uložení. Do tabulek je zatím zapsat
+     * nejde bezpečně: řádky nemají identifikátor a „kdy" v historii je věta
+     * („4. září"), takže by se dal jen přepsat celý seznam — a to je přesně
+     * to, co starší opis v kartě smazat nesmí (viz OdebraneVStavu). Zůstávají
+     * proto ve sdíleném stavu dvojice, kam je prototyp ukládá.
+     */
+    public const SERVEROVE = ['favList', 'forgList', 'antiList', 'fam', 'truths'];
 
     /** Tabulka → klíč seznamu v prohlížeči (kvůli tomu, co z něj výslovně odebral). */
     private const KLICE = [
@@ -69,7 +81,10 @@ class MechanismyVeStavu
     /** @return array<string, mixed> */
     public function zpracuj(array $patch, GallerySpace $prostor, ?User $uzivatel): array
     {
-        $lide = array_flip($prostor->members()->pluck('users.name', 'users.id')->all());
+        // Jen dvojice: laskavost „od hosta" nebo host jako strana rodiny by
+        // v účtu dvojice neměly co dělat.
+        $lide = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn ($clen) => [(string) $clen->name => (int) $clen->id])->all();
         $this->patch = $patch;
 
         /*
@@ -124,10 +139,10 @@ class MechanismyVeStavu
         }
 
         $this->srovnej('couple_favours', $seznam, $prostor, function (array $l) use ($lide) {
-            $co = trim((string) ($l['what'] ?? ''));
+            $co = Vejde::do($l['what'] ?? '');
 
             return $co === '' ? null : [
-                'from_user_id' => $lide[(string) ($l['from'] ?? '')] ?? null,
+                'from_user_id' => $this->kdo($lide, $l['from'] ?? null),
                 'what' => $co,
                 'happened_on' => $this->den($l['date'] ?? null),
                 'weight' => max(1, min(5, (int) ($l['w'] ?? 1))),
@@ -147,13 +162,13 @@ class MechanismyVeStavu
         }
 
         $this->srovnej('couple_forgiven', $seznam, $prostor, function (array $o) use ($lide) {
-            $co = trim((string) ($o['what'] ?? ''));
+            $co = Vejde::do($o['what'] ?? '');
 
             return $co === '' ? null : [
-                'forgiven_by' => $lide[(string) ($o['by'] ?? '')] ?? null,
+                'forgiven_by' => $this->kdo($lide, $o['by'] ?? null),
                 'what' => $co,
                 'happened_on' => $this->den($o['date'] ?? null),
-                'tries' => max(0, (int) ($o['tries'] ?? 0)),
+                'tries' => Vejde::cislo($o['tries'] ?? 0, 0, Vejde::SMALL),
             ];
         });
     }
@@ -174,18 +189,18 @@ class MechanismyVeStavu
             'červenec', 'srpen', 'září', 'říjen', 'listopad', 'prosinec']);
 
         $this->srovnej('couple_anti_budget', $seznam, $prostor, function (array $a) use ($mesice) {
-            $nazev = trim((string) ($a['name'] ?? ''));
+            $nazev = Vejde::do($a['name'] ?? '');
 
             if ($nazev === '') {
                 return null;
             }
 
-            $mesic = $mesice[(string) ($a['month'] ?? '')] ?? Cas::dnes()->month;
+            $mesic = $mesice[Vejde::do($a['month'] ?? '')] ?? Cas::dnes()->month;
 
             return [
                 'name' => $nazev,
-                'kind' => $this->druhAnti((string) ($a['type'] ?? '')),
-                'saved' => max(0, (int) ($a['saved'] ?? 0)),
+                'kind' => $this->druhAnti(Vejde::do($a['type'] ?? '')),
+                'saved' => Vejde::cislo($a['saved'] ?? 0, 0, Vejde::INT),
                 'decided_on' => Cas::dnes()->setDate(Cas::dnes()->year, $mesic, 1)->toDateString(),
                 'came_back' => (bool) ($a['back'] ?? false),
             ];
@@ -217,22 +232,23 @@ class MechanismyVeStavu
 
         foreach (array_values($seznam) as $poradi => $r) {
             $r = (array) $r;
-            $jmeno = trim((string) ($r['name'] ?? ''));
+            $jmeno = Vejde::do($r['name'] ?? '');
 
             if ($jmeno === '') {
                 continue;
             }
 
-            $uuid = (string) ($r['id'] ?? '');
+            $uuid = Vejde::do($r['id'] ?? '');
             $puvodni = $znamé[$uuid] ?? null;
-            $kdo = $lide[(string) ($r['lastWho'] ?? '')] ?? null;
+            $kdo = $this->kdo($lide, $r['lastWho'] ?? null);
 
             $radek = [
                 'name' => $jmeno,
-                'side_user_id' => $lide[(string) ($r['side'] ?? '')] ?? null,
-                'every_days' => max(1, (int) ($r['every'] ?? 7)),
-                'note' => Vejde::do($r['note'] ?? ''),
-                'sort_order' => $poradi,
+                'side_user_id' => $this->kdo($lide, $r['side'] ?? null),
+                // `unsignedSmallInteger`; obří číslo by na MySQL shodilo zápis.
+                'every_days' => Vejde::cislo($r['every'] ?? 7, 1, Vejde::SMALL),
+                'note' => Vejde::do($r['note'] ?? '', 500),
+                'sort_order' => min($poradi, Vejde::SMALL),
                 'updated_at' => now(),
             ];
 
@@ -292,12 +308,14 @@ class MechanismyVeStavu
 
         // `a` z obrazovky je verze toho, kdo píše; `m` toho druhého.
         $ja = (int) (auth()->id() ?? $prostor->owner_id);
-        $lide = array_map('intval', $prostor->members()->pluck('users.id')->all());
+        // Jen dvojice. Se všemi členy mohl host s nižším id skončit jako
+        // „ten druhý" a verze partnera by se podepsala jemu.
+        $lide = array_map('intval', app(PristupDoGalerie::class)->dvojice($prostor)->pluck('id')->all());
         usort($lide, fn (int $x, int $y) => [$x !== $ja, $x] <=> [$y !== $ja, $y]);
         [$prvni, $druhy] = array_pad($lide, 2, null);
 
         $this->srovnej('couple_truths', $seznam, $prostor, function (array $p) use ($prvni, $druhy) {
-            $nadpis = trim((string) ($p['title'] ?? ''));
+            $nadpis = Vejde::do($p['title'] ?? '');
 
             return $nadpis === '' ? null : [
                 'title' => $nadpis,
@@ -332,7 +350,7 @@ class MechanismyVeStavu
                 continue;
             }
 
-            $uuid = (string) ($polozka['id'] ?? '');
+            $uuid = Vejde::do($polozka['id'] ?? '');
 
             if (isset($znamé[$uuid])) {
                 if (OdebraneVStavu::zmeneno(OdebraneVStavu::zmenene($this->patch, self::KLICE[$tabulka] ?? $tabulka), $uuid)) {
@@ -365,13 +383,20 @@ class MechanismyVeStavu
             ->delete();
     }
 
+    /** Skutečné datum, jinak dnešek — tvar sám nestačí („2026-13-45" MySQL odmítne). */
     private function den(mixed $hodnota): string
     {
-        $datum = trim((string) $hodnota);
+        return Vejde::den($hodnota) ?? Cas::dnes()->toDateString();
+    }
 
-        return preg_match('/^\d{4}-\d{2}-\d{2}$/', $datum)
-            ? $datum
-            : Cas::dnes()->toDateString();
+    /**
+     * Člen dvojice podle jména z obrazovky.
+     *
+     * @param  array<string, int>  $lide
+     */
+    private function kdo(array $lide, mixed $jmeno): ?int
+    {
+        return is_scalar($jmeno) ? ($lide[(string) $jmeno] ?? null) : null;
     }
 
     private function druhAnti(string $druh): string
