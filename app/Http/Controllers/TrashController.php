@@ -25,6 +25,9 @@ class TrashController extends Controller
         $media = MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNotNull('trashed_at')
+            // Skryté jen s odemčeným trezorem, stejně jako `vKosi()`. Seznam je
+            // dřív vypisoval i zamčené — s názvem souboru i titulkem.
+            ->when(! Trezor::odemcen(), fn (Builder $q) => $q->where('is_hidden', false))
             ->with(['variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
             ->orderByDesc('trashed_at')
             ->paginate(60)

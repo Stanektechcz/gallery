@@ -68,6 +68,7 @@ class RevolutStatementImportService
             ['connected_by' => $user->id, 'institution_name' => 'Revolut · import výpisu', 'sync_enabled' => false]);
         $retriedImport = (bool) $existing;
         if ($existing) {
+            $existing->rows_pending = 0;
             $existing->update([
                 'bank_connection_id' => $connection->id, 'bank_account_id' => null, 'imported_by' => $user->id,
                 'original_filename' => $file->getClientOriginalName(), 'format' => $extension, 'status' => 'processing',
@@ -91,7 +92,7 @@ class RevolutStatementImportService
             abort_if(count($rows) < 2, 422, 'Výpis neobsahuje žádné transakce.');
             $defaultCurrency = $this->detectedCurrency($rows);
             [$rows, $columns, $headerRow] = $this->table($rows);
-            $counts = ['total' => count($rows), 'imported' => 0, 'duplicate' => 0, 'failed' => 0];
+            $counts = ['total' => count($rows), 'imported' => 0, 'duplicate' => 0, 'failed' => 0, 'pending' => 0];
             $dates = collect();
             $firstAccount = null;
             $fallbackOccurrences = [];
@@ -103,7 +104,20 @@ class RevolutStatementImportService
                         continue;
                     }
                     $mapped = $this->mapped($row, $columns);
-                    $date = $this->date($mapped['booked_at'] ?? $mapped['started_at'] ?? null);
+                    // Čekající platba kartou (`PENDING`) se teprve zaúčtuje. Až
+                    // přijde v dalším výpisu jako `COMPLETED`, má datum dokončení,
+                    // a tedy jiný otisk — uložená čekající by zůstala vedle ní
+                    // a přehled by útratu sečetl dvakrát. Proto se neukládá vůbec;
+                    // počítá se zvlášť, protože chyba výpisu to není.
+                    if ($this->status($mapped['state'] ?? null) === 'pending') {
+                        $counts['pending']++;
+
+                        continue;
+                    }
+                    // Prázdná buňka CSV je `''`, ne `null` — `??` by datum zahájení
+                    // nevzal nikdy. U řádků s datem dokončení se nic nemění
+                    // (otisk zůstává, jak ho mají už nahrané výpisy).
+                    $date = $this->date($this->filled($mapped['booked_at'] ?? null) ?? $this->filled($mapped['started_at'] ?? null));
                     $amount = $this->amount($mapped);
                     abort_unless($date && $amount !== null, 422, 'Řádek nemá platné datum nebo částku.');
                     $currency = $this->currency($mapped, $defaultCurrency);
@@ -161,6 +175,8 @@ class RevolutStatementImportService
                 }
             }
             abort_if(! $counts['imported'] && ! $counts['duplicate'] && $counts['failed'], 422, 'Žádnou transakci se nepodařilo načíst. '.($firstFailure ?: 'Zkontrolujte datum a částku ve výpisu.'));
+            // Mimo `$fillable` modelu — zapisuje ho jen tahle služba.
+            $import->rows_pending = $counts['pending'];
             $import->update(['bank_account_id' => $firstAccount?->id, 'status' => $counts['failed'] && ! $counts['imported'] ? 'failed' : 'completed',
                 'rows_total' => $counts['total'], 'rows_imported' => $counts['imported'], 'rows_duplicate' => $counts['duplicate'],
                 'rows_failed' => $counts['failed'], 'period_from' => $dates->min()?->toDateString(), 'period_to' => $dates->max()?->toDateString(),
@@ -470,6 +486,12 @@ class RevolutStatementImportService
         return $negative ? -abs($number) : $number;
     }
 
+    /** Hodnota buňky, nebo `null`, když je prázdná (i jen s mezerami). */
+    private function filled(mixed $value): mixed
+    {
+        return $value === null || trim((string) $value) === '' ? null : $value;
+    }
+
     private function date(mixed $value): ?Carbon
     {
         if ($value === null || $value === '') {
@@ -499,6 +521,6 @@ class RevolutStatementImportService
     {
         return ['uuid' => $import->uuid, 'filename' => $import->original_filename, 'status' => $import->status,
             'rows_total' => $import->rows_total, 'rows_imported' => $import->rows_imported, 'rows_duplicate' => $import->rows_duplicate,
-            'rows_failed' => $import->rows_failed, 'period_from' => $import->period_from?->toDateString(), 'period_to' => $import->period_to?->toDateString(), 'error' => $import->error_summary];
+            'rows_failed' => $import->rows_failed, 'rows_pending' => (int) ($import->rows_pending ?? 0), 'period_from' => $import->period_from?->toDateString(), 'period_to' => $import->period_to?->toDateString(), 'error' => $import->error_summary];
     }
 }

@@ -88,6 +88,60 @@ class ImportRevolutuTest extends TestCase
         $this->assertSame([], $dashboard['categories']);
     }
 
+    /**
+     * Čekající platba kartou není chyba výpisu ani druhá útrata.
+     *
+     * Revolut ji vypisuje s prázdným „Completed Date". Prázdná buňka CSV je
+     * `''`, ne `null`, takže se nepoužilo datum zahájení a řádek skončil jako
+     * „nemá platné datum" — skoro každý výpis tak hlásil chyby. V XLSX
+     * (`null`) se naopak uložil s datem zahájení a jeho zaúčtované dvojče
+     * z dalšího výpisu mělo jiný otisk: uložily se obě a přehled je sečetl.
+     */
+    public function test_cekajici_platba_se_preskoci_a_zauctovana_ulozi_jednou(): void
+    {
+        $hlavicka = "Type,Product,Started Date,Completed Date,Description,Amount,Fee,Currency,State,Balance\n";
+
+        $this->nahrat('zari.csv', $hlavicka
+            ."CARD_PAYMENT,Current,2026-09-07 09:00:00,,Hotel,-2500.00,0.00,CZK,PENDING,\n"
+            ."CARD_PAYMENT,Current,2026-09-08 12:00:00,2026-09-08 14:22:10,Albert,-432.50,0.00,CZK,COMPLETED,9567.50\n")
+            ->assertCreated()
+            ->assertJsonPath('import.rows_failed', 0)
+            ->assertJsonPath('import.rows_pending', 1)
+            ->assertJsonPath('import.rows_imported', 1)
+            ->assertJsonPath('import.error', null);
+
+        $this->assertSame(['Albert'], BankTransaction::pluck('description')->all());
+
+        $this->nahrat('zari-2.csv', $hlavicka
+            ."CARD_PAYMENT,Current,2026-09-07 09:00:00,2026-09-09 03:10:00,Hotel,-2500.00,0.00,CZK,COMPLETED,7067.50\n"
+            ."CARD_PAYMENT,Current,2026-09-08 12:00:00,2026-09-08 14:22:10,Albert,-432.50,0.00,CZK,COMPLETED,9567.50\n")
+            ->assertCreated()
+            ->assertJsonPath('import.rows_imported', 1)
+            ->assertJsonPath('import.rows_duplicate', 1)
+            ->assertJsonPath('import.rows_pending', 0);
+
+        // Popis je v databázi šifrovaný — porovnává se po načtení.
+        $hotel = BankTransaction::all()->where('description', 'Hotel');
+        $this->assertCount(1, $hotel);
+        $this->assertSame('booked', $hotel->first()->status);
+    }
+
+    /** Čekající pohyb (třeba ze synchronizace s bankou) se do součtů přehledu nepočítá. */
+    public function test_cekajici_pohyb_se_do_prehledu_nepocita(): void
+    {
+        $this->nahrat('srpen.csv', "Type,Completed Date,Description,Amount,Currency,State\n"
+            ."CARD,2026-08-11 12:00:00,Albert,-100,CZK,COMPLETED\n")->assertCreated();
+
+        $zauctovany = BankTransaction::sole();
+        BankTransaction::create(['bank_account_id' => $zauctovany->bank_account_id, 'external_id_hash' => hash('sha256', 'cekajici'),
+            'status' => 'pending', 'direction' => 'debit', 'amount' => -2500, 'currency' => 'CZK',
+            'booked_at' => '2026-08-12 09:00:00', 'value_date' => '2026-08-12', 'description' => 'Hotel', 'merchant_name' => 'Hotel']);
+
+        $dashboard = $this->getJson('/api/v1/banking/dashboard?gallery_space_id='.$this->prostor->id.'&from=2026-08-01&to=2026-08-31')->assertOk()->json();
+        $this->assertEqualsWithDelta(100, $dashboard['summary']['currencies'][0]['expenses'] ?? 0, 0.001);
+        $this->assertEqualsWithDelta(-100, $dashboard['summary']['currencies'][0]['net_change'] ?? 0, 0.001);
+    }
+
     public function test_poskozena_tabulka_nevraci_text_vyjimky(): void
     {
         // Skutečné XLSX useknuté v půlce: podle obsahu je to pořád tabulka, ale ZIP nejde otevřít.

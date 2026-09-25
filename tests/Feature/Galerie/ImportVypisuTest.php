@@ -238,6 +238,39 @@ class ImportVypisuTest extends TestCase
         $this->assertSame(0, Transaction::count());
     }
 
+    /**
+     * Do knihy jde jen zaúčtovaná platba.
+     *
+     * Zamítnutá (`DECLINED`) platba peníze neodnesla a čekající (`PENDING`)
+     * se teprve zaúčtuje — až přijde v dalším výpisu jako `COMPLETED`, má jiný
+     * bankovní pohyb, a tedy i jiný klíč platby. Obě se dřív zapsaly jako
+     * výdaj a čekající pak podruhé se svým zaúčtovaným dvojčetem.
+     */
+    public function test_zamitnuta_ani_cekajici_platba_do_knihy_nejde(): void
+    {
+        $ucet = $this->ucet('Společný účet');
+
+        $this->nahraj($ucet, self::HLAVICKA
+            ."CARD_PAYMENT,Current,2026-09-05 12:00:00,2026-09-05 12:00:01,Kavárna,-80.00,0.00,CZK,DECLINED,10000\n"
+            ."CARD_PAYMENT,Current,2026-09-06 12:00:00,2026-09-06 12:00:00,Hotel,-2500.00,0.00,CZK,PENDING,\n"
+            ."CARD_PAYMENT,Current,2026-09-07 09:00:00,,Lékárna,-312.00,0.00,CZK,PENDING,\n"
+            ."CARD_PAYMENT,Current,2026-09-08 12:00:00,2026-09-08 14:22:10,Albert,-432.50,0.00,CZK,COMPLETED,9567.50\n")
+            ->assertStatus(201)
+            ->assertJsonPath('zapsano', 1)
+            ->assertJsonPath('zprava', fn (string $z) => ! str_contains($z, 'nešl') && str_contains($z, 'čekají na zaúčtování'));
+
+        $this->assertSame(['Albert'], Transaction::pluck('description')->all());
+
+        // Tatáž platba zaúčtovaná v dalším výpisu se zapíše právě jednou.
+        $this->nahraj($ucet, self::HLAVICKA
+            ."CARD_PAYMENT,Current,2026-09-07 09:00:00,2026-09-08 03:10:00,Lékárna,-312.00,0.00,CZK,COMPLETED,9255.50\n"
+            ."CARD_PAYMENT,Current,2026-09-08 12:00:00,2026-09-08 14:22:10,Albert,-432.50,0.00,CZK,COMPLETED,9567.50\n")
+            ->assertStatus(201)
+            ->assertJsonPath('zapsano', 1);
+
+        $this->assertSame(['Albert', 'Lékárna'], Transaction::orderBy('description')->pluck('description')->all());
+    }
+
     /** Soubor bez data a částky vrátí srozumitelnou větu, ne chybu serveru. */
     public function test_necitelny_vypis_rekne_proc(): void
     {

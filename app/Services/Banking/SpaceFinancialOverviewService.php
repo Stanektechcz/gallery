@@ -89,13 +89,15 @@ class SpaceFinancialOverviewService
         $pageRows = $rows->slice(($page - 1) * $perPage, $perPage)->values();
         // Vrácená nebo zamítnutá platba zůstane v seznamu (se stavem), ale do
         // součtů nepatří — peníze z účtu neodešly. Dřív se počítala do výdajů.
-        $counted = $rows->reject(fn (BankTransaction $transaction) => $transaction->status === 'cancelled')->values();
+        // Čekající taky ne: zaúčtovaná přijde jako samostatný pohyb (jiné id
+        // i otisk) a útrata by se sečetla dvakrát.
+        $counted = $rows->reject(fn (BankTransaction $transaction) => in_array($transaction->status, ['cancelled', 'pending'], true))->values();
 
         return [
             'available' => true,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $from->diffInDays($to) + 1],
             'accounts' => $accounts->map(fn (BankAccount $item) => $this->account($item))->values(),
-            'summary' => array_merge($this->summary($counted, $links), ['transaction_count' => $rows->count(), 'cancelled_count' => $rows->count() - $counted->count()]),
+            'summary' => array_merge($this->summary($counted, $links), ['transaction_count' => $rows->count(), 'cancelled_count' => $rows->where('status', 'cancelled')->count(), 'pending_count' => $rows->where('status', 'pending')->count()]),
             'categories' => $this->categories($counted),
             'cashflow' => $this->cashflow($counted),
             'daily_cashflow' => $this->dailyCashflow($counted),

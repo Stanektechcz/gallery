@@ -56,7 +56,8 @@ class VaultController extends Controller
 
     public function lock(Request $request): RedirectResponse
     {
-        Trezor::zamkni($request);
+        // Výslovné zamčení — stejně jako v galerii zavře trezor všude (viz `Trezor`).
+        Trezor::zamkniVsude($request);
 
         return redirect()->route('vault.index');
     }

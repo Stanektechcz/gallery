@@ -95,12 +95,24 @@ class ImportVypisuController extends Controller
         $pohyby = $this->pohyby($import, $idPohybu);
 
         $mena = strtoupper((string) ($ucet->currency ?: 'CZK'));
-        $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0, 'zarazeno' => 0];
+        // Čekající řádky výpis vůbec neuložil (`rows_pending`); čekající pohyb
+        // známý odjinud (synchronizace s bankou) se přičte ve smyčce.
+        $pocty = ['zapsano' => 0, 'uz' => 0, 'mena' => 0, 'zarazeno' => 0,
+            'ceka' => (int) ($vysledek['import']['rows_pending'] ?? 0), 'zruseno' => 0];
         $jineMeny = [];
         $podleDriv = $this->zarazeni->mapa($prostor);
 
         DB::transaction(function () use ($pohyby, $prostor, $ucet, $mena, $request, $podleDriv, &$pocty, &$jineMeny) {
             foreach ($pohyby as $pohyb) {
+                // Do knihy jen zaúčtované. Zamítnutá nebo vrácená platba peníze
+                // neodnesla; čekající se zaúčtuje jako jiný bankovní pohyb (jiné
+                // id → jiný klíč platby níž), takže by se výdaj zapsal dvakrát.
+                if ($pohyb->status !== 'booked') {
+                    $pohyb->status === 'pending' ? $pocty['ceka']++ : $pocty['zruseno']++;
+
+                    continue;
+                }
+
                 $castka = round(abs((float) $pohyb->amount), 2);
 
                 if ($castka <= 0) {
@@ -179,7 +191,7 @@ class ImportVypisuController extends Controller
         AuditLog::record('finance.statement.ledger', null, [
             'space_id' => $prostor->id, 'import_uuid' => $import->uuid, 'wallet' => $ucet->uuid,
             'written' => $pocty['zapsano'], 'already' => $pocty['uz'], 'other_currency' => $pocty['mena'],
-            'categorized' => $pocty['zarazeno'],
+            'categorized' => $pocty['zarazeno'], 'pending' => $pocty['ceka'], 'cancelled' => $pocty['zruseno'],
         ]);
 
         return response()->json([
@@ -227,7 +239,7 @@ class ImportVypisuController extends Controller
     /**
      * Věta pro toast — co se stalo, ne jen „hotovo".
      *
-     * @param  array{zapsano: int, uz: int, mena: int}  $pocty
+     * @param  array{zapsano: int, uz: int, mena: int, zarazeno: int, ceka: int, zruseno: int}  $pocty
      * @param  list<string>  $meny
      */
     private function zprava(array $pocty, string $ucet, array $meny, int $chybne): string
@@ -248,6 +260,18 @@ class ImportVypisuController extends Controller
 
         if ($pocty['mena']) {
             $casti[] = $this->pocet($pocty['mena'], 'platba', 'platby', 'plateb').' v '.implode(', ', $meny).' vynechány (účet je v jiné měně)';
+        }
+
+        // Čekající a zamítnuté nejsou chyby výpisu — jen se (zatím) nezapisují.
+        if ($pocty['ceka']) {
+            $casti[] = $this->pocet($pocty['ceka'],
+                'platba čeká na zaúčtování — do knihy přijde s dalším výpisem',
+                'platby čekají na zaúčtování — do knihy přijdou s dalším výpisem',
+                'plateb čeká na zaúčtování — do knihy přijdou s dalším výpisem');
+        }
+
+        if ($pocty['zruseno']) {
+            $casti[] = $this->pocet($pocty['zruseno'], 'zamítnutá nebo vrácená platba vynechána', 'zamítnuté nebo vrácené platby vynechány', 'zamítnutých nebo vrácených plateb vynecháno');
         }
 
         if ($chybne) {

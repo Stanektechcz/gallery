@@ -112,6 +112,88 @@ class TrezorSezeniTest extends TestCase
         $this->assertFalse(session()->has('vault_unlocked_by'));
     }
 
+    /**
+     * Pomalý požadavek zamčení nevrátí.
+     *
+     * Laravel na konci každého požadavku zapíše celé sezení. Požadavek, který
+     * začal před „Zamknout" (nahrávání, dlouhý výpis) a skončil po něm, zapsal
+     * zpátky `vault_unlocked_*` ze svého začátku — trezor se potichu otevřel
+     * až na patnáct minut. Tady je to napodobené doslova: snímek sezení
+     * z doby odemčení se po zamčení vrátí do sezení.
+     */
+    public function test_pozdni_zapis_sezeni_zamceny_trezor_neotevre(): void
+    {
+        Sanctum::actingAs($this->adri);
+
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'adrianovo-heslo'])->assertOk()->assertJson(['odemceno' => true]);
+        $snimek = session()->all();
+
+        $this->postJson('/api/trezor/zamknout')->assertOk()->assertJson(['odemceno' => false]);
+        session()->put($snimek);
+
+        $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => false, 'zbyva' => 0]);
+
+        // Nové odemčení po zamčení platí jako dřív.
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'adrianovo-heslo'])->assertOk()->assertJson(['odemceno' => true]);
+        $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => true]);
+    }
+
+    /**
+     * Zamčení zavře trezor na všech zařízeních toho, kdo zamkl.
+     *
+     * Je to krok pro soukromí („někdo se mi dívá přes rameno") — telefon
+     * s odemčeným trezorem na stole nesmí zůstat otevřený jen proto, že se
+     * zamykalo z počítače. Partnerovo odemčení zůstane, patří jemu.
+     */
+    public function test_zamceni_zavre_trezor_i_na_druhem_zarizeni(): void
+    {
+        Sanctum::actingAs($this->adri);
+
+        // Zařízení B (telefon): vlastní sezení s vlastním odemčením.
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'adrianovo-heslo'])->assertOk()->assertJson(['odemceno' => true]);
+        $telefon = session()->all();
+
+        // Zařízení A (počítač): jiné sezení, odemkne a zamkne.
+        session()->flush();
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'adrianovo-heslo'])->assertOk();
+        $this->postJson('/api/trezor/zamknout')->assertOk()->assertJson(['odemceno' => false]);
+
+        // Makinčino odemčení (v jejím sezení) zamčení Adriana nezavře.
+        session()->flush();
+        Sanctum::actingAs($this->maki);
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'makino-heslo'])->assertOk();
+        $makinka = session()->all();
+
+        session()->flush();
+        session()->put($telefon);
+        Sanctum::actingAs($this->adri);
+        $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => false]);
+
+        session()->flush();
+        session()->put($makinka);
+        Sanctum::actingAs($this->maki);
+        $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => true]);
+    }
+
+    /** Přihlášení není zamčení — odemčený trezor na jiném zařízení nezavře. */
+    public function test_prihlaseni_nezavre_trezor_jinde(): void
+    {
+        Sanctum::actingAs($this->adri);
+        $this->postJson('/api/trezor/odemknout', ['heslo' => 'adrianovo-heslo'])->assertOk();
+        $telefon = session()->all();
+
+        // Přihlášení heslem na počítači (`Sanctum::actingAs` přepnul výchozí strážce).
+        session()->flush();
+        $this->app['auth']->shouldUse('web');
+        $this->post('/login', ['email' => $this->adri->email, 'password' => 'adrianovo-heslo'])->assertRedirect();
+        $this->assertAuthenticatedAs($this->adri);
+
+        session()->flush();
+        session()->put($telefon);
+        Sanctum::actingAs($this->adri);
+        $this->getJson('/api/trezor')->assertOk()->assertJson(['odemceno' => true]);
+    }
+
     public function test_prihlaseni_heslem_zapomene_odemceni(): void
     {
         $this->withSession($this->odemcenyTrezor($this->adri))

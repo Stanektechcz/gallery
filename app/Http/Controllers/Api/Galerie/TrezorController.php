@@ -89,7 +89,9 @@ class TrezorController extends Controller
 
     public function zamkni(Request $request): JsonResponse
     {
-        Trezor::zamkni($request);
+        // Na všech zařízeních a natrvalo — i proti pomalému požadavku, který
+        // by po zamčení zapsal do sezení zpátky odemčení (viz `Trezor`).
+        Trezor::zamkniVsude($request);
         AuditLog::record('vault.lock');
 
         return response()->json($this->odpoved($request));
