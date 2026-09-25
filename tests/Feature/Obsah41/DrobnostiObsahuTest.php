@@ -12,6 +12,7 @@ use App\Services\Obsah\UcetRadosti;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -107,8 +108,38 @@ class DrobnostiObsahuTest extends TestCase
         $this->assertNotContains('Zrušený', $co);
     }
 
-    /** Rok v číslech: čekající platba není zapsaná a eura se nepíšou jako koruny. */
-    public function test_rok_v_cislech_bez_cekajicich_a_bez_michani_men(): void
+    /**
+     * Rok v číslech bez kurzu: čekající platba není zapsaná a eura se nepíšou jako koruny.
+     *
+     * Kurz ECB v testu známý není (síť je zavřená), takže se eura sečíst nedají —
+     * ukážou se jen koruny a výslovně se řekne, že eura v součtu nejsou.
+     */
+    public function test_rok_v_cislech_bez_kurzu_bez_cekajicich_a_bez_michani_men(): void
+    {
+        $finance = $this->rokVCislechSEury();
+
+        $this->assertSame("3\u{00A0}000 Kč", $finance[4][0][1]);
+        $this->assertStringContainsString('jen v CZK', $finance[4][0][2]);
+        $this->assertStringContainsString('50 € stranou', str_replace("\u{00A0}", ' ', $finance[4][0][2]));
+    }
+
+    /** S kurzem se eura přepočtou do korun a řekne se, k jakému dni kurz platí. */
+    public function test_rok_v_cislech_s_kurzem_secte_v_korunach(): void
+    {
+        Http::fake([
+            'api.frankfurter.dev/*' => Http::response(['date' => '2026-09-24', 'base' => 'EUR', 'quote' => 'CZK', 'rate' => 25.0]),
+        ]);
+
+        $finance = $this->rokVCislechSEury();
+
+        // 1 000 + 2 000 + 50 € × 25; čekajících 7 000 se nepočítá.
+        $this->assertSame("4\u{00A0}250 Kč", $finance[4][0][1]);
+        $this->assertStringContainsString('přepočteno kurzem ECB k 24. 9. 2026', $finance[4][0][2]);
+        $this->assertStringNotContainsString('jen v', $finance[4][0][2]);
+    }
+
+    /** @return array<int, mixed> kapitola „finance" letošního roku v číslech */
+    private function rokVCislechSEury(): array
     {
         $rok = (int) $this->dnes()->year;
         $den = $this->dnes()->startOfYear()->addDays(5)->toDateTimeString();
@@ -118,10 +149,8 @@ class DrobnostiObsahuTest extends TestCase
         $this->transakce(['amount_from' => 50, 'occurred_at' => $den, 'currency_from' => 'EUR']);
 
         $kapitoly = collect($this->getJson('/api/data/tyden')->assertOk()->json('data.ROKVCISLECH.'.$rok));
-        $finance = $kapitoly->firstWhere(0, 'finance');
 
-        $this->assertSame("3\u{00A0}000 Kč", $finance[4][0][1]);
-        $this->assertStringContainsString('jen v CZK', $finance[4][0][2]);
+        return $kapitoly->firstWhere(0, 'finance');
     }
 
     /** Čekající příjem (`pending`) ještě na účet nepřišel. */

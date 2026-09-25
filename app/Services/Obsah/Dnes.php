@@ -7,7 +7,9 @@ use App\Models\Conversation;
 use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Finance\ExchangeRateService;
 use App\Support\Cas;
+use App\Support\Meny;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
@@ -48,6 +50,9 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
 
     /** @var array<int, bool> */
     private array $nahledy = [];
+
+    // Největší výdaj dne se srovnává v hlavní měně kurzem ECB.
+    public function __construct(private readonly ExchangeRateService $kurzy) {}
 
     public function skupina(): string
     {
@@ -200,16 +205,19 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('transactions')) {
-            $vydaj = DB::table('transactions')
+            $hlavni = Meny::hlavni($prostor);
+            $vydaj = $this->nejvetsiVydaj(DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)->where('type', 'expense')->whereNull('deleted_at')
                 ->whereMonth('occurred_at', $dnes->month)->whereDay('occurred_at', $dnes->day)->whereYear('occurred_at', '<', $dnes->year)
                 ->orderByDesc('amount_from')
-                ->first(['occurred_at', 'description', 'counterparty', 'amount_from', 'currency_from']);
+                // Jeden kalendářní den v minulých letech; strop jen pro jistotu.
+                ->limit(500)
+                ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'currency_from']), $hlavni);
 
             if ($vydaj) {
                 $kdy = CarbonImmutable::parse($vydaj->occurred_at);
                 $nalezy[] = ['Výdaj', 'ph-receipt', (string) ($vydaj->description ?: ($vydaj->counterparty ?: 'Výdaj')),
-                    $this->datum($kdy).' · '.$this->castka((float) $vydaj->amount_from, (string) ($vydaj->currency_from ?? 'CZK')),
+                    $this->datum($kdy).' · '.$this->castka((float) $vydaj->amount_from, Meny::kod($vydaj->currency_from) ?? $hlavni),
                     '', 'var(--g-panel)', 'x-transakce'];
             }
         }
@@ -245,6 +253,40 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         return $nalezy;
+    }
+
+    /**
+     * Největší výdaj z kandidátů seřazených od největší částky — podle hodnoty v hlavní měně.
+     *
+     * Řadilo se podle holého čísla, takže 1 000 Kč „přebilo" 100 € (2 500 Kč).
+     * Z každé měny se vezme její největší výdaj a ty se srovnají přepočtené
+     * kurzem ECB. Měna bez kurzu se srovnat nedá a vypadne; když se nedá
+     * přepočítat nic (samé cizí měny bez kurzu), zůstane největší výdaj
+     * podle pořadí z databáze — jiné srovnání není.
+     *
+     * @param  Collection<int, object>  $kandidati
+     */
+    private function nejvetsiVydaj(Collection $kandidati, string $hlavni): ?object
+    {
+        if ($kandidati->isEmpty()) {
+            return null;
+        }
+
+        // Kandidáti jsou seřazení sestupně, takže první v měně je její největší.
+        $podleMeny = $kandidati->groupBy(fn (object $t) => Meny::kod($t->currency_from) ?? $hlavni)
+            ->map(fn (Collection $v) => $v->first());
+
+        $vHlavni = $podleMeny->map(function (object $t, string $mena) use ($hlavni) {
+            if ($mena === $hlavni) {
+                return (float) $t->amount_from;
+            }
+
+            $kurz = $this->kurzy->rate($mena, $hlavni);
+
+            return $kurz === null ? null : (float) $t->amount_from * $kurz['rate'];
+        })->filter(fn (?float $castka) => $castka !== null);
+
+        return $vHlavni->isEmpty() ? $kandidati->first() : $podleMeny[$vHlavni->sortDesc()->keys()->first()];
     }
 
     // ——— rytmus vztahu ———
@@ -433,15 +475,17 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('transactions')) {
+            // Výdaj bez měny je v hlavní měně dvojice — ne natvrdo v korunách.
+            $hlavni = Meny::hlavni($prostor);
             DB::table('transactions')->where('gallery_space_id', $prostor->id)->where('type', 'expense')->whereNull('deleted_at')
                 ->whereDate('occurred_at', $od->toDateString())
                 ->orderBy('created_at')->limit(4)
                 ->get(['description', 'counterparty', 'amount_from', 'currency_from', 'created_at'])
-                ->each(function ($t) use (&$radky, $od) {
+                ->each(function ($t) use (&$radky, $od, $hlavni) {
                     // Datum výdaje nemá čas; řadí se podle toho, kdy byl zapsaný.
                     $zapsano = Cas::mistni($t->created_at);
                     $radky[] = ['t' => $zapsano->isSameDay($od) ? $zapsano : $od->setTime(12, 0), 'ph-receipt', 'Výdaj',
-                        ($t->description ?: ($t->counterparty ?: 'Výdaj')).' · '.$this->castka((float) $t->amount_from, (string) ($t->currency_from ?? 'CZK')), 'x-transakce', null];
+                        ($t->description ?: ($t->counterparty ?: 'Výdaj')).' · '.$this->castka((float) $t->amount_from, Meny::kod($t->currency_from) ?? $hlavni), 'x-transakce', null];
                 });
         }
 
@@ -716,17 +760,10 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
         return intdiv($sekund, 60).':'.str_pad((string) ($sekund % 60), 2, '0', STR_PAD_LEFT);
     }
 
+    /** Tisíce pevnou mezerou, ať se částka na úvodní obrazovce nezlomí; znak podle `Meny`. */
     private function castka(float $castka, string $mena): string
     {
-        $znak = match (strtoupper($mena)) {
-            'CZK' => 'Kč',
-            'EUR' => '€',
-            'USD' => '$',
-            'GBP' => '£',
-            default => strtoupper($mena),
-        };
-
-        return number_format($castka, 0, ',', "\u{00A0}").' '.$znak;
+        return number_format($castka, 0, ',', "\u{00A0}").' '.Meny::znak($mena);
     }
 
     private function pocet(int $n, string $jedna, string $dve, string $pet): string

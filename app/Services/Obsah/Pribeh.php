@@ -9,6 +9,7 @@ use App\Models\MediaVariant;
 use App\Models\Transaction;
 use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
+use App\Support\Meny;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use App\Support\Trezor;
@@ -610,13 +611,10 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
         ]));
     }
 
+    /** Příběh vypráví, kolik se dalo — bez znaménka; zápis částky je společný (`Meny`). */
     private function castka(float $castka, string $mena): string
     {
-        $znak = match (strtoupper($mena)) {
-            'CZK' => 'Kč', 'EUR' => '€', 'USD' => '$', default => $mena,
-        };
-
-        return number_format(abs($castka), 0, ',', ' ').' '.$znak;
+        return Meny::castka(abs($castka), $mena);
     }
 
     /** „Pátek 24. července 2026" — nadpis rekonstruovaného dne. */

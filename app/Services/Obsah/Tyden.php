@@ -4,7 +4,9 @@ namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
 use App\Models\Transaction;
+use App\Services\Finance\ExchangeRateService;
 use App\Support\Cas;
+use App\Support\Meny;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -44,6 +46,9 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
 
     /** @var array<int, bool> které snímky mají zmenšeninu */
     private array $nahledy = [];
+
+    // Útrata týdne a roční finance sčítají přes měny v hlavní měně kurzem ECB.
+    public function __construct(private readonly ExchangeRateService $kurzy) {}
 
     public function skupina(): string
     {
@@ -379,31 +384,19 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
              *
              * Eura a koruny se sčítaly dohromady a psaly jako „Kč"; a
              * `NOT IN (draft, rejected)` bralo i čekající (`pending`), které
-             * kniha (`Transaction::ZAPSANE`) ještě nepočítá. Ukazuje se měna
-             * s nejvíc pohyby — stejně jako u útraty týdne — a že jiné měny
-             * v souhrnu nejsou, se řekne.
+             * kniha (`Transaction::ZAPSANE`) ještě nepočítá. Pak se ukazovala
+             * jen měna s nejvíc pohyby. Teď se měny přepočtou do hlavní kurzem
+             * ECB (`financeRoku()`), a bez kurzu se ukáže jen hlavní měna.
              */
             $poMenach = DB::table('transactions')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
                 ->whereIn('state', Transaction::ZAPSANE)->whereIn('type', Transaction::VYSLEDKOVE)
                 ->whereBetween('occurred_at', [$od->toDateString(), $do->toDateString()])
-                ->selectRaw('type, COALESCE(currency_from, currency_to, ?) AS mena, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka, COUNT(*) AS n', ['CZK'])
+                ->selectRaw('type, COALESCE(currency_from, currency_to, ?) AS mena, SUM(ABS(COALESCE(amount_from, amount_to))) AS castka, COUNT(*) AS n', [Meny::hlavni($prostor)])
                 ->groupBy('type', 'mena')
                 ->get();
 
             if ($poMenach->isNotEmpty()) {
-                $meny = $poMenach->groupBy(fn (object $r) => strtoupper((string) $r->mena));
-                $mena = $meny->sortByDesc(fn (Collection $r) => $r->sum('n'))->keys()->first();
-                $pohyby = $meny[$mena]->pluck('castka', 'type');
-                $vydaje = (float) ($pohyby['expense'] ?? 0);
-                $prijmy = (float) ($pohyby['income'] ?? 0);
-                $popisek = $meny->count() > 1 ? 'zapsané v knize · jen v '.$mena : 'zapsané v knize';
-                $castka = fn (float $c) => number_format($c, 0, ',', "\u{00A0}").' '.$this->znak($mena);
-
-                $kapitoly[] = ['finance', 'Finance', 3, 'Roční souhrn bez detailů transakcí.', [
-                    ['Výdaje', $castka($vydaje), $popisek],
-                    ['Příjmy', $castka($prijmy), $popisek],
-                    ['Rozdíl', $castka($prijmy - $vydaje), $prijmy >= $vydaje ? 'zbylo' : 'chybělo'],
-                ]];
+                $kapitoly[] = ['finance', 'Finance', 3, 'Roční souhrn bez detailů transakcí.', $this->financeRoku($prostor, $poMenach)];
             }
         }
 
@@ -612,8 +605,11 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
     /**
      * Utraceno za týden: `[částka, poznámka]`.
      *
-     * Výdaje v různých měnách se nesčítají — koruny s eury by daly číslo,
-     * které neplatí ani v jedné. Ukáže se měna s nejvíc výdaji.
+     * Výdaje v různých měnách se sčítají v hlavní měně kurzem ECB a poznámka
+     * nese rozpis po měnách i datum kurzu („3 000 Kč + 50 € · přepočteno kurzem
+     * ECB k 24. 9. 2026"). Dřív se ukázala jen měna s nejvíc výdaji a ostatní
+     * zmizely. Bez kurzu se nesčítá nic: ukáže se hlavní měna a zbytek stranou —
+     * koruny s eury by daly číslo, které neplatí ani v jedné.
      *
      * @return array{0: string, 1: string}
      */
@@ -623,7 +619,8 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
             return ['—', 'finance nejsou založené'];
         }
 
-        $poMenach = DB::table('transactions')
+        $hlavni = Meny::hlavni($prostor);
+        $radky = DB::table('transactions')
             ->where('gallery_space_id', $prostor->id)
             ->where('type', 'expense')
             ->whereNull('deleted_at')
@@ -631,19 +628,138 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereIn('state', Transaction::ZAPSANE)
             ->where('occurred_at', '>=', $od->toDateString())
             ->where('occurred_at', '<', $do->toDateString())
-            ->selectRaw('COALESCE(currency_from, ?) AS mena, SUM(amount_from) AS soucet, COUNT(*) AS n', ['CZK'])
+            ->selectRaw('COALESCE(currency_from, ?) AS mena, SUM(amount_from) AS soucet, COUNT(*) AS n', [$hlavni])
             ->groupBy('mena')
-            ->get()
-            ->sortByDesc('n');
+            ->get();
 
-        if ($poMenach->isEmpty()) {
+        if ($radky->isEmpty()) {
             return ['0', 'žádný zapsaný výdaj'];
         }
 
-        $hlavni = $poMenach->first();
-        $castka = number_format((float) $hlavni->soucet, 0, ',', "\u{00A0}").' '.$this->znak((string) $hlavni->mena);
+        $soucty = $this->poMenach($radky, $hlavni);
+        $vysledek = $this->kurzy->doHlavni($soucty, $prostor);
 
-        return [$castka, $poMenach->count() > 1 ? 'jen výdaje v '.$hlavni->mena.', další jsou v jiné měně' : $this->pocet((int) $hlavni->n, 'výdaj', 'výdaje', 'výdajů')];
+        if ($vysledek['uplne']) {
+            $castka = $this->castka((float) $vysledek['celkem'], $vysledek['mena']);
+            $popisek = $this->kurzy->popisek($vysledek);
+
+            return [$castka, $popisek === null
+                ? $this->pocet((int) $radky->sum('n'), 'výdaj', 'výdaje', 'výdajů')
+                : $this->castky($vysledek['poMenach']).' · '.$popisek];
+        }
+
+        $mena = $this->ukazanaMena($vysledek['poMenach'], $hlavni);
+        $stranou = array_diff_key($vysledek['poMenach'], [$mena => true]);
+
+        return [
+            $this->castka($vysledek['poMenach'][$mena] ?? 0.0, $mena),
+            // Jediná měna bez kurzu (třeba týden jen v eurech) nemá co dát stranou.
+            $stranou === []
+                ? $this->pocet((int) $radky->sum('n'), 'výdaj', 'výdaje', 'výdajů')
+                : 'jen výdaje v '.$mena.', '.$this->castky($stranou).' stranou',
+        ];
+    }
+
+    /**
+     * Kapitola „Finance" roku v číslech: výdaje, příjmy a rozdíl.
+     *
+     * S kurzem se všechno převede do hlavní měny; výdaje i příjmy se převádějí
+     * jen spolu — kdyby výdaje přepočtené byly a příjmy ne, rozdíl by odečítal
+     * úplné číslo od neúplného. Bez kurzu jedna měna (hlavní, když v ní něco
+     * je) a zbytek se v poznámce napíše částkou „stranou".
+     *
+     * @param  Collection<int, object>  $radky  {type, mena, castka, n}
+     * @return list<array{0: string, 1: string, 2: string}>
+     */
+    private function financeRoku(GallerySpace $prostor, Collection $radky): array
+    {
+        $hlavni = Meny::hlavni($prostor);
+        $vydajePoMenach = $this->poMenach($radky->where('type', 'expense'), $hlavni);
+        $prijmyPoMenach = $this->poMenach($radky->where('type', 'income'), $hlavni);
+
+        $vydaje = $this->kurzy->doHlavni($vydajePoMenach, $prostor);
+        $prijmy = $this->kurzy->doHlavni($prijmyPoMenach, $prostor);
+
+        if ($vydaje['uplne'] && $prijmy['uplne']) {
+            $mena = $vydaje['mena'];
+            $v = (float) $vydaje['celkem'];
+            $p = (float) $prijmy['celkem'];
+            $poznamka = fn (array $vysledek) => ($popisek = $this->kurzy->popisek($vysledek)) === null
+                ? 'zapsané v knize'
+                : 'zapsané v knize · '.$this->castky($vysledek['poMenach']).' · '.$popisek;
+
+            return [
+                ['Výdaje', $this->castka($v, $mena), $poznamka($vydaje)],
+                ['Příjmy', $this->castka($p, $mena), $poznamka($prijmy)],
+                ['Rozdíl', $this->castka($p - $v, $mena), $p >= $v ? 'zbylo' : 'chybělo'],
+            ];
+        }
+
+        // Měna, ve které se ukáže obojí: hlavní, jinak ta s nejvíc pohyby.
+        $mena = $this->ukazanaMena($this->poMenach($radky, $hlavni, true), $hlavni);
+        $v = (float) ($vydaje['poMenach'][$mena] ?? 0.0);
+        $p = (float) ($prijmy['poMenach'][$mena] ?? 0.0);
+        $poznamka = function (array $poMenach) use ($mena) {
+            $stranou = array_diff_key($poMenach, [$mena => true]);
+
+            return 'zapsané v knize · jen v '.$mena.($stranou === [] ? '' : ' · '.$this->castky($stranou).' stranou');
+        };
+
+        return [
+            ['Výdaje', $this->castka($v, $mena), $poznamka($vydaje['poMenach'])],
+            ['Příjmy', $this->castka($p, $mena), $poznamka($prijmy['poMenach'])],
+            ['Rozdíl', $this->castka($p - $v, $mena), $p >= $v ? 'zbylo' : 'chybělo'],
+        ];
+    }
+
+    /**
+     * Řádky `{mena, soucet|castka, n}` jako `měna => součet`, měny s nejvíc zápisy první.
+     *
+     * Pořadí rozhoduje, kterou měnu ukázat, když kurz chybí a hlavní měna v datech
+     * není. S `$jenPocty` se místo částek sčítá počet zápisů — tak se vybírá měna
+     * společná výdajům i příjmům.
+     *
+     * @param  Collection<int, object>  $radky
+     * @return array<string, float>
+     */
+    private function poMenach(Collection $radky, string $hlavni, bool $jenPocty = false): array
+    {
+        $soucty = [];
+        $pocty = [];
+
+        foreach ($radky as $r) {
+            $mena = strtoupper(trim((string) $r->mena)) ?: $hlavni;
+            $castka = $jenPocty ? (int) $r->n : (float) ($r->soucet ?? $r->castka ?? 0);
+            $soucty[$mena] = ($soucty[$mena] ?? 0.0) + $castka;
+            $pocty[$mena] = ($pocty[$mena] ?? 0) + (int) $r->n;
+        }
+
+        arsort($pocty);
+
+        // Klíče v pořadí podle počtu, hodnoty součty.
+        return array_map(fn (string $mena) => $soucty[$mena], array_combine(array_keys($pocty), array_keys($pocty)));
+    }
+
+    /**
+     * Měna, ve které se ukáže číslo, když kurz chybí: hlavní, když v ní něco je, jinak první.
+     *
+     * @param  array<string, float>  $poMenach  seřazené podle přednosti
+     */
+    private function ukazanaMena(array $poMenach, string $hlavni): string
+    {
+        return array_key_exists($hlavni, $poMenach) || $poMenach === [] ? $hlavni : (string) array_key_first($poMenach);
+    }
+
+    /** Částka jako na celé obrazovce týdne: tisíce pevnou mezerou, ať se číslo nezlomí. */
+    private function castka(float $castka, string $mena): string
+    {
+        return number_format($castka, 0, ',', "\u{00A0}").' '.Meny::znak($mena);
+    }
+
+    /** @param  array<string, float>  $castky  „3 000 Kč + 50 €" */
+    private function castky(array $castky): string
+    {
+        return implode(' + ', array_map(fn (string $mena, float $castka) => $this->castka($castka, $mena), array_keys($castky), $castky));
     }
 
     // ——— příští týden ———
@@ -881,17 +997,6 @@ class Tyden implements MaPrazdneKolekce, PoskytovatelObsahu
     private function pocet(int $n, string $jedna, string $dve, string $pet): string
     {
         return $n.' '.($n === 1 ? $jedna : ($n >= 2 && $n <= 4 ? $dve : $pet));
-    }
-
-    private function znak(string $mena): string
-    {
-        return match (strtoupper($mena)) {
-            'CZK' => 'Kč',
-            'EUR' => '€',
-            'USD' => '$',
-            'GBP' => '£',
-            default => strtoupper($mena),
-        };
     }
 
     /**

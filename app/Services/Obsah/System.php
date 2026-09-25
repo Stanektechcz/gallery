@@ -10,6 +10,7 @@ use App\Models\StorageConnection;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
+use App\Services\Finance\ExchangeRateService;
 use App\Services\Finance\LedgerService;
 use App\Services\Media\MazaniFotek;
 use App\Services\Notifications\NotificationPreferenceService;
@@ -18,6 +19,7 @@ use App\Services\Provoz\PlanovaneUlohy;
 use App\Services\Provoz\UlozisteGalerie;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\Cas;
+use App\Support\Meny;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use App\Support\Trezor;
@@ -86,6 +88,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         private readonly PlanovaneUlohy $ulohy,
         private readonly NastaveniAplikace $nastaveni,
         private readonly MazaniFotek $mazaniFotek,
+        // Součty přes měny (zůstatek, rozpočet, cesta) jdou do hlavní měny kurzem ECB.
+        private readonly ExchangeRateService $kurzy,
     ) {}
 
     public function skupina(): string
@@ -1203,19 +1207,26 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $zustatky = $this->kniha->walletBalances($prostor)->keyBy('uuid');
 
         /*
-         * Sčítají se jen účty ve stejné měně.
+         * Zůstatek v hlavní měně (CZK), účty v jiných měnách přepočtené kurzem ECB.
          *
-         * Koruny a eura se sčítaly dohromady a výsledek se napsal v měně
-         * prvního účtu — na obrazovce, jejímž jediným úkolem je říct, kterým
-         * číslům se dá věřit. Když má dvojice účty ve víc měnách, počítá se
-         * ta nejčastější a řádek řekne, že ostatní stranou.
+         * Dřív vyhrála měna s nejvíc účty — dva eurové účty proti jednomu
+         * korunovému tak z celého zůstatku udělaly „1 000 €" a koruny zmizely.
+         * Teď se každá měna sečte zvlášť a převede jednou; když kurz chybí,
+         * ukáže se jen hlavní měna a zbytek se napíše částkou „stranou" —
+         * smíšené číslo na obrazovce o důvěryhodnosti čísel nesmí vzniknout.
          */
-        $podleMeny = $penezenky->groupBy(fn (object $p) => mb_strtoupper(trim((string) ($p->currency ?: 'CZK'))));
-        $hlavni = $podleMeny->sortByDesc(fn (Collection $ucty) => $ucty->count())->keys()->first();
-        $vHlavni = $podleMeny[$hlavni];
-        $stranou = $penezenky->count() - $vHlavni->count();
+        $hlavniMena = Meny::hlavni($prostor);
+        $podleMeny = $penezenky->groupBy(fn (object $p) => $this->klicMeny($p->currency, $hlavniMena));
+        $poMenach = $podleMeny
+            ->sortByDesc(fn (Collection $ucty) => $ucty->count())
+            ->map(fn (Collection $ucty) => $ucty->sum(fn (object $p) => (float) ($zustatky[$p->uuid]['balance'] ?? $p->opening_balance ?? 0)))
+            ->all();
 
-        $celkem = $vHlavni->sum(fn (object $p) => (float) ($zustatky[$p->uuid]['balance'] ?? $p->opening_balance ?? 0));
+        $soucet = $this->vHlavniMene($poMenach, $prostor);
+        $hlavni = $soucet['mena'];
+        $celkem = $soucet['hodnota'];
+        // Kolik účtů je v čísle: po přepočtu všechny, bez kurzu jen ty v ukázané měně.
+        $vHlavni = $soucet['stranou'] === [] ? $penezenky : ($podleMeny[$hlavni] ?? collect());
 
         $napojeni = Tabulky::je('bank_connections')
             ? DB::table('bank_connections')
@@ -1230,12 +1241,17 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return [
             'label' => 'Zůstatek na účtech',
-            'value' => $this->castka($celkem, (string) $hlavni),
+            'value' => Meny::castka($celkem, $hlavni),
             'kind' => $sync ? 'hard' : 'manual',
             'where' => trim(($sync
                 ? 'Bankovní napojení · '.($napojeni->institution_name ?: 'banka')
                 : $this->pocet($vHlavni->count(), 'ručně vedený účet', 'ručně vedené účty', 'ručně vedených účtů'))
-                .($stranou > 0 ? ' · '.$this->pocet($stranou, 'účet v jiné měně stranou', 'účty v jiné měně stranou', 'účtů v jiné měně stranou') : '')),
+                .$this->dovetekMen($soucet, 'stranou')),
+            // Datum kurzu zvlášť, ať ho obrazovka umí ukázat i jinde než ve „where".
+            'rate' => $soucet['prepocet'],
+            // Zůstatky po měnách — původní čísla, přepočet je jen druhá informace.
+            // Prázdné jako `{}`, ať má klíč pořád tvar mapy.
+            'split' => $soucet['poMenach'] ?: new \stdClass,
             'age' => $sync ? $this->pred($sync) : 'podle zapsaných pohybů',
             // Napojený a čerstvý zůstatek je nejtvrdší číslo v aplikaci; ručně
             // vedený je tak přesný, jak přesně se do něj zapisovalo.
@@ -1367,14 +1383,39 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
          * vyřazený z rozpočtu, vyrovnání mezi partnery a eura jako koruny.
          * Převod pěti tisíc na spořák tak „snědl" půlku měsíce.
          */
-        $utraceno = (float) Transaction::withoutGlobalScope(SpaceContext::SCOPE)
+        $hlavniMena = Meny::hlavni($prostor);
+        $menaRozpoctu = $this->klicMeny($rozpocet->currency, $hlavniMena);
+        $poMenach = [];
+
+        Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->utraty()
             ->where('excluded_from_budget', false)
             ->where('is_settlement', false)
-            ->where('currency_from', (string) $rozpocet->currency)
-            ->whereBetween('occurred_at', [$dnes->startOfMonth(), $dnes->endOfMonth()])
-            ->sum('amount_from');
+            // `occurred_at` je datum: jako datum se i porovnává. S časem „00:00:00"
+            // by řetězcové srovnání (SQLite) vynechalo útraty z prvního dne v měsíci.
+            ->whereBetween('occurred_at', [$dnes->startOfMonth()->toDateString(), $dnes->endOfMonth()->toDateString()])
+            ->groupBy('currency_from')
+            ->selectRaw('currency_from AS mena, SUM(amount_from) AS soucet')
+            ->toBase()
+            ->get()
+            ->each(function (object $r) use (&$poMenach, $hlavniMena) {
+                $mena = $this->klicMeny($r->mena, $hlavniMena);
+                $poMenach[$mena] = ($poMenach[$mena] ?? 0.0) + (float) $r->soucet;
+            });
+
+        /*
+         * Útrata v jiné měně rozpočet čerpá taky — přepočtená a označená.
+         *
+         * Počítala se jen útrata v měně rozpočtu, takže večeře za 20 € na
+         * výletě z korunového rozpočtu neubrala nic a „zbývá" lhalo. Bez kurzu
+         * se nepřepočítá nic a řádek řekne, kolik v čísle chybí.
+         */
+        $utraceno = (float) ($poMenach[$menaRozpoctu] ?? 0.0);
+        $jine = array_filter(array_diff_key($poMenach, [$menaRozpoctu => true]), fn (float $c) => abs($c) >= 0.005);
+        $prevod = $jine === [] ? null : $this->doMeny($jine, $menaRozpoctu, $prostor);
+        $utraceno += $prevod['celkem'] ?? 0.0;
+        $jineText = $jine === [] ? '' : ' · '.$this->castky($jine).' '.($prevod['popisek'] ?? 'nezapočteno');
 
         // Odhad stojí na tom, kolik měsíců má aplikace za sebou. Jeden měsíc
         // dat neumí říct nic o tom, jak měsíc obvykle dopadá.
@@ -1382,9 +1423,11 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return [
             'label' => 'Zbývá v rozpočtu tento měsíc',
-            'value' => $this->castka($plan - $utraceno, (string) $rozpocet->currency),
+            'value' => Meny::castka($plan - $utraceno, $menaRozpoctu),
             'kind' => 'guess',
-            'where' => 'Dopočítáno z limitů a zapsaných útrat',
+            'where' => 'Dopočítáno z limitů a zapsaných útrat'.$jineText,
+            'rate' => $prevod['popisek'] ?? null,
+            'split' => $poMenach ?: new \stdClass,
             'age' => 'přepočet při každém načtení',
             'conf' => min(84, 45 + $mesicu * 4),
             'stale' => false,
@@ -1480,13 +1523,16 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         /*
-         * Jen to, co se opravdu utratilo, a jen v jedné měně.
+         * Jen to, co se opravdu utratilo, v hlavní měně.
          *
          * Počítaly se i plánované útraty (rozpočet cesty dopředu) a eura se
-         * přičítala ke korunám pod nápisem „Kč". Bere se nejčastější měna;
-         * ostatní se v řádku přiznají.
+         * přičítala ke korunám pod nápisem „Kč". Pak vyhrávala nejčastější
+         * měna a ostatní se jen přiznaly. Teď se všechno přepočte kurzem ECB
+         * do hlavní měny; bez kurzu se ukáže hlavní měna (nebo nejčastější,
+         * když v hlavní nic není) a zbytek se napíše částkou stranou.
          */
-        $poMenach = DB::table('trip_expenses')
+        $hlavniMena = Meny::hlavni($prostor);
+        $radky = DB::table('trip_expenses')
             ->where('trip_id', $cesta->id)
             ->where('state', 'actual')
             ->groupBy('currency')
@@ -1495,21 +1541,33 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->sortByDesc('pocet')
             ->values();
 
-        $utraty = $poMenach->first();
-
-        if ($utraty === null || (int) $utraty->pocet === 0) {
+        if ((int) $radky->sum('pocet') === 0) {
             return null;
         }
 
-        $jine = $poMenach->count() - 1;
+        $poMenach = [];
+        $pocty = [];
+
+        foreach ($radky as $r) {
+            $mena = $this->klicMeny($r->currency, $hlavniMena);
+            $poMenach[$mena] = ($poMenach[$mena] ?? 0.0) + (float) $r->soucet;
+            $pocty[$mena] = ($pocty[$mena] ?? 0) + (int) $r->pocet;
+        }
+
+        $soucet = $this->vHlavniMene($poMenach, $prostor);
+        // Položek v čísle: po přepočtu všechny, bez kurzu jen ty v ukázané měně.
+        $polozek = $soucet['stranou'] === [] ? array_sum($pocty) : ($pocty[$soucet['mena']] ?? 0);
+        $posledni = $radky->pluck('posledni')->filter()->max();
 
         return [
             'label' => 'Útrata na cestě '.$cesta->name,
-            'value' => $this->castka((float) $utraty->soucet, (string) ($utraty->currency ?: 'CZK')),
+            'value' => Meny::castka($soucet['hodnota'], $soucet['mena']),
             'kind' => 'manual',
-            'where' => 'Zapsáno ručně — '.$this->pocet((int) $utraty->pocet, 'položka', 'položky', 'položek')
-                .($jine > 0 ? ' · '.$this->pocet($jine, 'další měna', 'další měny', 'dalších měn').' stranou' : ''),
-            'age' => $utraty->posledni ? 'poslední zápis '.CarbonImmutable::parse($utraty->posledni)->format('j. n.') : 'bez data',
+            'where' => 'Zapsáno ručně — '.$this->pocet($polozek, 'položka', 'položky', 'položek')
+                .$this->dovetekMen($soucet, 'stranou'),
+            'rate' => $soucet['prepocet'],
+            'split' => $soucet['poMenach'] ?: new \stdClass,
+            'age' => $posledni ? 'poslední zápis '.CarbonImmutable::parse($posledni)->format('j. n.') : 'bez data',
             'conf' => 72,
             'stale' => false,
             'note' => 'Hotovost se na cestě zapisuje z hlavy — pár set stranou je běžné.',
@@ -1810,17 +1868,110 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             : str_replace('.', ',', (string) round($bajtu / 1_000_000, 1)).' MB';
     }
 
-    private function castka(float $castka, string $mena): string
+    /**
+     * Klíč měny pro součty: velkými písmeny, prázdná je hlavní měna.
+     *
+     * Starší zápisy měnu nemají — psalo se jen v korunách. Nesmysl, který kódem
+     * není, se nechává, jak je: `doHlavni()` ho nepřepočítá a řekne to.
+     */
+    private function klicMeny(mixed $mena, string $hlavni): string
     {
-        $znak = match (strtoupper($mena)) {
-            'CZK' => 'Kč',
-            'EUR' => '€',
-            'USD' => '$',
-            'GBP' => '£',
-            default => $mena,
-        };
+        $kod = strtoupper(trim((string) $mena));
 
-        return number_format($castka, 0, ',', ' ').' '.$znak;
+        return $kod === '' ? $hlavni : $kod;
+    }
+
+    /**
+     * Součet po měnách jako jedno číslo v hlavní měně — nebo, bez kurzu, jedna měna a zbytek stranou.
+     *
+     * Bez kurzu se smíšené číslo nesmí ukázat, ani z části přepočtené. Ukáže se
+     * hlavní měna, a když v ní nic není, první měna z `$poMenach` (volající je
+     * řadí podle toho, co má přednost).
+     *
+     * @param  array<string, float>  $poMenach
+     * @return array{hodnota: float, mena: string, prepocet: ?string, stranou: array<string, float>, poMenach: array<string, float>}
+     */
+    private function vHlavniMene(array $poMenach, GallerySpace $prostor): array
+    {
+        $vysledek = $this->kurzy->doHlavni($poMenach, $prostor);
+        $soucty = $vysledek['poMenach'];
+        // Rozpis s hlavní měnou vpředu; `array_merge` nechá klíč na prvním místě.
+        $soucty = isset($soucty[$vysledek['mena']]) ? array_merge([$vysledek['mena'] => $soucty[$vysledek['mena']]], $soucty) : $soucty;
+
+        if ($vysledek['uplne']) {
+            return [
+                'hodnota' => (float) $vysledek['celkem'],
+                'mena' => $vysledek['mena'],
+                'prepocet' => $this->kurzy->popisek($vysledek),
+                'stranou' => [],
+                'poMenach' => $soucty,
+            ];
+        }
+
+        $mena = array_key_exists($vysledek['mena'], $soucty) ? $vysledek['mena'] : (string) array_key_first($soucty);
+
+        return [
+            'hodnota' => (float) ($soucty[$mena] ?? 0.0),
+            'mena' => $mena,
+            'prepocet' => null,
+            'stranou' => array_diff_key($soucty, [$mena => true]),
+            'poMenach' => $soucty,
+        ];
+    }
+
+    /**
+     * Částky převedené do měny `$cil`, nebo null, když chybí jediný kurz.
+     *
+     * Do hlavní měny přes `doHlavni()`. Rozpočet ale smí být i v eurech a
+     * `doHlavni()` převádí jen do hlavní měny — tam se kurz bere po měnách
+     * z `rate()`, se stejným pravidlem: datum je to nejstarší z použitých.
+     *
+     * @param  array<string, float>  $castky  měna => částka, bez měny `$cil`
+     * @return array{celkem: float, popisek: ?string}|null
+     */
+    private function doMeny(array $castky, string $cil, GallerySpace $prostor): ?array
+    {
+        if ($cil === Meny::hlavni($prostor)) {
+            $vysledek = $this->kurzy->doHlavni($castky, $prostor);
+
+            return $vysledek['uplne'] ? ['celkem' => (float) $vysledek['celkem'], 'popisek' => $this->kurzy->popisek($vysledek)] : null;
+        }
+
+        $celkem = 0.0;
+        $datum = null;
+
+        foreach ($castky as $mena => $castka) {
+            $kurz = Meny::kod((string) $mena) === null ? null : $this->kurzy->rate((string) $mena, $cil);
+
+            if ($kurz === null) {
+                return null;
+            }
+
+            $celkem += $castka * $kurz['rate'];
+            $datum = $datum === null || $kurz['date'] < $datum ? $kurz['date'] : $datum;
+        }
+
+        return ['celkem' => round($celkem, 2), 'popisek' => $this->kurzy->popisek(['prepocteno' => true, 'kurzKeDni' => $datum])];
+    }
+
+    /**
+     * Dovětek řádku: „ · přepočteno kurzem ECB k …", nebo „ · 1 000 € stranou".
+     *
+     * @param  array{prepocet: ?string, stranou: array<string, float>}  $soucet  výstup `vHlavniMene()`
+     */
+    private function dovetekMen(array $soucet, string $slovo): string
+    {
+        return match (true) {
+            $soucet['prepocet'] !== null => ' · '.$soucet['prepocet'],
+            $soucet['stranou'] !== [] => ' · '.$this->castky($soucet['stranou']).' '.$slovo,
+            default => '',
+        };
+    }
+
+    /** @param  array<string, float>  $castky  měna => částka; „1 000 € + 20 $" */
+    private function castky(array $castky): string
+    {
+        return implode(' + ', array_map(fn (string $mena, float $castka) => Meny::castka($castka, $mena), array_keys($castky), $castky));
     }
 
     private function cislo(int $kolik): string
@@ -2089,7 +2240,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             trim(implode(' · ', array_filter([
                 (string) $t['id'] === $muj ? 'aktivní' : null,
                 $t['gb'] > 0 ? $t['gb'].' GB' : null,
-                $t['price'] > 0 ? $this->castka((float) $t['price'], 'CZK').' měsíčně' : 'zdarma',
+                $t['price'] > 0 ? Meny::castka((float) $t['price'], 'CZK').' měsíčně' : 'zdarma',
             ]))),
             (string) $t['id'] === $muj ? 'aktivní' : 'zařadit',
         ], $tarify);

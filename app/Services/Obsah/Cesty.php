@@ -3,7 +3,9 @@
 namespace App\Services\Obsah;
 
 use App\Models\GallerySpace;
+use App\Services\Finance\ExchangeRateService;
 use App\Support\Cas;
+use App\Support\Meny;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
@@ -28,6 +30,9 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
 
     private const DNY = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+
+    // Útraty cesty ve víc měnách se sčítají v hlavní měně kurzem ECB.
+    public function __construct(private readonly ExchangeRateService $kurzy) {}
 
     public function skupina(): string
     {
@@ -270,7 +275,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 // pod cestou vzniká hledáním.
                 'photoMatch' => $mistaCesty->first() ?: $c->name,
                 'desc' => (string) ($c->description ?? ''),
-                'stats' => $this->cisla($c, $od, $do, $delka, $dnes, $utraty[$c->id] ?? collect(), $limity[$c->id] ?? collect(), $dny[$c->id] ?? collect(), $program),
+                'stats' => $this->cisla($prostor, $c, $od, $do, $delka, $dnes, $utraty[$c->id] ?? collect(), $limity[$c->id] ?? collect(), $dny[$c->id] ?? collect(), $program),
                 'days' => $this->dnyCesty($dny[$c->id] ?? collect(), $program, $od),
                 'budget' => $this->rozpocet($limity[$c->id] ?? collect(), $utraty[$c->id] ?? collect()),
                 'budgetTitle' => 'Rozpočet cesty',
@@ -287,9 +292,13 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      * Čísla nad cestou. Které to jsou, závisí na tom, kdy cesta je: před
      * odjezdem zajímá odpočet, uprostřed dnešní den, po ní útrata.
      *
+     * „Utraceno" ve víc měnách se s kurzem ECB sečte v hlavní měně a třetí
+     * prvek řádku nese datum kurzu a rozpis po měnách; bez kurzu se ukáže
+     * jen rozpis („70 € + 500 Kč") — dřív tu stálo „sečíst nejde".
+     *
      * @return list<array<int, string>>
      */
-    private function cisla(object $c, CarbonImmutable $od, CarbonImmutable $do, int $delka, CarbonImmutable $dnes, Collection $utraty, Collection $limity, Collection $dny, Collection $program): array
+    private function cisla(GallerySpace $prostor, object $c, CarbonImmutable $od, CarbonImmutable $do, int $delka, CarbonImmutable $dnes, Collection $utraty, Collection $limity, Collection $dny, Collection $program): array
     {
         // Zrušený program v plánu není — „Položek v plánu" ho počítalo taky.
         $polozek = $dny->sum(fn ($d) => ($program[$d->id] ?? collect())
@@ -311,11 +320,37 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 $dnes->gt($do) => ['Bylo', 'před '.$this->pocet((int) $do->diffInDays($dnes), 'dnem', 'dny', 'dny')],
                 default => ['Dnes', 'den '.((int) $od->diffInDays($dnes) + 1)],
             },
-            $plan && $menaPlanu !== null ? ['Rozpočet', $this->castka($plan, $menaPlanu)] : null,
-            $utraceno && $menaUtrat !== null ? ['Utraceno', $this->castka($utraceno, $menaUtrat)] : null,
-            $utraceno && $menaUtrat === null ? ['Utraceno', 've víc měnách — sečíst nejde'] : null,
+            $plan && $menaPlanu !== null ? ['Rozpočet', Meny::castka($plan, $menaPlanu)] : null,
+            $utraceno && $menaUtrat !== null ? ['Utraceno', Meny::castka($utraceno, $menaUtrat)] : null,
+            $utraceno && $menaUtrat === null ? $this->utracenoVeVicMenach($prostor, $skutecne, $c->currency ?? null) : null,
             $polozek ? ['Položek v plánu', (string) $polozek] : null,
         ]));
+    }
+
+    /**
+     * „Utraceno" z útrat ve víc měnách: `['Utraceno', částka, popisek]`, nebo bez kurzu `['Utraceno', rozpis]`.
+     *
+     * @param  Collection<int, object>  $utraty
+     * @return array<int, string>
+     */
+    private function utracenoVeVicMenach(GallerySpace $prostor, Collection $utraty, ?string $menaCesty): array
+    {
+        $poMenach = $this->poMenach($utraty, Meny::kod($menaCesty) ?? Meny::hlavni($prostor));
+        $vysledek = $this->kurzy->doHlavni($poMenach, $prostor);
+
+        if (! $vysledek['uplne']) {
+            return ['Utraceno', $this->castky($poMenach)];
+        }
+
+        // Víc měn a úplný přepočet: popisek s datem kurzu tu je vždycky. Kdyby se
+        // měny sešly jen v hlavní (třeba „czk" a „CZK"), stačí rozpis.
+        $popisek = $this->kurzy->popisek($vysledek);
+
+        return [
+            'Utraceno',
+            Meny::castka((float) $vysledek['celkem'], $vysledek['mena']),
+            $popisek === null ? $this->castky($poMenach) : $popisek.' · '.$this->castky($poMenach),
+        ];
     }
 
     /**
@@ -351,6 +386,12 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
      * Příznak 2 znamená „jen plán" — v téhle kategorii se zatím nic neutratilo
      * a pruh se nemá kreslit jako naplněný.
      *
+     * S limitem se srovnává jen útrata v jeho měně. Koruny se sčítaly s eury
+     * a „540 z 100 €" tvrdilo přečerpání, které nenastalo. Útrata v jiné měně
+     * se připíše vedle („· 500 Kč v jiné měně"), do procent nevstupuje:
+     * limit cesty je v měně cesty a na jeho přepočet by kurz ECB do hlavní
+     * měny nestačil.
+     *
      * @return list<array<int, mixed>>
      */
     private function rozpocet(Collection $limity, Collection $utraty): array
@@ -359,14 +400,18 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
 
         return $limity->map(function ($l) use ($podleKategorie) {
             $limit = (int) $l->amount;
-            $vKategorii = $podleKategorie[$l->category] ?? collect();
-            $utraceno = (int) $vKategorii->sum('amount');
+            $mena = Meny::kod($l->currency ?? null) ?? Meny::HLAVNI;
+            // Útrata bez měny patří k limitu, jako dřív — starší zápisy měnu nemají.
+            $poMenach = $this->poMenach($podleKategorie[$l->category] ?? collect(), $mena);
+            $utraceno = (int) round($poMenach[$mena] ?? 0.0);
+            $jine = array_diff_key($poMenach, [$mena => true]);
 
             return [
                 $this->kategorie((string) $l->category),
-                $utraceno
-                    ? $this->cislo($utraceno).' z '.$this->castka($limit, $l->currency ?? null)
-                    : 'plán '.$this->castka($limit, $l->currency ?? null),
+                ($utraceno
+                    ? $this->cislo($utraceno).' z '.Meny::castka($limit, $mena)
+                    : 'plán '.Meny::castka($limit, $mena))
+                .($jine === [] ? '' : ' · '.$this->castky($jine).' v jiné měně'),
                 $limit ? min(100, (int) round($utraceno / $limit * 100)) : 0,
                 $utraceno ? 0 : 2,
             ];
@@ -408,6 +453,24 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             : collect();
 
         $utraty = DB::table('trip_expenses')->where('trip_id', $ted->id)->where('state', '!=', 'planned')->get();
+        $dnesni = $utraty->filter(fn ($u) => $u->occurred_at && CarbonImmutable::parse($u->occurred_at)->isSameDay($dnes));
+
+        /*
+         * Čísla běžící cesty jsou v měně cesty.
+         *
+         * `fund`, `spent` i `todaySpent` sčítaly koruny s eury a obrazovka je
+         * pak kreslila globálním znakem — eurová cesta s večeří za 500 Kč
+         * „utratila 540 €". Teď nesou jen útraty v měně cesty; ostatní měny
+         * chodí zvlášť (`spentOther`, `todayOther`) a souhrn všeho v hlavní
+         * měně kurzem ECB (`spentMain`, bez kurzu `celkem: null`). Limity v jiné
+         * měně do fondu nepatří — jinak by se znovu sčítalo, co sečíst nejde.
+         */
+        $mena = Meny::kod($ted->currency ?? null) ?? Meny::hlavni($prostor);
+        $limity = DB::table('trip_budget_limits')->where('trip_id', $ted->id)->get(['amount', 'currency']);
+        $fond = $limity->filter(fn ($l) => (Meny::kod($l->currency) ?? $mena) === $mena)->sum('amount');
+        $poMenach = $this->poMenach($utraty, $mena);
+        $dnesPoMenach = $this->poMenach($dnesni, $mena);
+        $vHlavni = $this->kurzy->doHlavni($poMenach, $prostor);
 
         return [
             'id' => $klic,
@@ -418,12 +481,23 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
             'day' => (int) $od->diffInDays($dnes) + 1,
             'days' => (int) $od->diffInDays($do) + 1,
             'when' => self::DNY[$dnes->dayOfWeek].' '.$dnes->day.'. '.self::MESICE[$dnes->month].' '.$dnes->year,
+            'mena' => $mena,
+            'znak' => Meny::znak($mena),
             // Jako u seznamu cest: limity kategorií, jinak celkový rozpočet z dialogu nové cesty.
-            'fund' => (int) DB::table('trip_budget_limits')->where('trip_id', $ted->id)->sum('amount') ?: (int) round((float) ($ted->budget ?? 0)),
-            'spent' => (int) $utraty->sum('amount'),
-            'todaySpent' => (int) $utraty
-                ->filter(fn ($u) => $u->occurred_at && CarbonImmutable::parse($u->occurred_at)->isSameDay($dnes))
-                ->sum('amount'),
+            'fund' => (int) $fond ?: (int) round((float) ($ted->budget ?? 0)),
+            'spent' => (int) round($poMenach[$mena] ?? 0.0),
+            'todaySpent' => (int) round($dnesPoMenach[$mena] ?? 0.0),
+            // Mapa měna => částka; prázdná jako `{}`, ať má klíč pořád stejný tvar.
+            'spentOther' => array_diff_key($poMenach, [$mena => true]) ?: new \stdClass,
+            'todayOther' => array_diff_key($dnesPoMenach, [$mena => true]) ?: new \stdClass,
+            'spentMain' => [
+                'mena' => $vHlavni['mena'],
+                'znak' => Meny::znak($vHlavni['mena']),
+                'celkem' => $vHlavni['celkem'],
+                'kurzKeDni' => $vHlavni['kurzKeDni'],
+                'popisek' => $this->kurzy->popisek($vHlavni),
+                'chybi' => $vHlavni['chybi'],
+            ],
             'plan' => $program->map(fn ($a) => [
                 $a->starts_at ? CarbonImmutable::parse($a->starts_at)->format('G:i') : '—',
                 $this->ikona((string) $a->type),
@@ -433,13 +507,14 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 // Číslo bodu — pro „Posunout o hodinu".
                 (int) $a->id,
             ])->values()->all(),
-            'spendRows' => $utraty
-                ->filter(fn ($u) => $u->occurred_at && CarbonImmutable::parse($u->occurred_at)->isSameDay($dnes))
+            'spendRows' => $dnesni
                 ->map(fn ($u) => [
                     $u->title,
                     (int) $u->amount,
                     $this->kategorie((string) $u->category),
                     CarbonImmutable::parse($u->occurred_at)->format('G:i'),
+                    // Měna řádku — částka je v ní, ne v měně cesty.
+                    Meny::kod($u->currency) ?? $mena,
                 ])->values()->all(),
             'diary' => $this->denikCesty($ted->id, $od),
             'tripEntry' => [
@@ -926,27 +1001,41 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
     }
 
     /**
-     * Částka s měnou, ve které je.
+     * Útraty sečtené po měnách, měna `$vychozi` první.
      *
-     * Psalo se natvrdo „Kč" — cesta rozpočtovaná v eurech tak o sobě tvrdila
-     * „Rozpočet 1 200 Kč". `trips.currency` i `trip_expenses.currency` přitom
-     * existují. Když se v seznamu sejde víc měn, nesčítá se nic: součet korun
-     * a eur je číslo, které nic neznamená.
+     * Útrata bez měny patří k `$vychozi` (měna cesty nebo limitu) — starší
+     * zápisy měnu nemají. Částky se nesčítají přes měny; to dělá až
+     * `ExchangeRateService::doHlavni()`, s kurzem a datem.
+     *
+     * @param  Collection<int, object>  $utraty
+     * @return array<string, float>
      */
-    private function castka(int $kolik, ?string $mena): string
+    private function poMenach(Collection $utraty, string $vychozi): array
     {
-        return $this->cislo($kolik).' '.$this->znak($mena);
+        $soucty = [];
+
+        foreach ($utraty as $u) {
+            $mena = Meny::kod($u->currency ?? null) ?? $vychozi;
+            $soucty[$mena] = round(($soucty[$mena] ?? 0.0) + (float) $u->amount, 2);
+        }
+
+        $soucty = array_filter($soucty, fn (float $c) => abs($c) >= 0.005);
+
+        // `array_merge` nechá klíč na místě, kde se objevil poprvé — tady vpředu.
+        return isset($soucty[$vychozi]) ? array_merge([$vychozi => $soucty[$vychozi]], $soucty) : $soucty;
     }
 
-    private function znak(?string $mena): string
+    /**
+     * Částky po měnách vedle sebe: „70 € + 500 Kč".
+     *
+     * Částka se píše v měně, ve které je (`Meny::castka`). Dřív tu stálo natvrdo
+     * „Kč" a cesta rozpočtovaná v eurech o sobě tvrdila „Rozpočet 1 200 Kč".
+     *
+     * @param  array<string, float>  $castky
+     */
+    private function castky(array $castky): string
     {
-        return match (mb_strtoupper(trim((string) $mena))) {
-            '', 'CZK' => 'Kč',
-            'EUR' => '€',
-            'USD' => '$',
-            'GBP' => '£',
-            default => mb_strtoupper(trim((string) $mena)),
-        };
+        return implode(' + ', array_map(fn (string $mena, float $castka) => Meny::castka($castka, $mena), array_keys($castky), $castky));
     }
 
     /**
