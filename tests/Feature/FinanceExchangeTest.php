@@ -119,7 +119,8 @@ class FinanceExchangeTest extends TestCase
     public function test_kpi_z_historie_objem_z_obdobi(): void
     {
         $this->smena('2026-06-10', 24000, 1000, 'Banka', 100);
-        $this->smena(now()->toDateString(), 26000, 1000, 'Banka', 200);
+        // Dnešek dvojice, ne UTC — „tento měsíc" v Rozpočtu je podle pražského data.
+        $this->smena($this->dnes()->toDateString(), 26000, 1000, 'Banka', 200);
 
         $odpoved = $this->getJson('/api/v1/rozpocet/smeny?obdobi=dnes')->assertOk();
 
