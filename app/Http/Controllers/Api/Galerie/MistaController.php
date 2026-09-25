@@ -32,8 +32,10 @@ class MistaController extends Controller
         $prostor = GallerySpace::findOrFail($this->parId($request));
         $data = $request->validate([
             'nazev' => ['required', 'string', 'max:160'],
-            'mesto' => ['nullable', 'string', 'max:120'],
-            'zeme' => ['nullable', 'string', 'max:120'],
+            // Sloupce `places.city`/`places.country` jsou `string(100)` —
+            // delší hodnota by na MySQL spadla na 500 místo 422.
+            'mesto' => ['nullable', 'string', 'max:100'],
+            'zeme' => ['nullable', 'string', 'max:100'],
             'poznamka' => ['nullable', 'string', 'max:2000'],
         ]);
 

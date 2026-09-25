@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ScheduledTaskRun;
 use App\Services\Provoz\PlanovaneUlohy;
 use Illuminate\Bus\Queueable;
+use Illuminate\Console\Scheduling\Event;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -50,9 +51,23 @@ class SpustPlanovanouUlohu implements ShouldQueue
         $zacatek = microtime(true);
 
         try {
-            // `run()` obchází kalendář úlohy i pozastavení — o to při ručním
-            // spuštění jde. Filtry `->when()` a `->withoutOverlapping()` platí dál.
+            /*
+             * `run()` obchází jen kalendář úlohy a pozastavení — o to při
+             * ručním spuštění jde. `->withoutOverlapping()` platí dál (řeší ho
+             * `run()` samo), ale `->when()`/`->skip()` ne: ty se vyhodnocují
+             * v `Schedule::dueEvents()`, kterým `run()` vůbec neprochází.
+             */
             $uloha->run(app());
+
+            if (self::preskoceno($uloha)) {
+                $zaznam->update([
+                    'finished_at' => now(),
+                    'duration_ms' => (int) round((microtime(true) - $zacatek) * 1000),
+                    'state' => ScheduledTaskRun::PRESKOCENO,
+                ]);
+
+                return;
+            }
 
             $zaznam->update([
                 'finished_at' => now(),
@@ -71,5 +86,19 @@ class SpustPlanovanouUlohu implements ShouldQueue
 
             throw $e;
         }
+    }
+
+    /**
+     * Po `$uloha->run()` doopravdy nic neproběhlo?
+     *
+     * `withoutOverlapping()` nechá `exitCode` `null` a nic neproběhlo — hlásit to
+     * jako HOTOVO by administraci řeklo, že ruční spuštění doběhlo, když se
+     * ve skutečnosti nic nespustilo. `runInBackground` zase odštěpí proces a
+     * vrátí se dřív, než je výsledek známý — tenhle job se o jeho doběhnutí
+     * nedozví, takže ani tady nejde tvrdit HOTOVO.
+     */
+    private static function preskoceno(Event $uloha): bool
+    {
+        return $uloha->skippedBecauseOverlapping || ($uloha->runInBackground && $uloha->exitCode === null);
     }
 }

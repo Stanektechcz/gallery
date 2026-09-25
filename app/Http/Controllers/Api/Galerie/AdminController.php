@@ -16,9 +16,12 @@ use App\Services\Billing\EntitlementService;
 use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\AdministraceZasahy;
 use App\Services\Provoz\PlanovaneUlohy;
+use App\Support\Provozovatel;
 use App\Support\SpaceContext;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
 /**
@@ -66,7 +69,9 @@ class AdminController extends Controller
         $this->jenVlastnik($request, $prostor);
 
         $data = $request->validate([
-            'email' => ['required', 'email', 'max:255'],
+            // Adresu provozovatele nastaví jen provozovatel — pozvánka by jinak
+            // vrátila odkaz, přes který si ji vezme ten, kdo zve.
+            'email' => ['required', 'email', 'max:255', Provozovatel::pravidlo($request->user())],
             'role' => ['nullable', 'string', 'in:správce,host'],
         ]);
 
@@ -286,6 +291,7 @@ class AdminController extends Controller
     {
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
+        $this->omezProvoznuUlohu($request, 'health');
 
         SpustPlanovanouUlohu::dispatch('storage-health');
 
@@ -344,6 +350,10 @@ class AdminController extends Controller
         $prostor = $this->prostor($request);
         $this->jenSpravce($request, $prostor);
 
+        if ($riziko === 'r1') {
+            $this->omezProvoznuUlohu($request, 'mirror-backlog');
+        }
+
         $popis = match ($riziko) {
             'r1' => $this->zaloznKopie($prostor),
             'r2' => $this->vysypKos($prostor),
@@ -365,11 +375,18 @@ class AdminController extends Controller
 
     private function vysypKos(GallerySpace $prostor): string
     {
+        // Se zamčeným trezorem se nemaže, co uživatel v koši neviděl —
+        // stejné pravidlo jako `KosController::vKosi()`. Bez něj by „Vysypat
+        // koš" z panelu rizik smazal i fotky z trezoru, které se v koši
+        // se zamčeným trezorem vůbec neukazují.
+        $trezor = Trezor::odemcen();
+
         // Vysypat hned znamená vysypat hned: `purge_after` se posune do minulosti
         // a úklidová úloha zbytek dodělá, včetně smazání souborů z disku.
         $pocet = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNotNull('trashed_at')
+            ->when(! $trezor, fn ($q) => $q->where('is_hidden', false))
             ->update(['purge_after' => now()->subMinute()]);
 
         SpustPlanovanouUlohu::dispatch('trash-purge');
@@ -464,6 +481,23 @@ class AdminController extends Controller
             403,
             'Tohle může jen vlastník nebo správce.',
         );
+    }
+
+    /**
+     * Instanční úlohu bez fronty na zpomalení může spustit jen jednou za pět minut.
+     *
+     * `healthCheck` a `fixRisk('r1')` běžely bez jakéhokoli omezení — několik
+     * kliknutí za sebou (od jednoho i od více správců stejného prostoru) by
+     * zaplnilo frontu stejnou úlohou znovu a znovu, aniž by to komu pomohlo.
+     */
+    private function omezProvoznuUlohu(Request $request, string $uloha): void
+    {
+        $klic = 'admin-uloha:'.$uloha.':'.$request->user()->id;
+
+        abort_if(RateLimiter::tooManyAttempts($klic, 1), 429,
+            'Tohle už jste spustili nedávno — zkuste to znovu za '.RateLimiter::availableIn($klic).' s.');
+
+        RateLimiter::hit($klic, 300);
     }
 
     /** Protokol je součást administrace — zásah bez záznamu se nepočítá. */

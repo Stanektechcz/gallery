@@ -10,6 +10,7 @@ use App\Services\Automation\AutomationEngine;
 use App\Services\Obsah\Pravidla;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 /**
  * „Spustit teď" — pravidlo se doopravdy provede.
@@ -37,10 +38,32 @@ class PravidloController extends Controller
         try {
             $zprava = $this->motor->spustRucne($radek, $prostor);
         } catch (\Throwable $e) {
+            /*
+             * Motor svůj vlastní, česky napsaný důvod hlásí přesně jako
+             * `\RuntimeException` (viz `AutomationEngine::spustRucne`/`perform`) —
+             * ten se pošle beze změny. `QueryException` je ale taky potomek
+             * `\RuntimeException` (přes PHP vestavěnou `\PDOException`), a ten
+             * nese SQLSTATE i hodnoty z dotazu — proto se pozná přesnou třídou,
+             * ne `instanceof`, a do odpovědi nejde nikdy.
+             */
+            $vlastniDuvod = $e::class === \RuntimeException::class;
+
+            $zprava = $vlastniDuvod
+                ? $e->getMessage()
+                : 'Pravidlo se nepovedlo spustit — podrobnosti jsou v logu serveru.';
+
+            if (! $vlastniDuvod) {
+                Log::error('Ruční spuštění pravidla selhalo', [
+                    'pravidlo' => $radek->uuid,
+                    'vyjimka' => $e::class,
+                    'zprava' => $e->getMessage(),
+                ]);
+            }
+
             // Odpověď nese i historii: neúspěšný běh se zapsal a obrazovka ho
             // má ukázat stejně jako povedený.
             return response()->json([
-                'zprava' => $e->getMessage(),
+                'zprava' => $zprava,
                 'ok' => false,
             ] + $this->obsahPravidel($prostor), 422);
         }

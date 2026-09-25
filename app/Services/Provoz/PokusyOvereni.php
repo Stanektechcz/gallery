@@ -41,11 +41,19 @@ class PokusyOvereni
      */
     public static function chyba(User $kdo, string $druh): array
     {
-        $pokusu = (int) Cache::get(self::klic($kdo, $druh, 'pokusy'), 0) + 1;
+        $klic = self::klic($kdo, $druh, 'pokusy');
+
+        /*
+         * `Cache::get` a `Cache::put` zvlášť nejsou jeden krok: dva souběžné
+         * špatné pokusy si oba přečtou stejnou nulu a oba zapíšou jedničku —
+         * paralelní hádání hesla se tak vůbec nepočítalo. `add` založí
+         * počítadlo jen tomu, kdo přijde první, `increment` je pak atomický
+         * krok navíc, ne nové přečtení a zápis.
+         */
+        Cache::add($klic, 0, now()->addMinutes(15));
+        $pokusu = (int) Cache::increment($klic);
 
         if ($pokusu < self::POKUSU) {
-            Cache::put(self::klic($kdo, $druh, 'pokusy'), $pokusu, now()->addMinutes(15));
-
             return ['pokusu' => $pokusu, 'zbyva' => self::POKUSU - $pokusu, 'blok' => 0];
         }
 

@@ -2,8 +2,11 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\AutomationRule;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Automation\AutomationEngine;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -191,6 +194,109 @@ class PravidlaVeStavuTest extends TestCase
 
         $this->assertSame(0, DB::table('shared_todos')->count());
         $this->assertSame(0, DB::table('automation_runs')->count());
+    }
+
+    /**
+     * Pravidlo bez autora (účet mezitím zmizel) běží dál — na vlastníka prostoru.
+     *
+     * `automation_rules.created_by` je `nullOnDelete`, ale `shared_todos.created_by`
+     * je NOT NULL. Bez náhrady by od smazání účtu autora každý běh tohohle
+     * pravidla selhával.
+     */
+    public function test_pravidlo_bez_autora_bezi_na_vlastnika(): void
+    {
+        $autor = User::factory()->create();
+        $this->prostor->members()->syncWithoutDetaching([$autor->id => ['role' => 'editor']]);
+
+        $uuid = (string) Str::uuid();
+        $this->pravidlo([
+            'uuid' => $uuid,
+            'created_by' => $autor->id,
+            'action' => 'todo.create',
+            'action_config' => json_encode(['title' => 'Zalít kytky']),
+        ]);
+
+        $autor->forceDelete();
+        $this->assertNull(DB::table('automation_rules')->where('uuid', $uuid)->value('created_by'));
+
+        $this->postJson('/api/pravidla/'.$uuid.'/spustit')->assertOk();
+
+        $this->assertSame($this->prostor->owner_id, DB::table('shared_todos')->value('created_by'));
+    }
+
+    /**
+     * Ruční spuštění bez podnětu nenechá v názvu nevyplněný `{placeholder}`.
+     *
+     * Tlačítko „Spustit teď" volá `spustRucne` s prázdným polem — bez
+     * úklidu by v úkolu zůstalo doslova „{title} do domácnosti".
+     */
+    public function test_rucni_spusteni_odstrani_nevyplnene_zavorky(): void
+    {
+        $uuid = (string) Str::uuid();
+        $this->pravidlo([
+            'uuid' => $uuid,
+            'action' => 'todo.create',
+            'action_config' => json_encode(['title' => '{title} do domácnosti']),
+        ]);
+
+        $this->postJson('/api/pravidla/'.$uuid.'/spustit')->assertOk();
+
+        $this->assertSame('do domácnosti', DB::table('shared_todos')->value('title'));
+    }
+
+    /**
+     * Zápisek z automatizace se vejde do sloupce `journal_entries.title` (180).
+     *
+     * Motor dřív ořezával na 200 — na SQLite v testech to neshodilo nic,
+     * na MySQL ve striktním režimu by běh pravidla spadl s chybou.
+     */
+    public function test_dlouhy_nazev_zapisku_se_vejde_do_sloupce(): void
+    {
+        $uuid = (string) Str::uuid();
+        $this->pravidlo([
+            'uuid' => $uuid,
+            'action' => 'journal.entry',
+            'action_config' => json_encode(['title' => str_repeat('Á', 190), 'body' => 'Text']),
+        ]);
+
+        $this->postJson('/api/pravidla/'.$uuid.'/spustit')->assertOk();
+
+        $nazev = DB::table('journal_entries')->value('title');
+        $this->assertLessThanOrEqual(180, mb_strlen($nazev));
+    }
+
+    /**
+     * Selhání motoru na MySQL nesmí obrazovce ukázat SQLSTATE ani hodnoty z dotazu.
+     *
+     * `spustRucne` dřív posílal `$e->getMessage()` rovnou do 422 — u
+     * `QueryException` je to celá SQL chyba, ne věta pro člověka.
+     */
+    public function test_selhani_motoru_neprozradi_sqlstate(): void
+    {
+        $uuid = (string) Str::uuid();
+        $this->pravidlo(['uuid' => $uuid]);
+
+        $vyjimka = new QueryException(
+            'mysql',
+            'insert into `shared_todos` (`title`) values (?)',
+            ['tajna-hodnota'],
+            new \Exception('SQLSTATE[22001]: String data, right truncated'),
+        );
+
+        $this->app->bind(AutomationEngine::class, fn () => new class($vyjimka) extends AutomationEngine
+        {
+            public function __construct(private readonly \Throwable $vyjimka) {}
+
+            public function spustRucne(AutomationRule $rule, GallerySpace $space): string
+            {
+                throw $this->vyjimka;
+            }
+        });
+
+        $odpoved = $this->postJson('/api/pravidla/'.$uuid.'/spustit')->assertStatus(422);
+
+        $this->assertStringNotContainsString('SQLSTATE', $odpoved->json('zprava'));
+        $this->assertStringNotContainsString('tajna-hodnota', $odpoved->json('zprava'));
     }
 
     /** Cizí pravidlo nespustí nikdo. */

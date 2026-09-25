@@ -9,6 +9,7 @@ use App\Models\MediaVariant;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
+use App\Support\Trezor;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -830,6 +831,8 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        $trezor = Trezor::odemcen();
+
         return DB::table('guest_comments as k')
             ->leftJoin('shared_links as o', 'o.id', '=', 'k.shared_link_id')
             ->leftJoin('media_items as m', 'm.id', '=', 'k.media_item_id')
@@ -839,7 +842,8 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
             ->get([
                 'k.uuid', 'k.guest_name', 'k.body', 'k.kind', 'k.duration', 'k.audio_path',
                 'k.is_hidden', 'k.is_pinned', 'k.created_at',
-                'o.name as odkaz', 'm.original_filename as fotka',
+                'o.name as odkaz', 'm.original_filename as fotka', 'm.is_hidden as fotka_skryta',
+                'm.trashed_at as fotka_v_kosi',
             ])
             ->map(fn (object $k) => array_filter([
                 'id' => $k->uuid,
@@ -849,7 +853,10 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
                 'share' => (string) ($k->odkaz ?? ''),
                 'hidden' => (bool) $k->is_hidden,
                 'kind' => $k->kind === 'voice' ? 'voice' : null,
-                'photo' => $k->fotka,
+                // Fotka z trezoru se zamčeným trezorem se tu nejmenuje — jinak
+                // by vzkazy hostů prozradily název souboru, který koš i knihovna
+                // za zamčeným trezorem schovávají.
+                'photo' => ($k->fotka_v_kosi === null && (! $k->fotka_skryta || $trezor)) ? $k->fotka : null,
                 'len' => $k->duration,
                 // Bez adresy je hlasovka řádek, který tvrdí, že babička něco
                 // řekla, a nejde si to poslechnout.

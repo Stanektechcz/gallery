@@ -42,6 +42,27 @@ class MistaTest extends TestCase
         $this->postJson('/api/mista', ['nazev' => 'lofoty'])->assertStatus(422);
     }
 
+    /**
+     * `mesto`/`zeme` delší než sloupce `places.city`/`places.country` (100 znaků)
+     * se odmítne s 422.
+     *
+     * Sloupce jsou `string(100)`, validace dřív pouštěla `max:120` — na
+     * SQLite v testech to prošlo potichu, na MySQL ve striktním režimu by
+     * to spadlo na 500 místo srozumitelné chyby.
+     */
+    public function test_prilis_dlouhe_mesto_a_zeme_dostanou_422(): void
+    {
+        $this->postJson('/api/mista', [
+            'nazev' => 'Lofoty',
+            'mesto' => str_repeat('x', 101),
+        ])->assertStatus(422)->assertJsonValidationErrors('mesto');
+
+        $this->postJson('/api/mista', [
+            'nazev' => 'Lofoty',
+            'zeme' => str_repeat('x', 101),
+        ])->assertStatus(422)->assertJsonValidationErrors('zeme');
+    }
+
     public function test_byli_jsme_zmeni_stav_mista(): void
     {
         $misto = Place::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Island', 'lifecycle_status' => 'idea']);

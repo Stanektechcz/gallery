@@ -43,7 +43,9 @@ class TiskController extends Controller
 
         $data = $request->validate([
             'title' => ['required', 'string', 'max:180'],
-            'kind' => ['nullable', 'string', 'max:40'],
+            // Sloupec `kind` je `string(20)` (viz migrace) — delší hodnota
+            // by na MySQL spadla na 500 místo 422.
+            'kind' => ['nullable', 'string', 'max:20'],
             'price' => ['nullable', 'integer', 'min:0', 'max:1000000'],
             'note' => ['nullable', 'string', 'max:300'],
         ]);
@@ -84,7 +86,8 @@ class TiskController extends Controller
         $data = $request->validate([
             'id' => ['required', 'string', 'max:64'],
             'step' => ['required', 'integer', 'min:0', 'max:'.(count(self::KROKY) - 1)],
-            'tracking' => ['nullable', 'string', 'max:80'],
+            // Sloupec `tracking` je `string(60)` — stejný důvod jako u `kind`.
+            'tracking' => ['nullable', 'string', 'max:60'],
         ]);
 
         $objednavka = DB::table('print_orders')

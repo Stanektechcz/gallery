@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\SharedTodo;
 use App\Support\Cas;
+use App\Support\Vejde;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -260,8 +261,11 @@ class AutomationEngine
         SharedTodo::create([
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $space->id,
-            'created_by' => $rule->created_by,
-            'title' => $this->fill($config['title'] ?? 'Úkol z automatizace', $payload),
+            // Autor pravidla může mezitím zmizet (`automation_rules.created_by`
+            // je `nullOnDelete`), zápis do `shared_todos` ale autora vyžaduje —
+            // bez náhrady by od té chvíle každý běh pravidla selhával.
+            'created_by' => $rule->created_by ?? $space->owner_id,
+            'title' => $this->fill($config['title'] ?? 'Úkol z automatizace', $payload, Vejde::SLOUPEC),
             'status' => 'open',
             'due_at' => isset($config['due_in_days']) && $config['due_in_days'] !== ''
                 ? now()->addDays((int) $config['due_in_days'])
@@ -277,8 +281,13 @@ class AutomationEngine
         JournalEntry::create([
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $space->id,
-            'created_by' => $rule->created_by,
-            'title' => $this->fill($config['title'] ?? 'Zápisek z automatizace', $payload),
+            // Stejná náhrada jako u úkolu — `journal_entries.created_by` je
+            // NOT NULL a autor pravidla může mezitím přijít o účet.
+            'created_by' => $rule->created_by ?? $space->owner_id,
+            // `journal_entries.title` je `string(180)`, ne 200 — delší text by
+            // na MySQL ve striktním režimu spadl na chybu při každém běhu.
+            'title' => $this->fill($config['title'] ?? 'Zápisek z automatizace', $payload, 180),
+            // `body` je `longText` — neořezává se, jen se zbaví nevyplněných {…}.
             'body' => $this->fill($config['body'] ?? '', $payload),
             'entry_date' => Cas::dnes()->toDateString(),
             'visibility' => 'private',
@@ -291,8 +300,15 @@ class AutomationEngine
      * Only the trigger's own fields, and only as plain text — this is a template for a
      * task title, not an expression language, and the moment it becomes one it becomes
      * something that has to be made safe.
+     *
+     * A manual "Spustit teď" run has no trigger payload, so a placeholder nothing filled
+     * (`{title}`, `{filename}`, …) must not survive into the title verbatim — it is
+     * stripped, and the double space it can leave behind is collapsed with it.
+     *
+     * @param  int|null  $max  sloupec, do kterého se text musí vejít; `null` když se
+     *                         nemá ořezávat (např. `longText`)
      */
-    private function fill(string $template, array $payload): string
+    private function fill(string $template, array $payload, ?int $max = null): string
     {
         foreach ($payload as $key => $value) {
             if (is_scalar($value)) {
@@ -300,6 +316,9 @@ class AutomationEngine
             }
         }
 
-        return Str::limit(trim($template), 200, '');
+        $text = (string) preg_replace('/\{[a-zA-Z0-9_]+\}/', '', $template);
+        $text = trim((string) preg_replace('/ {2,}/', ' ', $text));
+
+        return $max === null ? $text : Vejde::do($text, $max);
     }
 }

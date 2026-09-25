@@ -133,6 +133,38 @@ class ModeraceVzkazuTest extends TestCase
         $this->assertNull($fotka->fresh()->caption);
     }
 
+    /**
+     * Fotka z trezoru se v přehledu vzkazů se zamčeným trezorem nejmenuje.
+     *
+     * `GV_C` čte `Pribeh::komentareHostu` — dřív bral `original_filename`
+     * bez ohledu na `is_hidden`, takže fotka poslaná do trezoru dál ukazovala
+     * svůj název na obrazovce vzkazů hostů, i s trezorem zamčeným.
+     */
+    public function test_fotka_z_trezoru_se_ve_vzkazech_nejmenuje_bez_odemceni(): void
+    {
+        $fotka = $this->fotka();
+        $this->vzkaz('Tady jsme byli poprvé.', ['media_item_id' => $fotka->id]);
+        $fotka->forceFill(['is_hidden' => true])->save();
+
+        $zamceno = $this->getJson('/api/data/pribeh')->assertOk()->json('data.GV_C');
+        $this->assertArrayNotHasKey('photo', $zamceno[0]);
+
+        $odemceno = $this->withSession($this->odemcenyTrezor($this->adri))
+            ->getJson('/api/data/pribeh')->assertOk()->json('data.GV_C');
+        $this->assertSame('IMG_1.jpg', $odemceno[0]['photo']);
+    }
+
+    /** Smazaná (v koši) fotka se ve vzkazech taky nejmenuje — je pryč, ne skrytá. */
+    public function test_fotka_v_kosi_se_ve_vzkazech_nejmenuje(): void
+    {
+        $fotka = $this->fotka();
+        $this->vzkaz('Tady jsme byli poprvé.', ['media_item_id' => $fotka->id]);
+        $fotka->forceFill(['trashed_at' => now()])->save();
+
+        $odpoved = $this->getJson('/api/data/pribeh')->assertOk()->json('data.GV_C');
+        $this->assertArrayNotHasKey('photo', $odpoved[0]);
+    }
+
     /** Cizí dvojice na vzkaz nesáhne. */
     public function test_cizi_vzkaz_nejde_upravit(): void
     {

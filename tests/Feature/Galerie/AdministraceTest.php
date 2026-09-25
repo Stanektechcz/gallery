@@ -457,6 +457,23 @@ class AdministraceTest extends TestCase
         Queue::assertPushed(SpustPlanovanouUlohu::class);
     }
 
+    /**
+     * Kontrola systému se dá odpálit jen jednou za pět minut.
+     *
+     * Bez omezení šlo tlačítko zmáčknout donekonečna a pokaždé to zařadilo
+     * další běh instanční úlohy do fronty — nic z toho nikomu nepomohlo,
+     * jen to frontu plnilo stejnou prací.
+     */
+    public function test_kontrola_systemu_ma_limit(): void
+    {
+        $this->postJson('/api/admin/health/check')->assertOk();
+        $this->postJson('/api/admin/health/check')
+            ->assertStatus(429)
+            ->assertJsonPath('message', fn (string $zprava) => str_starts_with($zprava, 'Tohle už jste spustili nedávno'));
+
+        Queue::assertPushed(SpustPlanovanouUlohu::class, 1);
+    }
+
     /** Gigabajty pro pruhy rizika počítá server — prototyp je měl napevno. */
     public function test_prehled_nese_gigabajty_pro_rizika(): void
     {
@@ -530,6 +547,73 @@ class AdministraceTest extends TestCase
 
         $this->assertTrue($media->fresh()->purge_after->isPast(), 'Vysypat teď znamená teď, ne za třicet dní.');
         Queue::assertPushed(SpustPlanovanouUlohu::class);
+    }
+
+    /**
+     * Se zamčeným trezorem „Vysypat koš" nesahá na fotky z trezoru.
+     *
+     * Stejné pravidlo jako u ručního mazání v `KosController::vKosi()` —
+     * jinak by se z panelu rizik dala smazat fotka, kterou koš se zamčeným
+     * trezorem vůbec neukazuje, aniž by ji uživatel viděl a potvrdil počet.
+     */
+    public function test_vysypani_kose_se_zamcenym_trezorem_nesahne_na_trezor(): void
+    {
+        $bezna = MediaItem::create([
+            'gallery_space_id' => $this->prostor->id,
+            'owner_user_id' => $this->adri->id,
+            'uploaded_by' => $this->adri->id,
+            'original_filename' => 'vylet.jpg',
+            'safe_filename' => 'vylet.jpg',
+            'extension' => 'jpg',
+            'mime_type' => 'image/jpeg',
+            'media_type' => 'photo',
+            'size_bytes' => 1024,
+            'status' => 'ready',
+            'trashed_at' => now(),
+            'purge_after' => now()->addDays(30),
+        ]);
+        $trezor = MediaItem::create([
+            'gallery_space_id' => $this->prostor->id,
+            'owner_user_id' => $this->adri->id,
+            'uploaded_by' => $this->adri->id,
+            'original_filename' => 'pas.jpg',
+            'safe_filename' => 'pas.jpg',
+            'extension' => 'jpg',
+            'mime_type' => 'image/jpeg',
+            'media_type' => 'photo',
+            'size_bytes' => 1024,
+            'status' => 'ready',
+            'is_hidden' => true,
+            'trashed_at' => now(),
+            'purge_after' => now()->addDays(30),
+        ]);
+
+        $this->postJson('/api/admin/risks/r2/fix')->assertOk();
+
+        $this->assertTrue($bezna->fresh()->purge_after->isPast());
+        $this->assertTrue($trezor->fresh()->purge_after->isFuture(),
+            'Fotka z trezoru se zamčeným trezorem nesmí být ke smazání.');
+
+        // Odemčený trezor — a smaže se i ta z trezoru, počet v protokolu odpovídá oběma.
+        $this->withSession($this->odemcenyTrezor($this->adri))
+            ->postJson('/api/admin/risks/r2/fix')->assertOk();
+        $this->assertTrue($trezor->fresh()->purge_after->isPast());
+    }
+
+    /** „Druhá kopie" z panelu rizik má stejný limit jako kontrola systému. */
+    public function test_zaloznikopie_ma_limit(): void
+    {
+        $this->postJson('/api/admin/risks/r1/fix')->assertOk();
+        $this->postJson('/api/admin/risks/r1/fix')->assertStatus(429);
+
+        Queue::assertPushed(SpustPlanovanouUlohu::class, 1);
+    }
+
+    /** Vysypání koše (r2) svůj vlastní limit nemá — jen zálohu (r1) a kontrolu zdraví. */
+    public function test_vysypani_kose_nema_limit(): void
+    {
+        $this->postJson('/api/admin/risks/r2/fix')->assertOk();
+        $this->postJson('/api/admin/risks/r2/fix')->assertOk();
     }
 
     public function test_nezname_riziko_neprojde(): void

@@ -80,6 +80,34 @@ class TiskTest extends TestCase
         $this->assertStringContainsString('nezadává', $zprava);
     }
 
+    /**
+     * `kind` delší než sloupec `print_orders.kind` (20 znaků) se odmítne s 422.
+     *
+     * Sloupec je `string(20)`, validace dřív pouštěla `max:40` — na SQLite
+     * v testech to prošlo potichu, na MySQL ve striktním režimu by to spadlo
+     * na 500 místo srozumitelné chyby.
+     */
+    public function test_prilis_dlouhy_druh_dostane_422(): void
+    {
+        $this->postJson('/api/tisk/objednavka', [
+            'title' => 'Kniha',
+            'kind' => str_repeat('x', 21),
+        ])->assertStatus(422)->assertJsonValidationErrors('kind');
+    }
+
+    /** `tracking` delší než sloupec `print_orders.tracking` (60 znaků) se odmítne s 422. */
+    public function test_prilis_dlouhe_cislo_zasilky_dostane_422(): void
+    {
+        $this->postJson('/api/tisk/objednavka', ['title' => 'Kniha'])->assertOk();
+        $uuid = DB::table('print_orders')->value('uuid');
+
+        $this->postJson('/api/tisk/stav', [
+            'id' => $uuid,
+            'step' => 1,
+            'tracking' => str_repeat('x', 61),
+        ])->assertStatus(422)->assertJsonValidationErrors('tracking');
+    }
+
     /** Stav posouvá člověk, ne tiskárna. */
     public function test_stav_jde_posunout(): void
     {
