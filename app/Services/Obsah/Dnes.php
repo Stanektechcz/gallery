@@ -2,8 +2,13 @@
 
 namespace App\Services\Obsah;
 
+use App\Models\ChatMessage;
+use App\Models\Conversation;
+use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
+use App\Models\User;
 use App\Support\Cas;
+use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
@@ -295,9 +300,22 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
+        /*
+         * Jen z rozpočtů, které ten, kdo se dívá, smí vidět.
+         *
+         * Cíl se hledal přes prostor, takže partnerův soukromý rozpočet
+         * (třeba spoření na dárek) se ukázal na úvodní obrazovce i s částkou.
+         */
+        $rozpocty = FinanceAccess::viditelneRozpocty((int) $prostor->id, auth()->id() === null ? null : (int) auth()->id());
+
+        if ($rozpocty === []) {
+            return null;
+        }
+
         $cil = DB::table('budget_goals as g')
             ->join('budgets as b', 'b.id', '=', 'g.budget_id')
             ->where('b.gallery_space_id', $prostor->id)
+            ->whereIn('b.id', $rozpocty)
             ->whereNull('b.deleted_at')
             ->where('g.target_amount', '>', 0)
             ->whereColumn('g.saved_amount', '<', 'g.target_amount')
@@ -387,13 +405,28 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
                 $this->pocet($hodina->count(), 'fotka', 'fotky', 'fotek').($misto ? ' · '.$misto : ''), 'all', $this->nahled($prvni)];
         }
 
-        if (Tabulky::je('chat_messages')) {
-            DB::table('chat_messages')->where('gallery_space_id', $prostor->id)->whereNull('deleted_at')
+        $divak = auth()->user();
+
+        if (Tabulky::je('chat_messages') && $divak instanceof User) {
+            /*
+             * Přes model, ne `DB::table`: tělo zprávy je v databázi zašifrované
+             * (`ChatMessage::$casts`) a přehled dne ukazoval „eyJpdiI6…".
+             *
+             * A jen z hovorů, ve kterých ten, kdo se dívá, je: společný chat
+             * dvojice (bez hovoru) a hovory podle `Conversation::forUser`.
+             * Soukromý hovor partnera s hostem sem nepatří.
+             */
+            ChatMessage::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('gallery_space_id', $prostor->id)
+                ->where(fn ($q) => $q->whereNull('conversation_id')
+                    ->orWhereIn('conversation_id', Conversation::query()->forUser($divak)->select('id')))
                 ->where('created_at', '>=', $odUtc)->where('created_at', '<', $doUtc)
                 ->orderBy('created_at')->limit(4)
                 ->get(['created_by', 'body', 'attachment_type', 'created_at'])
-                ->each(function ($m) use (&$radky, $jmena) {
-                    $text = trim((string) $m->body) !== '' ? '„'.mb_substr(trim((string) $m->body), 0, 60).'"' : 'příloha';
+                ->each(function (ChatMessage $m) use (&$radky, $jmena) {
+                    // Zpráva, kterou nejde dešifrovat (jiný klíč), nesmí vzít celý přehled dne.
+                    $telo = trim((string) rescue(fn () => $m->body, '', false));
+                    $text = $telo !== '' ? '„'.mb_substr($telo, 0, 60).'"' : 'příloha';
                     $radky[] = ['t' => Cas::mistni($m->created_at), 'ph-chats-circle', 'Zpráva',
                         ($jmena[(int) $m->created_by] ?? 'Někdo').': '.$text, 'x-zpravy', null];
                 });
@@ -488,7 +521,8 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('duplicate_groups')) {
-            $skupin = DB::table('duplicate_groups')->where('gallery_space_id', $prostor->id)->whereNull('resolved_at')->count();
+            // Týž počet jako obrazovka úklidu — nález jen z trezoru nebo koše se nepočítá.
+            $skupin = Knihovna::pocetNalezuDuplicit((int) $prostor->id);
 
             if ($skupin > 0) {
                 $navrhy[] = [

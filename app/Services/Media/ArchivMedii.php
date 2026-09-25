@@ -88,8 +88,11 @@ class ArchivMedii
             return null;
         }
 
+        // `download()` odpověď sám přepne na `public` — archiv fotek dvojice
+        // ale nesmí uložit sdílená mezipaměť (proxy, firemní síť).
         return response()
             ->download($soubor, Str::slug($nazev ?: 'fotky').'.zip')
+            ->setPrivate()
             ->deleteFileAfterSend();
     }
 

@@ -26,6 +26,34 @@ class DataController extends Controller
 {
     use UrcujePar;
 
+    /**
+     * Skupiny, jejichž obsah závisí na odemčeném trezoru nebo zámku.
+     *
+     * Ty se do paměti prohlížeče **neukládají vůbec** (`no-store`). `Vary`
+     * by tu nepomohl: po zamčení trezoru jde tentýž požadavek se stejnými
+     * hlavičkami i sezením, a prohlížeč by ještě třicet sekund vracel obsah
+     * trezoru — položky, názvy, počty v koši.
+     */
+    private const BEZ_PAMETI = ['system', 'knihovna', 'pravidla', 'pribeh'];
+
+    /**
+     * Ostatní skupiny: uložit smí, vydat bez ověření u serveru ne (`no-cache`).
+     *
+     * Bylo tu `max-age=30`. Prohlížeč ale klíčuje mezipaměť jen adresou —
+     * token v `Authorization` ani sezení v `Cookie` v klíči nejsou — takže po
+     * přepnutí účtu na témže zařízení by druhý člověk půl minuty viděl obsah
+     * prvního, i jeho soukromé rozpočty. `Vary: Authorization, Cookie` by to
+     * řešil, jenže middleware Inertie hlavičku `Vary` u každé odpovědi
+     * přepíše na `X-Inertia`. Načtení stránky (`/api/data?skupiny=…`) chodí
+     * s `no-cache` stejně, takže se tím skoro nic nezdrží.
+     */
+    private function sPameti(JsonResponse $odpoved, array $skupiny): JsonResponse
+    {
+        return $odpoved->header('Cache-Control', array_intersect($skupiny, self::BEZ_PAMETI) !== []
+            ? 'private, no-store'
+            : 'private, no-cache');
+    }
+
     /** @param  iterable<PoskytovatelObsahu>  $poskytovatele */
     public function __construct(private readonly iterable $poskytovatele) {}
 
@@ -36,10 +64,7 @@ class DataController extends Controller
 
         abort_if($odpoved === null, 404, 'Takovou skupinu obsahu server nezná.');
 
-        return response()->json($odpoved)
-            // Krátká paměť: obsah se mění po zápisu, ne po vteřině, a panel
-            // i obrazovky se překreslují častěji, než se data mění.
-            ->header('Cache-Control', 'private, max-age=30');
+        return $this->sPameti(response()->json($odpoved), [$skupina]);
     }
 
     /**
@@ -72,8 +97,7 @@ class DataController extends Controller
             }
         }
 
-        return response()->json(['skupiny' => (object) $skupiny])
-            ->header('Cache-Control', 'private, max-age=30');
+        return $this->sPameti(response()->json(['skupiny' => (object) $skupiny]), $jmena);
     }
 
     /**

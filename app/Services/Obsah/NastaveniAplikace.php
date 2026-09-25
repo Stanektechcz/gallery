@@ -62,6 +62,7 @@ class NastaveniAplikace
                         ['Aktivní sezení', '', 'Odhlásit ostatní'],
                         ['Zamknout teď', 'Vyžádá kód okamžitě — třeba když zařízení někomu půjčíte', 'Zamknout'],
                         $this->mazani($mazani),
+                        $this->odmitnutiMazani($mazani),
                     ])),
                 ],
                 'pwa' => [
@@ -124,6 +125,33 @@ class NastaveniAplikace
         }
 
         return ['Mazání fotek', 'Jen po společném schválení — „Do koše" fotku navrhne, smaže ji až souhlas druhého', 'Navrhnout mazání bez schválení'];
+    }
+
+    /**
+     * Druhý řádek jen u cizího návrhu „každý sám": odmítnout.
+     *
+     * Řádek nese jedno tlačítko a u návrhu druhého to je „Potvrdit změnu" —
+     * odmítnout ho z nastavení nešlo, i když server stažení dovolí každému
+     * z dvojice (`mazani/rezim/zrusit`). Jinak řádek nepřibývá, ať se počet
+     * řádků nemění pod rukama.
+     *
+     * @param  array<string, mixed>  $m  `MAZANI`
+     * @return array{0: string, 1: string, 2: string}|null
+     */
+    private function odmitnutiMazani(array $m): ?array
+    {
+        $navrh = $m['navrhRezimu'] ?? null;
+
+        if (($m['rezim'] ?? 'spolecne') === 'kazdy' || ! is_array($navrh) || ($navrh['rezim'] ?? null) !== 'kazdy' || ! empty($navrh['ja'])) {
+            return null;
+        }
+
+        $kdo = (string) ($navrh['kdo'] ?? '');
+
+        return ['Návrh na mazání bez schválení', implode(' · ', array_filter([
+            $kdo !== '' ? 'Navrhuje '.$kdo : 'Navrhuje druhý z vás',
+            $navrh['kdy'] ?? null,
+        ])).' — když nesouhlasíte, zrušte ho', 'Zrušit návrh'];
     }
 
     /** @return array<string, mixed> */

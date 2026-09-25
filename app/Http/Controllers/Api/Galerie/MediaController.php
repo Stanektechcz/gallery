@@ -174,11 +174,25 @@ class MediaController extends Controller
          */
         abort_if($media->is_hidden && ! $this->trezorOdemceny($request), 404, 'Takový soubor tu není.');
 
+        /*
+         * Ani z koše. Vyhozenou fotku šlo dál stahovat, jako by se nic nestalo
+         * — náhled, video i archiv koš dávno nevydávají a obrazovka koše
+         * originál nepotřebuje (stahuje se jen z knihovny a u dokladu).
+         */
+        abort_if($media->trashed_at !== null, 404, 'Takový soubor tu není.');
+
         $originál = $media->variants()->where('type', 'original')->first();
 
         abort_if($originál === null, 404, 'Originál tohoto souboru na disku není.');
 
-        return $this->doprohlizece($originál->disk, $originál->path, $media->original_filename);
+        /*
+         * Originál z trezoru se neukládá do paměti prohlížeče.
+         *
+         * Po zamčení trezoru by ho prohlížeč vydal z mezipaměti komukoli
+         * u téhož počítače — `no-cache` jen chce ověření, uložení nezakáže.
+         */
+        return $this->doprohlizece($originál->disk, $originál->path, $media->original_filename,
+            $media->is_hidden ? ['Cache-Control' => 'private, no-store'] : []);
     }
 
     /**
@@ -316,7 +330,12 @@ class MediaController extends Controller
             $cesta = $disk->path($varianta->path);
 
             if (is_file($cesta)) {
-                return response()->file($cesta, $hlavicky);
+                /*
+                 * `BinaryFileResponse` si po nastavení hlaviček sám přepne
+                 * odpověď na `public` a naše `private` přepíše — video dvojice
+                 * by pak směla uložit i sdílená mezipaměť po cestě.
+                 */
+                return response()->file($cesta, $hlavicky)->setPrivate();
             }
         } catch (\Throwable) {
             // Vzdálené úložiště `path()` nemá — spadne se na proud níž.
@@ -359,6 +378,10 @@ class MediaController extends Controller
      */
     public function uprava(Request $request, string $uuid): JsonResponse
     {
+        // Úprava přepisuje náhledy na disku — účet jen pro čtení ji dělat nesmí,
+        // stejně jako mazání (`MazaniFotek`) a zápisy přes stav.
+        abort_if((bool) $request->user()?->read_only_mode, 403, 'Účet je v režimu jen pro čtení.');
+
         $media = $this->najdi($request, $uuid);
 
         $data = $request->validate([

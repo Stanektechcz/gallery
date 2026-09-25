@@ -127,6 +127,29 @@ class ObsahMazaniTest extends TestCase
         $this->assertFalse($data['MAZANI']['navrhRezimu']['ja']);
         $this->assertSame('Bára', $data['MAZANI']['navrhRezimu']['kdo']);
         $this->assertContains(['Mazání fotek', 'Bára navrhuje, aby každý mazal sám — potvrďte kódem zámku nebo heslem', 'Potvrdit změnu'], $data['SETROWS']['zamek']['rows']);
+
+        // Odmítnout jde taky — hned pod návrhem, ne jen potvrdit.
+        $radky = $data['SETROWS']['zamek']['rows'];
+        $i = array_search('Mazání fotek', array_column($radky, 0), true);
+        $this->assertSame(['Návrh na mazání bez schválení', 'Navrhuje Bára · dnes v 12:00 — když nesouhlasíte, zrušte ho', 'Zrušit návrh'], $radky[$i + 1]);
+    }
+
+    public function test_odmitnuti_navrhu_je_jen_u_ciziho_navrhu(): void
+    {
+        Sanctum::actingAs($this->vlastnik);
+        $pocet = count($this->getJson('/api/data/system')->assertOk()->json('data.SETROWS.zamek.rows'));
+
+        $this->actingAs($this->vlastnik);
+        $this->mazani->navrhniRezim($this->prostor, $this->vlastnik, 'kazdy', null, null);
+
+        // Navrhující má „Zrušit návrh" přímo v řádku — druhý řádek nepřibude.
+        Sanctum::actingAs($this->vlastnik);
+        $radky = $this->getJson('/api/data/system')->assertOk()->json('data.SETROWS.zamek.rows');
+        $this->assertCount($pocet, $radky);
+        $this->assertNotContains('Návrh na mazání bez schválení', array_column($radky, 0));
+
+        Sanctum::actingAs($this->partner);
+        $this->assertCount($pocet + 1, $this->getJson('/api/data/system')->assertOk()->json('data.SETROWS.zamek.rows'));
     }
 
     public function test_radek_nastaveni_podle_rezimu(): void

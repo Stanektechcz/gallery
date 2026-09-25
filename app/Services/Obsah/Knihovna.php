@@ -888,10 +888,26 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function osoby(GallerySpace $prostor, array $fotky): array
     {
+        /*
+         * Třicet lidí s nejvíc fotkami, ne třicet, jak je databáze vrátí.
+         *
+         * `limit(30)` bez řazení bral libovolných třicet a `PERSONS` přichází
+         * celé (`uplne()`), takže člověk, který se do výběru nevešel, z lidí
+         * zmizel — i když byl na polovině knihovny.
+         */
+        $pocty = $this->jenZMrizky(DB::table('media_person as mp')
+            ->join('media_items as m', 'm.id', '=', 'mp.media_item_id')
+            ->where('m.gallery_space_id', $prostor->id))
+            ->groupBy('mp.person_id')
+            ->select('mp.person_id', DB::raw('COUNT(*) AS pocet'));
+
         $lide = Person::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $prostor->id)
+            ->where('people.gallery_space_id', $prostor->id)
+            ->leftJoinSub($pocty, 'pocty', 'pocty.person_id', '=', 'people.id')
+            ->orderByRaw('COALESCE(pocty.pocet, 0) DESC')
+            ->orderBy('people.id')
             ->limit(30)
-            ->get();
+            ->get(['people.*']);
 
         if ($lide->isEmpty()) {
             return [];
@@ -937,7 +953,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'stats' => array_values(array_filter([
                     ['Fotek', $this->cislo($pocet)],
                     $od ? ['První výskyt', $od->format('j. n. Y')] : null,
-                    $do ? ['Naposledy', $do->isToday() ? 'dnes' : $do->format('j. n. Y')] : null,
+                    // Čas pořízení je podle hodin fotoaparátu; „dnes" je den dvojice, ne UTC.
+                    $do ? ['Naposledy', $do->toDateString() === Cas::dnes()->toDateString() ? 'dnes' : $do->format('j. n. Y')] : null,
                     ['Alb', $this->cislo($alb)],
                 ])),
                 'years' => $roky[$o->id] ?? [],
@@ -1036,15 +1053,14 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function spoluOsob(GallerySpace $prostor, array $id): array
     {
-        return DB::table('media_person as a')
+        return $this->jenZMrizky(DB::table('media_person as a')
             ->join('media_person as b', function ($spoj) {
                 $spoj->on('b.media_item_id', '=', 'a.media_item_id')
                     ->whereColumn('b.person_id', '!=', 'a.person_id');
             })
             ->join('media_items as m', 'm.id', '=', 'a.media_item_id')
             ->join('people as o', 'o.id', '=', 'b.person_id')
-            ->where('m.gallery_space_id', $prostor->id)
-            ->whereNull('m.trashed_at')
+            ->where('m.gallery_space_id', $prostor->id))
             ->whereIn('a.person_id', $id)
             ->whereIn('b.person_id', $id)
             ->groupBy('a.person_id', 'b.person_id', 'o.name')
@@ -1090,6 +1106,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->join('media_items as m', 'm.id', '=', 'vazba.media_item_id')
             ->where('m.gallery_space_id', $prostor->id)
             ->whereNull('m.trashed_at')
+            ->whereNull('m.deleted_at')
+            ->where('m.is_hidden', false)
             ->whereNull('a.deleted_at')
             ->whereIn('mp.person_id', $id)
             ->groupBy('mp.person_id', 'a.id', 'a.title')
@@ -1140,11 +1158,23 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function tagy(GallerySpace $prostor, array $id): Builder
     {
-        return DB::table('media_person as mp')
+        return $this->jenZMrizky(DB::table('media_person as mp')
             ->join('media_items as m', 'm.id', '=', 'mp.media_item_id')
             ->where('m.gallery_space_id', $prostor->id)
-            ->whereNull('m.trashed_at')
-            ->whereIn('mp.person_id', $id);
+            ->whereIn('mp.person_id', $id));
+    }
+
+    /**
+     * Fotky, které mřížka ukazuje: ne koš, ne smazané a **ne trezor**.
+     *
+     * Statistiky lidí (počet fotek, roky, s kým, alba) počítaly i fotky
+     * z trezoru — „Klára · 3 fotky" vedle mřížky, ve které jsou dvě, řekne,
+     * že je ve schovaných ještě jedna. Trezor je schovaný vždycky, i odemčený:
+     * mřížka ho neukazuje nikdy, takže ani čísla o ní.
+     */
+    private function jenZMrizky(Builder $dotaz, string $m = 'm'): Builder
+    {
+        return $dotaz->whereNull($m.'.trashed_at')->whereNull($m.'.deleted_at')->where($m.'.is_hidden', false);
     }
 
     /**
@@ -1152,15 +1182,43 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      *
      * @return list<array<string, mixed>>
      */
+    /**
+     * Kolik otevřených nálezů duplicit je vidět — odznak úklidu, návrh na
+     * úvodní obrazovce.
+     *
+     * Počítaly se všechny otevřené skupiny, i ty, jejichž kopie jsou jen
+     * v trezoru nebo v koši. Obrazovka je nevypíše (`duplicity()`), takže
+     * rozdíl mezi číslem a seznamem prozrazoval, že v trezoru něco je.
+     */
+    public static function pocetNalezuDuplicit(int $prostorId): int
+    {
+        return Tabulky::je('duplicate_groups') ? self::otevreneNalezy($prostorId)->count() : 0;
+    }
+
+    /** Otevřené nálezy, které mají aspoň dvě kopie v mřížce (mimo trezor a koš). */
+    private static function otevreneNalezy(int $prostorId): Builder
+    {
+        return DB::table('duplicate_groups')
+            ->where('gallery_space_id', $prostorId)
+            ->whereNull('resolved_at')
+            ->whereIn('id', DB::table('duplicate_group_items as p')
+                ->join('media_items as m', 'm.id', '=', 'p.media_item_id')
+                ->where('m.gallery_space_id', $prostorId)
+                ->where('m.is_hidden', false)
+                ->whereNull('m.trashed_at')
+                ->whereNull('m.deleted_at')
+                ->groupBy('p.duplicate_group_id')
+                ->havingRaw('COUNT(*) >= 2')
+                ->select('p.duplicate_group_id'));
+    }
+
     private function duplicity(GallerySpace $prostor): array
     {
         if (! Tabulky::je('duplicate_groups')) {
             return [];
         }
 
-        $skupiny = DB::table('duplicate_groups')
-            ->where('gallery_space_id', $prostor->id)
-            ->whereNull('resolved_at')
+        $skupiny = self::otevreneNalezy((int) $prostor->id)
             ->orderByDesc('detected_at')
             ->limit(20)
             ->get(['id', 'uuid', 'match_type']);
@@ -1256,9 +1314,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->orWhere(fn ($v) => $v->whereNull('location_name')->whereNull('latitude')))
             ->count();
 
-        $nalezy = Tabulky::je('duplicate_groups')
-            ? DB::table('duplicate_groups')->where('gallery_space_id', $prostor->id)->whereNull('resolved_at')->count()
-            : 0;
+        $nalezy = self::pocetNalezuDuplicit((int) $prostor->id);
 
         /*
          * Ostatní odznaky z katalogu nabídky byly taky z ukázky: Zprávy „2",
@@ -1272,7 +1328,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             fn (int $kolik) => $kolik ? $this->cislo($kolik) : '',
             [
                 'all' => (clone $vse)->count(),
-                'favorites' => (clone $vse)->where('is_favorite', true)->count(),
+                // Moje srdíčka jako v mřížce (`fav` z `user_favorites`), ne sdílený
+                // příznak `is_favorite` — ten svítí i po partnerově srdíčku.
+                'favorites' => auth()->id() === null || ! Tabulky::je('user_favorites') ? 0 : (clone $vse)
+                    ->whereIn('id', DB::table('user_favorites')->where('user_id', auth()->id())->select('media_item_id'))
+                    ->count(),
                 'x-lide' => Person::withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)->count(),
                 'x-uklid' => $chybi + $nalezy,
@@ -1357,8 +1417,16 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function roky(GallerySpace $prostor): array
     {
-        // Rok se vytahuje v PHP, ne v SQL: `YEAR()` a `strftime()` se mezi MySQL
-        // a SQLite liší a jedna z těch dvou by v testech nebo v produkci spadla.
+        /*
+         * Sčítá databáze, ne PHP.
+         *
+         * Stahovaly se časy všech fotek knihovny (desítky tisíc řádků při
+         * každém otevření), jen aby se z nich spočítalo pár čísel. `YEAR()`
+         * a `strftime()` se mezi MySQL a SQLite liší, a tak se bere první
+         * čtveřice znaků — `SUBSTR` znají obě a datum v nich začíná rokem
+         * (MySQL `DATETIME` převede na „YYYY-MM-DD …"). Rok je v UTC, stejně
+         * jako když ho dřív počítal `CarbonImmutable::parse()`.
+         */
         return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
@@ -1373,10 +1441,12 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
              */
             ->where('is_hidden', false)
             ->whereNotNull('taken_at')
-            ->pluck('taken_at')
-            ->countBy(fn ($kdy) => CarbonImmutable::parse($kdy)->year)
-            ->sortKeysDesc()
-            ->map(fn (int $pocet, $rok) => [(int) $rok, $pocet])
+            ->toBase()
+            ->selectRaw('SUBSTR(taken_at, 1, 4) AS rok, COUNT(*) AS pocet')
+            ->groupByRaw('SUBSTR(taken_at, 1, 4)')
+            ->get()
+            ->map(fn ($r) => [(int) $r->rok, (int) $r->pocet])
+            ->sortByDesc(fn (array $r) => $r[0])
             ->values()
             ->all();
     }
@@ -1754,7 +1824,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('is_hidden', false)
             ->toBase()
             ->get(['id', 'media_type', 'taken_at', 'uploaded_at', 'created_at', 'location_name', 'uploaded_by',
-                'camera_make', 'camera_model', 'lens_model', 'duration_ms', 'status', 'is_favorite']);
+                'camera_make', 'camera_model', 'lens_model', 'duration_ms', 'status']);
 
         if ($radky->isEmpty()) {
             return self::PRAZDNE_STATISTIKY;
@@ -1772,7 +1842,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
 
         foreach ($radky as $r) {
             $video = $r->media_type === 'video';
-            $oblibena = isset($oblibene[$r->id]) || (bool) $r->is_favorite;
+            // Jen moje srdíčko — jako mřížka a odznak (viz `fav` ve `fotky()`).
+            $oblibena = isset($oblibene[$r->id]);
             $kdy = $r->taken_at ?? $r->uploaded_at ?? $r->created_at;
             $den = $kdy ? CarbonImmutable::parse($kdy) : null;
             $misto = trim(explode(',', (string) ($r->location_name ?? ''))[0]);

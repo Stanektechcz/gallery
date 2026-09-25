@@ -443,7 +443,9 @@ class ObsahKnihovnaTest extends TestCase
     /** Čísla u položek nabídky počítá server, ne katalog nabídky. */
     public function test_cisla_postranniho_panelu_jsou_ze_skutecne_knihovny(): void
     {
-        $this->fotka(['is_favorite' => true, 'taken_at' => '2026-01-10 08:00:00', 'location_name' => 'Praha']);
+        // Oblíbená je moje srdíčko (`user_favorites`), jako v mřížce — ne sdílený `is_favorite`.
+        $oblibena = $this->fotka(['taken_at' => '2026-01-10 08:00:00', 'location_name' => 'Praha']);
+        DB::table('user_favorites')->insert(['user_id' => $this->adri->id, 'media_item_id' => $oblibena->id, 'created_at' => now()]);
         $this->fotka(['taken_at' => '2026-01-11 08:00:00', 'location_name' => 'Praha'], 2);
         Person::create(['gallery_space_id' => $this->prostor->id, 'name' => 'Makinka']);
 
@@ -581,7 +583,8 @@ class ObsahKnihovnaTest extends TestCase
         // Místo je první část adresy — „Praha, Česko" i „Praha" jsou jedno místo.
         $this->fotka(['taken_at' => '2026-01-10 08:15:00', 'location_name' => 'Praha, Česko', 'camera_make' => 'Apple', 'camera_model' => 'iPhone 15'], 1);
         $this->fotka(['taken_at' => '2025-07-01 20:00:00', 'location_name' => 'Praha', 'media_type' => 'video', 'duration_ms' => 30_000], 2);
-        $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-02-01 10:00:00', 'is_favorite' => true], 3);
+        $oblibena = $this->fotka(['taken_at' => null, 'uploaded_at' => '2026-02-01 10:00:00'], 3);
+        DB::table('user_favorites')->insert(['user_id' => $this->adri->id, 'media_item_id' => $oblibena->id, 'created_at' => now()]);
 
         $s = $this->getJson('/api/data/knihovna')->assertOk()->json('data.LIBSTATS');
 

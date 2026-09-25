@@ -7,6 +7,7 @@ use App\Models\FinanceAccess;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use App\Models\Transaction;
 use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Finance\LedgerService;
@@ -271,16 +272,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     public static function ostatniZDvojice(GallerySpace $prostor, ?int $ja): array
     {
-        $ids = DB::table('gallery_space_user')
-            ->where('gallery_space_id', $prostor->id)
-            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
-            ->pluck('user_id')
-            ->push($prostor->owner_id)
-            ->filter()
-            ->map(fn ($id) => (int) $id)
-            ->reject(fn (int $id) => $id === $ja)
-            ->unique()
-            ->values();
+        $ids = collect(self::idDvojice($prostor))->reject(fn (int $id) => $id === $ja)->values();
 
         if ($ids->isEmpty()) {
             return [];
@@ -294,6 +286,27 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                 // `null` je čerstvý účet, kterému výchozí hodnotu doplnila databáze.
                 'aktivni' => $u->is_active !== false,
             ]])
+            ->all();
+    }
+
+    /**
+     * Id dvojice prostoru: vlastník a role `owner`/`admin`/`editor` v TOMHLE
+     * prostoru. Host ne — `members()` ho vrací taky. Deaktivovaní ano: jejich
+     * zápisy, jména a návrhy v galerii zůstávají (jako `MazaniFotek::pocetDvojice`).
+     *
+     * @return list<int>
+     */
+    private static function idDvojice(GallerySpace $prostor): array
+    {
+        return DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
+            ->pluck('user_id')
+            ->push($prostor->owner_id)
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
             ->all();
     }
 
@@ -612,12 +625,14 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      */
     private function uctyDvojice(GallerySpace $prostor): array
     {
-        $lide = $prostor->members()->get(['users.id', 'users.name', 'users.email']);
-        $ja = auth()->id();
-
-        if ($ja !== null) {
-            $lide = $lide->sortByDesc(fn ($u) => (int) $u->id === (int) $ja)->values();
-        }
+        /*
+         * Jen dvojice, a jen ta, která se přihlásit může.
+         *
+         * Brali se všichni členové prostoru: přihlašovací obrazovka pak
+         * nabízela jméno a adresu hosta jako druhého z dvojice. Účet
+         * s odebraným přístupem se nepřihlásí, takže ho nabízet nemá smysl.
+         */
+        $lide = app(PristupDoGalerie::class)->dvojiceOdDivaka($prostor, auth()->user());
 
         return $lide
             ->map(fn ($u) => [(string) $u->name, (string) $u->email])
@@ -744,16 +759,27 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
      * skládala po svém, druhý Adrian by v jedné byl „Adrian (2)" a v druhé
      * „Adrian" — a jeho příjem by se na obrazovce nenašel.
      *
+     * Jen dvojice (`idDvojice`), ne hosté: host se jmenoval ve `DVOJICE`,
+     * v příjmech Financí i v aktivitě na úvodní obrazovce — a když vstoupil
+     * dřív než partner, seděl na jeho místě. Pořadí: ten, kdo se dívá, pak
+     * podle vstupu do prostoru a id (jako `PristupDoGalerie::dvojiceOdDivaka`),
+     * ať je stejné při každém načtení.
+     *
      * @return array<int, string>
      */
     public static function jmenaClenu(GallerySpace $prostor): array
     {
-        $lide = $prostor->members()->pluck('users.name', 'users.id')->all();
-        $ja = auth()->id();
+        $ids = self::idDvojice($prostor);
+        $ja = auth()->id() === null ? null : (int) auth()->id();
+        $vstup = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('user_id', $ids)
+            ->pluck('joined_at', 'user_id')
+            ->all();
+        $lide = User::query()->whereIn('id', $ids)->pluck('name', 'id')->map(fn ($j) => (string) $j)->all();
 
-        if ($ja !== null && array_key_exists($ja, $lide)) {
-            $lide = [$ja => $lide[$ja]] + $lide;
-        }
+        uksort($lide, fn (int $a, int $b) => [$b === $ja, ($vstup[$a] ?? null) === null, (string) ($vstup[$a] ?? ''), $a]
+            <=> [$a === $ja, ($vstup[$b] ?? null) === null, (string) ($vstup[$b] ?? ''), $b]);
 
         $videno = [];
         $jmena = [];
@@ -959,7 +985,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         return StorageConnection::query()
             ->where('provider', 'google_drive')
             ->whereNull('revoked_at')
-            ->whereIn('owner_user_id', $prostor->members()->pluck('users.id'))
+            // Jen dvojice: rozbité připojení hosta panel ukazoval i s jeho adresou.
+            ->whereIn('owner_user_id', self::idDvojice($prostor))
             ->orderByDesc('connected_at')
             ->first();
     }
@@ -1230,6 +1257,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
             ->where('is_archived', false)
+            // Trezor ne: rozdíl proti počtu v mřížce by prozradil, kolik v něm je.
+            ->where('is_hidden', false)
             ->count();
 
         if ($pocet === 0) {
@@ -1268,6 +1297,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $pocet = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->where('taken_at_estimated', true)
             ->count();
 
@@ -1329,10 +1359,20 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         // Měsíc dvojice: první noc v měsíci je v UTC ještě ten minulý.
         $dnes = Cas::dnes();
 
-        $utraceno = (float) DB::table('transactions')
+        /*
+         * Čerpání jako v rozpočtech (`Transaction::countsTowardsBudget`).
+         *
+         * `type != 'income'` počítalo za útratu i převod mezi vlastními účty,
+         * směnu a výběr z bankomatu, k tomu rozepsaný koncept, výdaj ručně
+         * vyřazený z rozpočtu, vyrovnání mezi partnery a eura jako koruny.
+         * Převod pěti tisíc na spořák tak „snědl" půlku měsíce.
+         */
+        $utraceno = (float) Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->where('type', '!=', 'income')
-            ->whereNull('deleted_at')
+            ->utraty()
+            ->where('excluded_from_budget', false)
+            ->where('is_settlement', false)
+            ->where('currency_from', (string) $rozpocet->currency)
             ->whereBetween('occurred_at', [$dnes->startOfMonth(), $dnes->endOfMonth()])
             ->sum('amount_from');
 
@@ -1422,9 +1462,16 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
+        /*
+         * `trips` měkké mazání nemá — cesta se maže doopravdy.
+         *
+         * Stála tu podmínka na `deleted_at`. Na MySQL je neznámý sloupec chyba
+         * a padla s ní celá skupina `system`: koš, trezor, zámek i oznámení
+         * přišly prázdné. SQLite v testech ho tiše vzal jako řetězec a řádek
+         * jen chyběl, takže to nikdo neviděl.
+         */
         $cesta = DB::table('trips')
             ->where('gallery_space_id', $prostor->id)
-            ->whereNull('deleted_at')
             ->orderByDesc('start_date')
             ->first(['id', 'name']);
 
@@ -1432,20 +1479,36 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             return null;
         }
 
-        $utraty = DB::table('trip_expenses')
+        /*
+         * Jen to, co se opravdu utratilo, a jen v jedné měně.
+         *
+         * Počítaly se i plánované útraty (rozpočet cesty dopředu) a eura se
+         * přičítala ke korunám pod nápisem „Kč". Bere se nejčastější měna;
+         * ostatní se v řádku přiznají.
+         */
+        $poMenach = DB::table('trip_expenses')
             ->where('trip_id', $cesta->id)
-            ->selectRaw('COUNT(*) AS pocet, SUM(amount) AS soucet, MAX(occurred_at) AS posledni')
-            ->first();
+            ->where('state', 'actual')
+            ->groupBy('currency')
+            ->selectRaw('currency, COUNT(*) AS pocet, SUM(amount) AS soucet, MAX(occurred_at) AS posledni')
+            ->get()
+            ->sortByDesc('pocet')
+            ->values();
 
-        if ((int) $utraty->pocet === 0) {
+        $utraty = $poMenach->first();
+
+        if ($utraty === null || (int) $utraty->pocet === 0) {
             return null;
         }
 
+        $jine = $poMenach->count() - 1;
+
         return [
             'label' => 'Útrata na cestě '.$cesta->name,
-            'value' => $this->castka((float) $utraty->soucet, 'CZK'),
+            'value' => $this->castka((float) $utraty->soucet, (string) ($utraty->currency ?: 'CZK')),
             'kind' => 'manual',
-            'where' => 'Zapsáno ručně — '.$this->pocet((int) $utraty->pocet, 'položka', 'položky', 'položek'),
+            'where' => 'Zapsáno ručně — '.$this->pocet((int) $utraty->pocet, 'položka', 'položky', 'položek')
+                .($jine > 0 ? ' · '.$this->pocet($jine, 'další měna', 'další měny', 'dalších měn').' stranou' : ''),
             'age' => $utraty->posledni ? 'poslední zápis '.CarbonImmutable::parse($utraty->posledni)->format('j. n.') : 'bez data',
             'conf' => 72,
             'stale' => false,
@@ -1493,8 +1556,21 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                  */
                 ->when(Tabulky::sloupec($tabulka, 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
                 ->when(Tabulky::sloupec($tabulka, 'trashed_at'), fn ($q) => $q->whereNull('trashed_at'))
+                // Trezor se nepočítá — rozdíl proti knihovně by ho prozradil.
+                ->when($tabulka === 'media_items', fn ($q) => $q->where('is_hidden', false))
                 ->selectRaw('SUM(CASE WHEN '.$autor.' = ? THEN 1 ELSE 0 END) AS a', [$vlastnik->id])
-                ->selectRaw('SUM(CASE WHEN '.$autor.' IS NOT NULL AND '.$autor.' <> ? THEN 1 ELSE 0 END) AS m', [$vlastnik->id])
+                /*
+                 * „Ten druhý" je partner, ne kdokoli jiný.
+                 *
+                 * Počítalo se všechno, co nezapsal vlastník — i nahrávky hosta
+                 * — a u pruhu stálo partnerovo jméno. Bez partnera (sám
+                 * v galerii) zůstává součet ostatních pod popiskem „ostatní".
+                 */
+                ->when(
+                    $druhy !== null,
+                    fn ($q) => $q->selectRaw('SUM(CASE WHEN '.$autor.' = ? THEN 1 ELSE 0 END) AS m', [$druhy->id]),
+                    fn ($q) => $q->selectRaw('SUM(CASE WHEN '.$autor.' IS NOT NULL AND '.$autor.' <> ? THEN 1 ELSE 0 END) AS m', [$vlastnik->id]),
+                )
                 ->selectRaw('MAX('.$cas.') AS posledni')
                 ->first();
 
@@ -1515,12 +1591,19 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         return $sekce;
     }
 
-    /** @return array{0: ?object, 1: ?object} */
+    /**
+     * Vlastník a partner — pozice `a`/`m` v `SECLIFE`, vlastník vždy první.
+     *
+     * Brali se všichni členové prostoru, takže host (vstoupil dřív, nebo měl
+     * menší id) seděl na místě partnera a jeho jméno stálo u pruhu dvojice.
+     * Deaktivovaný partner zůstává: jeho zápisy jsou pořád jeho.
+     *
+     * @return array{0: ?object, 1: ?object}
+     */
     private function dvojice(GallerySpace $prostor): array
     {
-        $lide = DB::table('gallery_space_user as clen')
-            ->join('users as u', 'u.id', '=', 'clen.user_id')
-            ->where('clen.gallery_space_id', $prostor->id)
+        $lide = DB::table('users as u')
+            ->whereIn('u.id', self::idDvojice($prostor))
             ->orderByRaw('CASE WHEN u.id = ? THEN 0 ELSE 1 END', [$prostor->owner_id])
             ->orderBy('u.id')
             ->get(['u.id', 'u.name']);
@@ -1553,6 +1636,11 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
             $pocet = DB::table($tabulka)
                 ->where('gallery_space_id', $prostor->id)
+                // Jako `zivotSekci`: smazané, koš a trezor se nepočítají — trezor
+                // by rozdílem proti knihovně prozradil, kolik v něm přibylo.
+                ->when(Tabulky::sloupec($tabulka, 'deleted_at'), fn ($q) => $q->whereNull('deleted_at'))
+                ->when(Tabulky::sloupec($tabulka, 'trashed_at'), fn ($q) => $q->whereNull('trashed_at'))
+                ->when($tabulka === 'media_items', fn ($q) => $q->where('is_hidden', false))
                 ->selectRaw('SUM(CASE WHEN '.$cas.' >= ? THEN 1 ELSE 0 END) AS letos', [$letos])
                 ->selectRaw('SUM(CASE WHEN '.$cas.' >= ? AND '.$cas.' < ? THEN 1 ELSE 0 END) AS loni', [$loni, $letos])
                 ->first();
@@ -1831,8 +1919,17 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         }
 
         if (Tabulky::je('transactions')) {
+            /*
+             * Zařadit jde jen výdaj a příjem, a jen živý.
+             *
+             * Počítaly se i smazané záznamy a převody mezi vlastními účty —
+             * ty kategorii nemají a mít nebudou, takže řádek „nezařazené
+             * transakce" nešel vyřídit nikdy.
+             */
             $bezKategorie = DB::table('transactions')
                 ->where('gallery_space_id', $prostor->id)
+                ->whereNull('deleted_at')
+                ->whereIn('type', Transaction::VYSLEDKOVE)
                 ->whereNull('category_id')
                 ->count();
 
