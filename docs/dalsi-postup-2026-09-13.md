@@ -804,6 +804,43 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ai. Třicáté šesté kolo — odhlášení a čeština frameworku (25. 9.)
+
+* **„Odhlásit se" v aplikaci.** V nastavení (Zámek a přístup) na počítači
+  i telefonu, jen u přihlášené dvojice. Neodeslané změny se nejdřív zkusí
+  doručit; co zbude (bez signálu), se zahodí jen na výslovné „Odhlásit
+  a zahodit" — s počtem („2 změny se ještě neodeslaly"). Dřív tlačítko
+  chybělo a odhlášení by je zahodilo mlčky.
+* **Hlášky frameworku česky.** Výchozí jazyk byl `en` a složka `lang/`
+  neexistovala: přihlášení bez hesla hlásilo „The password field is
+  required.", souhrn „(and 2 more errors)". Teď `lang/cs` (validace,
+  přihlášení, obnova hesla, stránkování) a výchozí `cs`; testy běží česky.
+  Česky začnou i datumy psané přes `translatedFormat` bez `locale('cs')`.
+* Smazané vývojové klíče `mereni-23` a `mereni-telefon` z lokální databáze
+  (bod 3.10).
+
+**Po nasazení:** v `.env` na serveru má být `APP_LOCALE=cs` (nebo řádek
+chybět). S `APP_LOCALE=en` zůstanou hlášky anglicky.
+
+**Ověřeno bez přihlášení:** oba dokumenty se načtou bez chyby skriptu
+a obě nové funkce jsou k dispozici; průchod dialogem s přihlášenou dvojicí
+v prohlížeči neproběhl (přihlašovat se v relaci nesmím) — kontroluje ho
+statický test pravidel.
+
+**Nesloučeno:** větve `claude/kind-perlman-108d25` (webové cesty vracejí
+klientovi, který čeká JSON, 422 místo přesměrování) a `claude/elated-tesla-64fdeb` (staré
+rozhraní ukáže chybu místo falešného úspěchu; po sloučení přestavět
+`public/build`) — sloučení do `main` je na rozhodnutí vlastníka.
+
+| Commit | Co |
+|---|---|
+| `65064353` | Hlášky validace a přihlášení česky |
+| `32bbef70` | „Odhlásit se" — a neodeslané změny se nezahodí bez zeptání |
+
+Testy: **1716 PHP testů**, všechny prošly. Bez migrace.
+
+---
+
 ## 2ah. Třicáté páté kolo — zápisy bez signálu, trezor, upozornění, noc (25. 9.)
 
 Kolo podle plánu (`task-plan`) a oprav po dávkách (`task-deep`, `task-build`);
@@ -862,11 +899,9 @@ a `claude/elated-tesla-64fdeb` — **zatím nesloučeno do `main`**.
 
 ### Zbývá
 
-* V aplikaci **není tlačítko „Odhlásit se"** — nic nevolá `signOut()`; účet se
-  mění jen na zamykací obrazovce („Jiný účet", otisk prstu). Oprava fronty
-  pokrývá i tyhle cesty.
-* Odhlášení bez signálu neodeslané změny zahodí (záměrně, ať nic nezůstane)
-  — bez varování.
+* ~~V aplikaci **není tlačítko „Odhlásit se"**~~ — hotovo (2ai).
+* ~~Odhlášení bez signálu neodeslané změny zahodí bez varování~~ — hotovo
+  (2ai): zeptá se s počtem.
 * Po vypršení tokenu (401, ne odhlášení) zůstane fronta v IndexedDB, dokud se
   týž účet nepřihlásí nebo neodhlásí.
 * Ověřit v prohlížeči s přihlášenou dvojicí: dvě úpravy bez signálu → jedna
@@ -1977,8 +2012,8 @@ ale každá položka zmenšuje, co by jedna chyba napáchala.
 9. ~~**Obnova ze zálohy nebyla ověřená**~~ — záloha databáze neexistovala
    vůbec; od kola 2ag `gallery:zaloha` / `gallery:obnova`, ověřené testem celým
    kruhem. Zbývá kopie mimo server (viz 2ag).
-10. Vývojový přístupový klíč „mereni" v **lokální** databázi (produkce ne) —
-    smazat v tinkeru: `DB::table('personal_access_tokens')->where('name', 'mereni')->delete()`.
+10. ~~Vývojový přístupový klíč „mereni" v **lokální** databázi~~ — smazané
+    (2ai: `mereni-23`, `mereni-telefon`).
 11. ~~**Pokusy o heslo k trezoru se počítají v sezení**~~ — hotovo (2d): cache
     podle účtu s prodlužujícím se uzavřením. Na produkci musí `CACHE_STORE`
     být sdílený (databáze/redis), ne `array`.
