@@ -164,15 +164,28 @@ class LedgerService
 
             $mena = $pohyb->currency_from ?? $pohyb->currency_to;
             $kdo = $pohyb->payer_partner_id;
+            // Jen poplatek placený navíc, a v jeho měně. Zahrnutý už je v částce —
+            // přičíst ho znovu by ho zaplatilo dvakrát. A dvě eura za platbu
+            // v korunách nejsou dvě koruny: dluhy se vedou po měnách.
+            $poplatek = $pohyb->feePaidExtra();
+            $menaPoplatku = $pohyb->fee_currency ?? $mena;
 
             if ($kdo) {
-                $zaplatil[$kdo][$mena] = ($zaplatil[$kdo][$mena] ?? 0) + (float) $pohyb->amount_from + (float) $pohyb->fee_amount;
+                $zaplatil[$kdo][$mena] = ($zaplatil[$kdo][$mena] ?? 0) + (float) $pohyb->amount_from;
+
+                if ($poplatek > 0) {
+                    $zaplatil[$kdo][$menaPoplatku] = ($zaplatil[$kdo][$menaPoplatku] ?? 0) + $poplatek;
+                }
             }
 
             // Bez rozdělení nese výdaj ten, kdo ho zaplatil — nic se nedluží.
             if ($pohyb->shares->isEmpty()) {
                 if ($kdo) {
-                    $melNest[$kdo][$mena] = ($melNest[$kdo][$mena] ?? 0) + (float) $pohyb->amount_from + (float) $pohyb->fee_amount;
+                    $melNest[$kdo][$mena] = ($melNest[$kdo][$mena] ?? 0) + (float) $pohyb->amount_from;
+
+                    if ($poplatek > 0) {
+                        $melNest[$kdo][$menaPoplatku] = ($melNest[$kdo][$menaPoplatku] ?? 0) + $poplatek;
+                    }
                 }
 
                 continue;

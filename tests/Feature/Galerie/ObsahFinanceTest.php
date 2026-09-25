@@ -389,7 +389,8 @@ class ObsahFinanceTest extends TestCase
         $vydaje = $this->getJson('/api/data/finance')->assertOk()->json('data.RULEXP');
 
         $mesice = [1 => 'ledna', 'února', 'března', 'dubna', 'května', 'června', 'července', 'srpna', 'září', 'října', 'listopadu', 'prosince'];
-        $this->assertSame([[$kdy->day.'. '.$mesice[$kdy->month], 'Bistro na rohu', 640, $kdy->toDateString()]], $vydaje);
+        // Páté pole je měna částky (přidané na konec, nic se neposunulo).
+        $this->assertSame([[$kdy->day.'. '.$mesice[$kdy->month], 'Bistro na rohu', 640, $kdy->toDateString(), 'CZK']], $vydaje);
     }
 
     /**
@@ -398,6 +399,9 @@ class ObsahFinanceTest extends TestCase
      * Obrazovka vyrovnání počítala dluh mezi dvěma lidmi z ukázky
      * („Adrian · Nákupy a benzín 14 820 Kč"). Minulý měsíc a vyřazené
      * z rozpočtu se nepočítají.
+     *
+     * Platby jsou v eurech, takže patří do `paidPoMenach.EUR`; `paid` nese jen
+     * hlavní měnu (koruny), protože z něj klient počítá dluh mezi dvojicí.
      */
     public function test_kdo_co_zaplatil_je_z_tohoto_mesice(): void
     {
@@ -415,9 +419,10 @@ class ObsahFinanceTest extends TestCase
         Transaction::create($zaklad + ['occurred_at' => $this->dnes(), 'amount_from' => 12.6, 'description' => 'Pekárna']);
         Transaction::create($zaklad + ['occurred_at' => $this->dnes()->subMonthNoOverflow()->startOfMonth()->addDay(), 'amount_from' => 90, 'description' => 'Loni']);
 
-        $zaplaceno = $this->getJson('/api/data/finance')->assertOk()->json('data.BUD.paid');
+        $bud = $this->getJson('/api/data/finance')->assertOk()->json('data.BUD');
 
-        $this->assertSame([[$this->adri->name, 'Potraviny', 43]], $zaplaceno);
+        $this->assertSame([[$this->adri->name, 'Potraviny', 43]], $bud['paidPoMenach']['EUR']);
+        $this->assertSame([], $bud['paid'], 'Eura do korunového „kdo co zaplatil" nepatří.');
     }
 
     /** Ikony aplikace jsou z Lucide, prototyp kreslí Phosphor. */
