@@ -194,10 +194,14 @@ class PrepocetDoHlavniTest extends TestCase
 
     public function test_combine_zustava(): void
     {
-        $this->kurzy(['EUR' => ['rate' => 25.0, 'date' => '2026-09-24']]);
+        // `combine` dává koruně dnešní datum a bere nejstarší z použitých —
+        // kurz proto musí být starší než „dnes" testu, i v nočních hodinách
+        // `TESTY_CAS` (1. 7.), kdy by pevný 24. 9. byl v budoucnosti.
+        $den = $this->dnes()->subDay()->toDateString();
+        $this->kurzy(['EUR' => ['rate' => 25.0, 'date' => $den]]);
 
         $this->assertSame(
-            ['total' => 3500.0, 'currency' => 'CZK', 'date' => '2026-09-24', 'rates' => ['CZK' => 1.0, 'EUR' => 25.0]],
+            ['total' => 3500.0, 'currency' => 'CZK', 'date' => $den, 'rates' => ['CZK' => 1.0, 'EUR' => 25.0]],
             $this->sluzba()->combine(['CZK' => 1000, 'EUR' => 100], 'CZK'),
         );
         $this->assertNull($this->sluzba()->combine(['CZK' => 1000], 'CZK'));
