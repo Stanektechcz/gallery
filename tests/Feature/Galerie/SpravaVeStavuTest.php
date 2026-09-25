@@ -52,19 +52,28 @@ class SpravaVeStavuTest extends TestCase
         Sanctum::actingAs($this->adri);
     }
 
+    /**
+     * Povolená změna role se provede doopravdy.
+     *
+     * Povolená je jen taková, která dvojici nerozbije — tady vlastník, který
+     * je v galerii sám, dělá z hosta správce. Partnera na hosta přeřadit
+     * nejde ani tudy (viz `DvojiceNejdeObejitTest`).
+     */
     public function test_zmena_role_ve_stavu_se_provede_doopravdy(): void
     {
+        $this->prostor->members()->updateExistingPivot($this->makinka->id, ['role' => 'viewer']);
+
         $odpoved = $this->patchStav([
             'admUsers' => [
                 ['id' => (string) $this->adri->id, 'name' => 'Adrian', 'role' => 'vlastník', 'state' => 'aktivní'],
-                ['id' => (string) $this->makinka->id, 'name' => 'Makinka', 'role' => 'host', 'state' => 'aktivní'],
+                ['id' => (string) $this->makinka->id, 'name' => 'Makinka', 'role' => 'správce', 'state' => 'aktivní'],
             ],
         ])->assertOk();
 
-        $this->assertSame('viewer', $this->rolePivotu($this->makinka), 'Záměr z obrazovky se musí projevit v databázi.');
+        $this->assertSame('editor', $this->rolePivotu($this->makinka), 'Záměr z obrazovky se musí projevit v databázi.');
 
         $vracene = collect($odpoved->json('data.admUsers'))->firstWhere('name', 'Makinka');
-        $this->assertSame('host', $vracene['role'], 'Odpověď musí nést skutečnost, ne to, co klient poslal.');
+        $this->assertSame('správce', $vracene['role'], 'Odpověď musí nést skutečnost, ne to, co klient poslal.');
     }
 
     /**
@@ -88,8 +97,9 @@ class SpravaVeStavuTest extends TestCase
         $this->assertArrayNotHasKey('admUsers', $ulozeno);
         $this->assertArrayNotHasKey('admLog', $ulozeno);
 
-        // V odpovědi skutečnost je — a vymyšlený zápis v protokolu neprojde.
-        $this->assertSame('host', collect($odpoved->json('data.admUsers'))->firstWhere('name', 'Makinka')['role']);
+        // V odpovědi skutečnost je — partner hostem nebude (dvojice se nemění)
+        // a vymyšlený zápis v protokolu neprojde.
+        $this->assertSame('správce', collect($odpoved->json('data.admUsers'))->firstWhere('name', 'Makinka')['role']);
         $this->assertNotContains('vymyšlený zápis', array_column($odpoved->json('data.admLog'), 'what'));
     }
 
@@ -272,14 +282,14 @@ class SpravaVeStavuTest extends TestCase
     public function test_protokol_nese_skutecne_zasahy(): void
     {
         $odpoved = $this->patchStav([
-            'admUsers' => [['id' => (string) $this->makinka->id, 'name' => 'Makinka', 'role' => 'host', 'state' => 'aktivní']],
+            'admUsers' => [['id' => (string) $this->makinka->id, 'name' => 'Makinka', 'role' => 'správce', 'state' => 'bez přístupu']],
         ])->assertOk();
 
         $protokol = $odpoved->json('data.admLog');
 
         $this->assertNotEmpty($protokol);
         $this->assertSame('Adrian', $protokol[0]['who']);
-        $this->assertStringContainsString('roli host', $protokol[0]['what']);
+        $this->assertStringContainsString('už do galerie nemá přístup', $protokol[0]['what']);
     }
 
     /**

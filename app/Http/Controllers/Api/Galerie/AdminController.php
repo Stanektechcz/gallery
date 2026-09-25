@@ -40,6 +40,10 @@ class AdminController extends Controller
 {
     use UrcujePar;
 
+    private const PARTNER_NE_HOST = 'Partnera nejde přeřadit na hosta — mazání fotek by pak nepotřebovalo jeho souhlas.';
+
+    private const DVOJICE_UPLNA = 'Dvojice už je úplná — další správce by mohl schvalovat mazání místo partnera.';
+
     public function __construct(
         private readonly AdministraceGalerie $administrace,
         private readonly PlanovaneUlohy $ulohy,
@@ -95,6 +99,8 @@ class AdminController extends Controller
         abort_if($stavajici && $this->zasahy->ucetUzPatriJinam($stavajici, $request->user()), 422,
             'Tenhle e-mail už v aplikaci účet má. Pozvánka by ho otevřela někomu jinému, takže ji neposíláme — připojit existující účet do další galerie zatím nejde.');
 
+        abort_if($this->zasahy->pridavaDoUplneDvojice($prostor, null, $data['role'] ?? 'host'), 422, self::DVOJICE_UPLNA);
+
         $pozvany = $this->zasahy->pozvi($prostor, $request->user(), $data['email'], $data['role'] ?? 'host');
 
         abort_if($pozvany === null, 422, 'Pozvánku se nepodařilo vytvořit.');
@@ -142,7 +148,21 @@ class AdminController extends Controller
         abort_if($clen->id === $prostor->owner_id, 422,
             'Vlastník musí být právě jeden — nejdřív předejte vlastnictví.');
 
-        $this->zasahy->zmenRoli($prostor, $request->user(), $clen->id, $data['role']);
+        // Mazání fotek čeká na souhlas partnera. Jako host by se do dvojice
+        // nepočítal a vlastník by mazal sám — viz `AdministraceZasahy`.
+        abort_if($this->zasahy->opoustiDvojici($prostor, $clen, $data['role']), 422, self::PARTNER_NE_HOST);
+
+        // „Správce" u člena dvojice nic nemění — a úspěch je to po pravdě.
+        if ($this->zasahy->jeVeDvojici($prostor, $clen)) {
+            return $this->prehled($prostor);
+        }
+
+        abort_if($this->zasahy->pridavaDoUplneDvojice($prostor, $clen, $data['role']), 422, self::DVOJICE_UPLNA);
+
+        // Obrazovka po úspěchu hlásí „má nyní roli…" — nesmí to hlásit o zásahu,
+        // který se neprovedl.
+        abort_unless($this->zasahy->zmenRoli($prostor, $request->user(), $clen->id, $data['role']), 422,
+            'Roli se nepodařilo změnit.');
 
         return $this->prehled($prostor);
     }
@@ -156,7 +176,12 @@ class AdminController extends Controller
         abort_if($novy->id === $prostor->owner_id, 422, 'Tenhle účet je vlastníkem už teď.');
         abort_if(! $novy->is_active, 422, 'Vlastnictví nejde předat účtu bez přístupu.');
 
-        $this->zasahy->predejVlastnictvi($prostor, $request->user(), $novy->id);
+        // Předchozí vlastník zůstává správcem, takže host by v dvojici byl třetí.
+        abort_if($this->zasahy->pridavaDoUplneDvojice($prostor, $novy, 'owner'), 422,
+            'Dvojice už je úplná — vlastnictví jde předat jen partnerovi, ne hostovi.');
+
+        abort_unless($this->zasahy->predejVlastnictvi($prostor, $request->user(), $novy->id), 422,
+            'Vlastnictví se nepodařilo předat.');
 
         return $this->prehled($prostor);
     }
@@ -483,10 +508,8 @@ class AdminController extends Controller
 
     private function jenSpravce(Request $request, GallerySpace $prostor): void
     {
-        $role = $prostor->members()->where('users.id', $request->user()->id)->first()?->pivot->role;
-
         abort_unless(
-            $request->user()->id === $prostor->owner_id || in_array($role, ['owner', 'admin', 'editor'], true),
+            $this->zasahy->jeSpravce($prostor, $request->user()),
             403,
             'Tohle může jen vlastník nebo správce.',
         );

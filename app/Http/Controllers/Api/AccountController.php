@@ -79,10 +79,10 @@ class AccountController extends Controller
             throw ValidationException::withMessages(['current_password' => 'Zadané heslo nesouhlasí.']);
         }
 
-        abort_if($user->role === 'owner' && $this->isOnlyOwner($user), 422,
-            'Jste jediný správce prostoru. Předejte roli jinému členovi, než účet zrušíte.');
-
         // Vlastník galerie (`owner_id`) by prostor nechal bez správce — úloha by ho stejně přeskočila.
+        // Rozhoduje jen vlastnictví: `users.role` má `owner` každý zaregistrovaný
+        // účet, takže kontrola podle něj nepouštěla zrušit účet partnerovi,
+        // který se kdysi registroval sám.
         abort_if(($prekazka = $zruseni->prekazka($user)) !== null, 422, $prekazka);
 
         $at = now()->addDays(self::DELETION_GRACE_DAYS);
@@ -168,19 +168,6 @@ class AccountController extends Controller
         }
 
         $user->forceFill(['preferences' => $preferences])->save();
-    }
-
-    /** A space left with nobody who can administer it is a space nobody can fix. */
-    private function isOnlyOwner(User $user): bool
-    {
-        foreach ($user->gallerySpaces()->get() as $space) {
-            $owners = $space->members()->where('users.role', 'owner')->count();
-            if ($owners <= 1) {
-                return true;
-            }
-        }
-
-        return false;
     }
 
     /** @return list<array<string, mixed>> */

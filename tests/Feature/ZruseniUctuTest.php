@@ -119,6 +119,36 @@ class ZruseniUctuTest extends TestCase
         $this->assertTrue((bool) $this->vlastnik->fresh()->is_active);
     }
 
+    /**
+     * O zrušení rozhoduje vlastnictví galerie, ne `users.role`.
+     *
+     * `owner` v `users.role` má každý zaregistrovaný účet. Dřívější kontrola
+     * „jediný správce" počítala členy podle něj — partnera, který se kdysi
+     * registroval sám, tak nepustila zrušit účet, přestože galerii nevlastní.
+     */
+    public function test_partner_s_users_role_owner_ucet_zrusit_smi(): void
+    {
+        $this->vlastnik->forceFill(['role' => 'partner'])->save();
+        $partner = User::factory()->create(['role' => 'owner']);
+        $this->prostor->members()->attach($partner->id, ['role' => 'editor']);
+
+        Sanctum::actingAs($partner);
+        $this->postJson('/api/v1/ucet/zruseni', ['current_password' => 'password'])->assertOk();
+
+        $this->assertNotNull($partner->fresh()->preferences['delete_requested_at'] ?? null);
+    }
+
+    /** Skutečný vlastník galerie zrušit nesmí, ať má v `users.role` cokoli. */
+    public function test_vlastnik_s_users_role_owner_ucet_nezrusi(): void
+    {
+        $this->vlastnik->forceFill(['password' => Hash::make('heslo-heslo-2')])->save();
+
+        Sanctum::actingAs($this->vlastnik);
+        $this->postJson('/api/v1/ucet/zruseni', ['current_password' => 'heslo-heslo-2'])
+            ->assertStatus(422)
+            ->assertJsonPath('message', 'Jste vlastník galerie. Nejdřív předejte vlastnictví druhému z dvojice, pak účet zrušte.');
+    }
+
     public function test_uloha_je_v_planovaci(): void
     {
         $nazvy = collect(app(Schedule::class)->events())->map(fn ($u) => $u->description)->all();

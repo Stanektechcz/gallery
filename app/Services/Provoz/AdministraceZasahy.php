@@ -8,7 +8,9 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Models\WebauthnCredential;
 use App\Notifications\InvitationNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Billing\EntitlementService;
+use App\Services\Media\MazaniFotek;
 use App\Services\Notifications\OdberyPush;
 use App\Support\Provozovatel;
 use Illuminate\Support\Facades\Hash;
@@ -25,10 +27,22 @@ use Illuminate\Support\Str;
  * Metody **nevyhazují výjimky na porušení práv**; vrací `false`. Volání ze stavu
  * nemá kam chybu zobrazit a odpověď se skutečností obrazovku stejně srovná;
  * kontroler si nad tím dělá vlastní kontroly, aby uměl odpovědět 403.
+ *
+ * **Dvojice se administrací nemění.** Mazání fotek čeká na souhlas druhého
+ * z dvojice (`MazaniFotek`) a dvojici tvoří role v prostoru
+ * (`PristupDoGalerie::ROLE_DVOJICE`). Kdyby šlo partnera přeřadit na hosta,
+ * zůstal by vlastník v dvojici sám a mazal by bez souhlasu. Do úplné dvojice
+ * zase nesmí přibýt nikdo další — změnou role, pozvánkou ani předáním
+ * vlastnictví hostovi —, protože by schvaloval mazání místo partnera. Obojí
+ * hlídají `opoustiDvojici` a `pridavaDoUplneDvojice`; kontroler se ptá týchž
+ * metod, aby uměl říct proč.
  */
 class AdministraceZasahy
 {
-    public function __construct(private readonly EntitlementService $tarify) {}
+    public function __construct(
+        private readonly EntitlementService $tarify,
+        private readonly MazaniFotek $mazani,
+    ) {}
 
     public function jeVlastnik(GallerySpace $prostor, User $kdo): bool
     {
@@ -41,9 +55,45 @@ class AdministraceZasahy
             return true;
         }
 
-        $role = $prostor->members()->where('users.id', $kdo->id)->first()?->pivot->role;
+        return in_array($this->rolePivotu($prostor, $kdo), PristupDoGalerie::ROLE_DVOJICE, true);
+    }
 
-        return in_array($role, ['owner', 'admin', 'editor'], true);
+    /** Patří účet k dvojici — vlastník nebo role dvojice v tomhle prostoru? */
+    public function jeVeDvojici(GallerySpace $prostor, User $clen): bool
+    {
+        return (int) $clen->id === (int) $prostor->owner_id
+            || in_array($this->rolePivotu($prostor, $clen), PristupDoGalerie::ROLE_DVOJICE, true);
+    }
+
+    /**
+     * Vyřadila by nová role člena z dvojice?
+     *
+     * Pak by mazání fotek přestalo čekat na jeho souhlas — `MazaniFotek` počítá
+     * dvojici podle rolí a vlastník, který v ní zůstane sám, maže rovnou.
+     *
+     * @param  string  $role  role z obrazovky („správce", „host") nebo z členství
+     */
+    public function opoustiDvojici(GallerySpace $prostor, User $clen, string $role): bool
+    {
+        return $this->jeVeDvojici($prostor, $clen)
+            && ! in_array($this->roleDovnitr($role), PristupDoGalerie::ROLE_DVOJICE, true);
+    }
+
+    /**
+     * Přibyl by s touhle rolí do už úplné dvojice někdo další?
+     *
+     * Souhlas s mazáním dává kdokoli z dvojice kromě navrhovatele. Třetí člen,
+     * kterého si vlastník vybere, by tak schvaloval místo partnera. Dokud je
+     * vlastník v prostoru sám, partner teprve přibývá a to je v pořádku.
+     *
+     * @param  User|null  $clen  `null` u pozvánky, účet v prostoru ještě není
+     * @param  string  $role  role z obrazovky nebo z členství (`owner` u předání)
+     */
+    public function pridavaDoUplneDvojice(GallerySpace $prostor, ?User $clen, string $role): bool
+    {
+        return in_array($this->roleDovnitr($role), PristupDoGalerie::ROLE_DVOJICE, true)
+            && ($clen === null || ! $this->jeVeDvojici($prostor, $clen))
+            && $this->mazani->pocetDvojice($prostor) >= 2;
     }
 
     public function zmenRoli(GallerySpace $prostor, User $kdo, int $komu, string $role): bool
@@ -54,6 +104,17 @@ class AdministraceZasahy
         if (! $this->jeVlastnik($prostor, $kdo) || $clen === null
             || $clen->id === $prostor->owner_id
             || ! isset(AdministraceGalerie::ROLE_DOVNITR[$role])) {
+            return false;
+        }
+
+        if ($this->opoustiDvojici($prostor, $clen, $role)
+            || $this->pridavaDoUplneDvojice($prostor, $clen, $role)) {
+            return false;
+        }
+
+        // „Správce" u člena dvojice nic nemění. Zápis by přepsal `admin` na
+        // `editor` a správce by potichu přišel o trvalé mazání z koše.
+        if ($this->jeVeDvojici($prostor, $clen)) {
             return false;
         }
 
@@ -72,6 +133,12 @@ class AdministraceZasahy
 
         if (! $this->jeVlastnik($prostor, $kdo) || $novy === null
             || $novy->id === $prostor->owner_id || ! $novy->is_active) {
+            return false;
+        }
+
+        // Předchozí vlastník zůstává ve dvojici jako správce — host, který by
+        // vlastnictví převzal, by v úplné dvojici byl třetí, kdo schvaluje mazání.
+        if ($this->pridavaDoUplneDvojice($prostor, $novy, 'owner')) {
             return false;
         }
 
@@ -125,10 +192,13 @@ class AdministraceZasahy
     public function pozvi(GallerySpace $prostor, User $kdo, string $email, string $role = 'host'): ?array
     {
         $email = trim($email);
+        $roleDovnitr = AdministraceGalerie::ROLE_DOVNITR[$role] ?? 'viewer';
 
         if (! $this->jeVlastnik($prostor, $kdo)
             || filter_var($email, FILTER_VALIDATE_EMAIL) === false
-            || ! $this->tarify->memberUsage($prostor)['can_add']) {
+            || ! $this->tarify->memberUsage($prostor)['can_add']
+            // Pozvaný správce by v úplné dvojici schvaloval mazání místo partnera.
+            || $this->pridavaDoUplneDvojice($prostor, null, $roleDovnitr)) {
             return null;
         }
 
@@ -196,7 +266,7 @@ class AdministraceZasahy
          */
         $prostor->members()->syncWithoutDetaching([
             $pozvany->id => [
-                'role' => AdministraceGalerie::ROLE_DOVNITR[$role] ?? 'viewer',
+                'role' => $roleDovnitr,
                 'joined_at' => now(),
             ],
         ]);
@@ -267,6 +337,20 @@ class AdministraceZasahy
     private function clen(GallerySpace $prostor, int $id): ?User
     {
         return $prostor->members()->where('users.id', $id)->first();
+    }
+
+    /** Z databáze, ne z načteného pivotu — ten může být starší než předání vlastnictví. */
+    private function rolePivotu(GallerySpace $prostor, User $kdo): ?string
+    {
+        $role = $prostor->members()->where('users.id', $kdo->id)->first()?->pivot->role;
+
+        return $role === null ? null : (string) $role;
+    }
+
+    /** Role z obrazovky na roli členství; role členství projde beze změny. */
+    private function roleDovnitr(string $role): string
+    {
+        return AdministraceGalerie::ROLE_DOVNITR[$role] ?? $role;
     }
 
     /** Protokol je součást administrace — zásah bez záznamu se nepočítá. */

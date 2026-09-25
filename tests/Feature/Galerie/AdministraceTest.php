@@ -206,12 +206,19 @@ class AdministraceTest extends TestCase
         $this->assertNull($klara->invitation_accepted_at);
     }
 
+    /**
+     * Role se mění jen tam, kde to dvojici nerozbije: vlastník, který je
+     * v galerii sám, si z hosta udělá správce. Partnera na hosta přeřadit
+     * nejde — viz `DvojiceNejdeObejitTest`.
+     */
     public function test_role_se_da_zmenit(): void
     {
-        $this->patchJson('/api/admin/users/'.$this->makinka->id.'/role', ['role' => 'host'])->assertOk();
+        $this->prostor->members()->updateExistingPivot($this->makinka->id, ['role' => 'viewer']);
+
+        $this->patchJson('/api/admin/users/'.$this->makinka->id.'/role', ['role' => 'správce'])->assertOk();
 
         $ucet = collect($this->getJson('/api/admin')->json('data.users'))->firstWhere('name', 'Makinka');
-        $this->assertSame('host', $ucet['role']);
+        $this->assertSame('správce', $ucet['role']);
     }
 
     /** Vlastník musí být právě jeden — jeho role se necykluje. */
@@ -627,13 +634,13 @@ class AdministraceTest extends TestCase
     /** Administrace bez záznamu není administrace. */
     public function test_kazdy_zasah_je_v_protokolu_se_jmenem(): void
     {
-        $this->patchJson('/api/admin/users/'.$this->makinka->id.'/role', ['role' => 'host'])->assertOk();
+        $this->postJson('/api/admin/users/'.$this->makinka->id.'/access', ['active' => false])->assertOk();
 
         $protokol = $this->getJson('/api/admin')->json('data.log');
 
         $this->assertNotEmpty($protokol);
         $this->assertSame('Adrian', $protokol[0]['who']);
-        $this->assertStringContainsString('Makinka má nyní roli host', $protokol[0]['what']);
+        $this->assertStringContainsString('Makinka už do galerie nemá přístup', $protokol[0]['what']);
     }
 
     public function test_protokol_vidi_jen_zasahy_vlastniho_prostoru(): void

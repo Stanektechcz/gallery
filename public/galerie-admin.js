@@ -137,6 +137,10 @@
       // Vlastník musí být právě jeden — platí tarif a jako jediný odebírá
       // přístup. Proto se jeho role necykluje: mění se jen předáním.
       const owner = users.find(u => u.role === 'vlastník') || null;
+      // Mazání fotek čeká na souhlas partnera, takže dvojice se tu nemění:
+      // partner hostem nebude a do úplné dvojice nepřibude třetí správce
+      // (server obojí odmítne). Tlačítko, které by skončilo odmítnutím, se nekreslí.
+      const parUplny = !!owner && users.some(u => u.role === 'správce');
       return Object.assign(base, {
         admHead: c.pl(active, 'aktivní účet', 'aktivní účty', 'aktivních účtů') + ' z ' + users.length
           + ' · vlastník je ' + (owner ? owner.name : 'neurčený') + ', role určuje, co kdo uvidí',
@@ -154,10 +158,10 @@
             isOff: u.state === 'bez přístupu',
             isOwner: isOwner,
             nextRole: next,
-            canCycle: !isOwner,
+            canCycle: !isOwner && u.role !== 'správce' && !parUplny,
             // Předání vlastnictví je výslovná akce: nový vlastník jeden,
-            // z předchozího se stane správce.
-            canTransfer: !isOwner && u.state === 'aktivní' && !!owner,
+            // z předchozího se stane správce — host by tak v úplné dvojici byl třetí.
+            canTransfer: !isOwner && u.state === 'aktivní' && !!owner && (u.role === 'správce' || !parUplny),
             transfer: () => zavolej(c, '/users/' + u.id + '/transfer')
               .then(ok => ok && note('Vlastnictví předáno · ' + u.name + ' platí tarif, ' + (owner ? owner.name : '') + ' je správce')),
             cycleRole: () => {
