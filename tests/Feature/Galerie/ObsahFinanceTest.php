@@ -150,6 +150,104 @@ class ObsahFinanceTest extends TestCase
     }
 
     /**
+     * Rozpočet v eurech počítá čerpání jen z útrat ve svojí měně.
+     *
+     * Dvojice může mít eurový rozpočet na cestu a přitom doma dál platit
+     * v korunách. Součet `SUM(ABS(amount_from))` bez ohledu na měnu sečetl
+     * 1 500 Kč a 20 € jako by to bylo 1 520 stejných jednotek — `FinanceService`
+     * (řádek ≈522, ≈547) přitom stejnou útratu filtruje na `currency_from`.
+     */
+    public function test_utraceno_v_kategorii_pocita_jen_menu_rozpoctu(): void
+    {
+        $this->regensburg();
+        $czk = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta CZK',
+            'kind' => 'bank', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $eur = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta EUR',
+            'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $potraviny = FinanceCategory::where('gallery_space_id', $this->prostor->id)->where('name', 'Potraviny')->sole();
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'category_id' => $potraviny->id, 'occurred_at' => now()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
+
+        Transaction::create($zaklad + ['wallet_from_id' => $czk->id, 'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Doma v korunách']);
+        Transaction::create($zaklad + ['wallet_from_id' => $eur->id, 'amount_from' => 20, 'currency_from' => 'EUR', 'description' => 'Lidl Regensburg']);
+
+        $kategorie = collect($this->getJson('/api/data/finance')->assertOk()->json('data.BUD.cats'));
+
+        $this->assertSame(20, $kategorie->firstWhere(0, 'Potraviny')[2], 'Do eurového rozpočtu patří jen eurová útrata, ne 1 520 smíchaných jednotek.');
+    }
+
+    /**
+     * Každý řádek Transakcí se formátuje ve svojí vlastní měně.
+     *
+     * `zalozka()` (≈429–447) psal každou částku znakem měny rozpočtu, i když
+     * transakce sama byla v jiné měně — koruna z domova by tak vypadala jako
+     * eura z rozpočtu na Německo.
+     */
+    public function test_radky_transakci_nesou_vlastni_menu(): void
+    {
+        $this->regensburg();
+        $czk = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta CZK',
+            'kind' => 'bank', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $eur = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Karta EUR',
+            'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => now()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
+
+        Transaction::create($zaklad + ['wallet_from_id' => $czk->id, 'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Doma v korunách']);
+        Transaction::create($zaklad + ['wallet_from_id' => $eur->id, 'amount_from' => 20, 'currency_from' => 'EUR', 'description' => 'Lidl Regensburg']);
+
+        $vse = $this->getJson('/api/data/finance')->assertOk()->json('data.ATX.all');
+        $radky = collect($vse['rows'])->keyBy(1);
+
+        $this->assertStringContainsString('Kč', $radky['Doma v korunách'][3]);
+        $this->assertStringContainsString('€', $radky['Lidl Regensburg'][3]);
+        $this->assertStringNotContainsString('Kč', $radky['Lidl Regensburg'][3]);
+    }
+
+    /**
+     * Převod mezi vlastními účty se do součtu záložky nepočítá jako útrata.
+     *
+     * `podepsana()` (≈464–469) bral každý typ kromě `income` jako záporný —
+     * i převod, který výsledek hospodaření vůbec nemění (`Transaction::affectsResult()`).
+     */
+    public function test_prevod_se_nepocita_do_souctu_zalozky(): void
+    {
+        $this->regensburg();
+        $czkA = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Běžný účet',
+            'kind' => 'bank', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+        $czkB = Wallet::create([
+            'gallery_space_id' => $this->prostor->id, 'name' => 'Spořicí účet',
+            'kind' => 'savings', 'currency' => 'CZK', 'opening_balance' => 0, 'is_active' => true,
+        ]);
+
+        Transaction::create([
+            'gallery_space_id' => $this->prostor->id, 'type' => 'expense',
+            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $czkA->id,
+            'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Nákup',
+            'state' => 'approved', 'created_by' => $this->adri->id,
+        ]);
+        Transaction::create([
+            'gallery_space_id' => $this->prostor->id, 'type' => 'transfer',
+            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $czkA->id, 'wallet_to_id' => $czkB->id,
+            'amount_from' => 500, 'currency_from' => 'CZK', 'amount_to' => 500, 'currency_to' => 'CZK',
+            'description' => 'Na spoření', 'state' => 'approved', 'created_by' => $this->adri->id,
+        ]);
+
+        $vse = $this->getJson('/api/data/finance')->assertOk()->json('data.ATX.all');
+
+        $this->assertCount(2, $vse['rows'], 'Převod se v seznamu zobrazuje, jen se nepočítá do součtu.');
+        $this->assertSame('−1 500 Kč', $vse['sum'], 'Převod 500 Kč nesmí navýšit součet na −2 000 Kč.');
+    }
+
+    /**
      * Jednorázově složené prostředky se rozpočítají na měsíce.
      *
      * Nula by v hlavičce znamenala „nemáme z čeho žít", což není totéž jako

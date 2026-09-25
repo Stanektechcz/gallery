@@ -432,18 +432,55 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
             return ['rows' => [], 'foot' => $prazdno, 'sum' => ''];
         }
 
-        $soucet = $pohyby->sum(fn (Transaction $t) => $this->podepsana($t));
-
         return [
             'rows' => $pohyby->map(fn (Transaction $t) => [
                 $this->den($t->occurred_at ?? $t->booked_on),
                 $t->description ?: ($t->counterparty ?: 'Bez popisu'),
                 $this->popisKategorie($t),
-                $this->sCznamenkem($this->podepsana($t), $mena),
+                // Vlastní měna transakce, ne měna rozpočtu — koruna z domova
+                // se jinak tvářila jako euro z rozpočtu na Německo.
+                $this->sCznamenkem($this->podepsana($t), $this->menaRadku($t)),
             ])->values()->all(),
             'foot' => $popisek,
-            'sum' => $this->sCznamenkem($soucet, $mena),
+            'sum' => $this->soucetZalozky($pohyby, $mena),
         ];
+    }
+
+    /**
+     * Součet záložky — po měnách, protože se sčítat nedají.
+     *
+     * Do součtu jde jen to, co mění hospodářský výsledek (`affectsResult()`):
+     * převod ani směna mezi vlastními účty útrata není, i když peníze
+     * opustily peněženku. Když je řádků víc měn, posílá se součet za každou
+     * zvlášť — sečíst korunu s eurem by bylo číslo bez smyslu.
+     */
+    private function soucetZalozky(Collection $pohyby, string $mena): string
+    {
+        $soucty = $pohyby
+            ->filter(fn (Transaction $t) => $t->affectsResult())
+            ->groupBy(fn (Transaction $t) => $this->menaRadku($t))
+            ->map(fn (Collection $s) => $s->sum(fn (Transaction $t) => $this->podepsana($t)));
+
+        if ($soucty->isEmpty()) {
+            return $this->sCznamenkem(0.0, $mena);
+        }
+
+        if ($soucty->count() === 1) {
+            return $this->sCznamenkem($soucty->first(), $soucty->keys()->first());
+        }
+
+        return $soucty->map(fn (float $castka, string $mena) => $this->sCznamenkem($castka, $mena))->implode(' · ');
+    }
+
+    /**
+     * Měna, ve které transakce sama je — ne měna rozpočtu, který na ni kouká.
+     *
+     * `podepsana()` bere `amount_from`, a když chybí, `amount_to`; měna se
+     * řídí týmž pravidlem, jinak by číslo neslo cizí značku.
+     */
+    private function menaRadku(Transaction $t): string
+    {
+        return (string) ($t->currency_from ?: ($t->currency_to ?: 'CZK'));
     }
 
     /**
@@ -760,7 +797,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
 
         // Utraceno se počítá z knihy, ne z vlastních položek rozpočtu — jinak by
         // obrazovka ukazovala plán, který nikdo neporovnal se skutečností.
-        $utraceno = $this->utracenoPoKategoriich($prostor, $dnes->startOfMonth(), $dnes->endOfMonth());
+        $utraceno = $this->utracenoPoKategoriich($prostor, $dnes->startOfMonth(), $dnes->endOfMonth(), $mena);
 
         /*
          * Obvyklá útrata kategorie: průměr tří celých měsíců před tímhle.
@@ -769,7 +806,7 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
          * podle kterého obrazovka hlásila, že kategorie „vybočuje". Tady je to
          * skutečný průměr; kategorie bez historie má nulu a za anomálii se nebere.
          */
-        $obvykle = $this->obvykleUtraty($prostor, $dnes);
+        $obvykle = $this->obvykleUtraty($prostor, $dnes, $mena);
 
         $prijem = $this->mesicniPrijem($rozpocet);
         $plan = $naMesic((float) $limity->sum('amount'));
@@ -821,6 +858,9 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
         $soucty = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->utraty()
+            // Jen útrata v měně rozpočtu — jinak by se do dvanácti měsíců
+            // přičetla i útrata v jiné měně jako by šlo o stejné jednotky.
+            ->where('currency_from', $mena)
             ->where('occurred_at', '>=', $od)
             ->get(['occurred_at', 'amount_from'])
             ->groupBy(fn (Transaction $t) => CarbonImmutable::parse($t->occurred_at)->format('Y-m'))
@@ -844,16 +884,21 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
     private function rok(GallerySpace $prostor, Budget $rozpocet, array $mesice = []): array
     {
         $od = Cas::dnes()->startOfYear();
+        $mena = $rozpocet->currency ?: 'CZK';
 
         $pohyby = Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->zapsane()
             ->whereIn('type', Transaction::VYSLEDKOVE)
             ->where('occurred_at', '>=', $od)
-            ->get(['type', 'amount_from', 'amount_to']);
+            ->get(['type', 'amount_from', 'amount_to', 'currency_from', 'currency_to']);
 
-        $prijem = (float) $pohyby->where('type', 'income')->sum(fn (Transaction $t) => abs((float) ($t->amount_to ?? $t->amount_from)));
-        $vydaj = (float) $pohyby->where('type', 'expense')->sum(fn (Transaction $t) => abs((float) $t->amount_from));
+        // Jen v měně rozpočtu — jinak by příjem v korunách a výdaj v eurech
+        // vytvořily „ušetřeno", které neodpovídá ani jedné z nich.
+        $prijem = (float) $pohyby->where('type', 'income')->filter(fn (Transaction $t) => ($t->currency_to ?: $t->currency_from) === $mena)
+            ->sum(fn (Transaction $t) => abs((float) ($t->amount_to ?? $t->amount_from)));
+        $vydaj = (float) $pohyby->where('type', 'expense')->filter(fn (Transaction $t) => $t->currency_from === $mena)
+            ->sum(fn (Transaction $t) => abs((float) $t->amount_from));
 
         /*
          * Nejdražší a nejlevnější měsíc — z už spočítaných součtů.
@@ -949,20 +994,29 @@ class Finance implements MaPrazdneKolekce, PoskytovatelObsahu
      *
      * @return array<int, float>
      */
-    public function obvykleUtraty(GallerySpace $prostor, CarbonImmutable $dnes): array
+    public function obvykleUtraty(GallerySpace $prostor, CarbonImmutable $dnes, string $mena): array
     {
         $pred = $dnes->startOfMonth()->subMonths(3);
 
-        return array_map(fn (float $v) => $v / 3, $this->utracenoPoKategoriich($prostor, $pred, $dnes->startOfMonth()->subSecond()));
+        return array_map(fn (float $v) => $v / 3, $this->utracenoPoKategoriich($prostor, $pred, $dnes->startOfMonth()->subSecond(), $mena));
     }
 
-    /** @return array<int, float> */
-    private function utracenoPoKategoriich(GallerySpace $prostor, CarbonImmutable $od, CarbonImmutable $do): array
+    /**
+     * Utraceno po kategoriích jen v zadané měně.
+     *
+     * `FinanceService` (viz `daily()`/`byCategory()` výš) filtruje stejně na
+     * `currency_from` — bez toho by se koruna z domova sečetla s eurem
+     * z rozpočtu na Německo, jako by šlo o stejné jednotky.
+     *
+     * @return array<int, float>
+     */
+    private function utracenoPoKategoriich(GallerySpace $prostor, CarbonImmutable $od, CarbonImmutable $do, string $mena): array
     {
         return Transaction::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->utraty()
             ->where('excluded_from_budget', false)
+            ->where('currency_from', $mena)
             ->whereBetween('occurred_at', [$od, $do])
             ->selectRaw('category_id, SUM(ABS(amount_from)) AS castka')
             ->groupBy('category_id')

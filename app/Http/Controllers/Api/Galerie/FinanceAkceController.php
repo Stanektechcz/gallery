@@ -402,7 +402,10 @@ class FinanceAkceController extends Controller
                 'Do tohohle rozpočtu se smíte dívat, ale ne v něm měnit.');
         }
 
-        $obvykle = $this->obsah->obvykleUtraty($prostor, now()->toImmutable());
+        // Měna existujícího rozpočtu, jinak domácí měna prostoru — odhad limitů
+        // počítá jen útratu ve stejné měně, ve které se rozpočet zakládá.
+        $mena = $rozpocet?->currency ?: (FinanceSettings::proProstor($prostor->id)->home_currency ?: 'CZK');
+        $obvykle = $this->obsah->obvykleUtraty($prostor, now()->toImmutable(), $mena);
         $kategorii = 0;
 
         DB::transaction(function () use ($prostor, $request, $data, $obvykle, &$rozpocet, &$kategorii) {
