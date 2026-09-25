@@ -72,4 +72,31 @@ class PristupDoGalerie
             return $dvojice && $this->proc($clen) === null;
         })->values();
     }
+
+    /**
+     * Prostory, kde účet patří do dvojice — ne ty, kam je jen pozvaný jako host.
+     *
+     * Brána (`proc()`) posuzuje jen první prostor účtu. Řadiče, které braly
+     * „kterýkoli prostor, kde je členem", by tak účtu s druhým členstvím
+     * (host cizí galerie) otevřely cesty, dokumenty i výdaje té galerie.
+     *
+     * @return Collection<int, GallerySpace>
+     */
+    public function prostoryDvojice(User $user): Collection
+    {
+        return $user->gallerySpaces()->get()
+            ->filter(fn (GallerySpace $prostor) => (int) $prostor->owner_id === (int) $user->id
+                || in_array((string) $prostor->pivot->role, self::ROLE_DVOJICE, true))
+            ->values();
+    }
+
+    /**
+     * Id prostorů z `prostoryDvojice()` — pro `whereIn('gallery_space_id', …)`.
+     *
+     * @return list<int>
+     */
+    public function idProstoruDvojice(User $user): array
+    {
+        return $this->prostoryDvojice($user)->map(fn (GallerySpace $prostor) => (int) $prostor->id)->all();
+    }
 }
