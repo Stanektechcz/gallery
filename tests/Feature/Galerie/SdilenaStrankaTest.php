@@ -11,6 +11,8 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Inertia\Testing\AssertableInertia as Assert;
+use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 /**
@@ -120,6 +122,41 @@ class SdilenaStrankaTest extends TestCase
         $this->assertSame([$foto->uuid], collect($media)->pluck('uuid')->all());
 
         $this->get('/s/'.$odkaz->token.'/media/'.$foto->uuid.'/download')->assertOk();
+    }
+
+    /**
+     * Smazané album přes starý odkaz nic neukáže — ani fotky zařazené jen přes `primary_album_id`.
+     *
+     * Větev s `primary_album_id` nekontrolovala, jestli album ještě existuje
+     * (spojovací tabulka ano, přes měkké mazání). Dvojice album smazala
+     * a host z odkazu dál viděl a stahoval jeho fotky.
+     */
+    public function test_smazane_album_pres_odkaz_nic_neukaze(): void
+    {
+        $hlavni = $this->fotka('HLAVNI.jpg', ['primary_album_id' => $this->album->id]);
+        $vazba = $this->fotka('VAZBA.jpg');
+        $this->doAlba($vazba);
+
+        $odkaz = SharedLink::create([
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'token' => 'tok'.Str::random(20),
+            'name' => 'Beskydy',
+            'target_type' => 'album',
+            'target_id' => $this->album->id,
+            'allow_download' => true,
+        ]);
+
+        Sanctum::actingAs($this->adri);
+        $this->deleteJson('/api/alba/'.$this->album->uuid)->assertOk();
+        $this->app['auth']->forgetGuards();
+
+        // Jako prošlý odkaz: stránka o konci platnosti, žádné fotky.
+        $this->get('/s/'.$odkaz->token)->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Shares/Expired')->missing('media'));
+
+        $this->get('/s/'.$odkaz->token.'/media/'.$hlavni->uuid.'/download')->assertForbidden();
+        $this->get('/s/'.$odkaz->token.'/media/'.$vazba->uuid.'/download')->assertForbidden();
     }
 
     private function fotka(string $jmeno, array $navic = []): MediaItem

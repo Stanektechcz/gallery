@@ -604,6 +604,14 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNotNull('trashed_at')
+            /*
+             * Fotka z trezoru jen s odemčeným trezorem — stejná podmínka jako
+             * `VAULT_ITEMS`. Smazání se na `is_hidden` neptá, takže vyhozená
+             * fotka z trezoru se jinak vypsala i s názvem souboru, zatímco byl
+             * trezor zamčený. Úplně ji schovat nejde: vrátit z koše ji jde jen
+             * odsud, a bez toho by ji po třiceti dnech úklid tiše smazal.
+             */
+            ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
             ->orderByDesc('trashed_at')
             ->limit(60)
             ->get(['uuid', 'original_filename', 'trashed_at', 'purge_after', 'uploaded_by', 'media_type']);

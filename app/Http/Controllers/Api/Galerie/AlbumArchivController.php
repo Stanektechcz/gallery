@@ -35,7 +35,11 @@ class AlbumArchivController extends Controller
             ->firstOrFail();
 
         $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->whereHas('albums', fn ($q) => $q->where('albums.id', $radek->id))
+            // Členství v albu stejně jako sdílená stránka (`SharedLink::servedMedia()`):
+            // hromadné „Přesunout" i import zařazují jen přes `primary_album_id`,
+            // a archiv, který četl jen spojovací tabulku, takové fotky vynechal.
+            ->where(fn ($q) => $q->where('primary_album_id', $radek->id)
+                ->orWhereHas('albums', fn ($a) => $a->where('albums.id', $radek->id)))
             ->where('gallery_space_id', $prostorId)
             ->whereNull('trashed_at')
             // Fotka v trezoru se do archivu nedostane: stažené album by ji

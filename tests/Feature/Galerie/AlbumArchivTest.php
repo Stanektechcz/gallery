@@ -85,11 +85,62 @@ class AlbumArchivTest extends TestCase
         $album = $this->album('Beskydy');
         $this->doAlba($album, $this->fotka('IMG_1.jpg', true));
         $this->doAlba($album, $this->fotka('IMG_1.jpg', true));
+        // Třetí fotka se jmenuje přesně tak, jak by se přejmenovala druhá —
+        // pamatovala se jen původní jména, takže se jedna z nich tiše přepsala.
+        $this->doAlba($album, $this->fotka('IMG_1 (2).jpg', true));
 
         $jmena = $this->vArchivu($this->get('/api/alba/'.$album->uuid.'/archiv')->assertOk());
 
+        $this->assertCount(3, $jmena);
+        $this->assertCount(3, array_unique($jmena));
         $this->assertContains('IMG_1.jpg', $jmena);
         $this->assertContains('IMG_1 (2).jpg', $jmena);
+    }
+
+    /**
+     * Po archivu nezůstane v dočasné složce prázdný soubor.
+     *
+     * `tempnam()` soubor rovnou založí; archiv se psal vedle, do jména
+     * s `.zip`, a prázdná rezervace po každém stažení zůstala ležet.
+     */
+    public function test_archiv_po_sobe_neneha_prazdny_soubor(): void
+    {
+        $album = $this->album('Beskydy');
+        $this->doAlba($album, $this->fotka('IMG_1.jpg', true));
+
+        $pred = $this->prazdneDocasne();
+        $this->vArchivu($this->get('/api/alba/'.$album->uuid.'/archiv')->assertOk());
+
+        $this->assertSame([], array_values(array_diff($this->prazdneDocasne(), $pred)));
+    }
+
+    /**
+     * Fotka zařazená jen přes `primary_album_id` do archivu patří.
+     *
+     * Hromadné „Přesunout" i import zařazují právě takhle, a sdílená stránka
+     * je v albu ukazuje; archiv četl jen spojovací tabulku a vynechal je.
+     */
+    public function test_fotka_jen_s_hlavnim_albem_je_v_archivu(): void
+    {
+        $album = $this->album('Beskydy');
+        $this->doAlba($album, $this->fotka('VAZBA.jpg', true));
+        $this->fotka('HLAVNI.jpg', true)->forceFill(['primary_album_id' => $album->id])->save();
+        $this->fotka('TREZOR.jpg', true)->forceFill(['primary_album_id' => $album->id, 'is_hidden' => true])->save();
+        $this->fotka('KOS.jpg', true)->forceFill(['primary_album_id' => $album->id, 'trashed_at' => now()])->save();
+
+        $jmena = $this->vArchivu($this->get('/api/alba/'.$album->uuid.'/archiv')->assertOk());
+        sort($jmena);
+
+        $this->assertSame(['HLAVNI.jpg', 'VAZBA.jpg'], $jmena);
+    }
+
+    /** @return list<string> prázdné soubory, které po sobě mohl nechat `tempnam()` archivu */
+    private function prazdneDocasne(): array
+    {
+        return array_values(array_filter(
+            glob(sys_get_temp_dir().DIRECTORY_SEPARATOR.'arc*') ?: [],
+            fn (string $f) => is_file($f) && filesize($f) === 0,
+        ));
     }
 
     /**

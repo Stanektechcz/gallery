@@ -444,10 +444,16 @@ class AlbaController extends Controller
     private function prepocitej(array $alba): void
     {
         foreach (array_unique(array_map('intval', $alba)) as $id) {
-            $pocet = DB::table('album_media as am')
-                ->join('media_items as m', 'm.id', '=', 'am.media_item_id')
-                ->where('am.album_id', $id)
+            // Stejné členství jako archiv a sdílená stránka: spojovací tabulka
+            // i `primary_album_id` (hromadné „Přesunout", import). Každá fotka
+            // jednou, i když je zařazená oběma cestami.
+            $pocet = DB::table('media_items as m')
                 ->whereNull('m.trashed_at')
+                ->where(fn ($q) => $q->where('m.primary_album_id', $id)
+                    ->orWhereExists(fn ($e) => $e->selectRaw('1')
+                        ->from('album_media as am')
+                        ->whereColumn('am.media_item_id', 'm.id')
+                        ->where('am.album_id', $id)))
                 ->count();
 
             DB::table('albums')->where('id', $id)->update(['media_count' => $pocet]);

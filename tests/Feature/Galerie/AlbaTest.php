@@ -142,6 +142,53 @@ class AlbaTest extends TestCase
         $this->assertNull(Album::where('uuid', $palava)->value('parent_id'));
     }
 
+    /**
+     * Starší album přesunuté pod novější si nechá celou cestu stromem.
+     *
+     * Přesun přestavoval potomky v pořadí primárního klíče a každý kopíroval
+     * řádky rodiče — jenže rodič s vyšším id přestavěný ještě nebyl. Podalbu
+     * pak chyběl předek, cesta v názvu byla špatně a pojistka proti vložení
+     * do vlastního podalba pustila smyčku, na které se `rebuildPaths` zacyklil.
+     */
+    public function test_presun_starsiho_alba_pod_novejsi_zachova_strom(): void
+    {
+        $a = $this->postJson('/api/alba', ['nazev' => 'Aa'])->json('album');
+        $b = $this->postJson('/api/alba', ['nazev' => 'Bb'])->json('album');
+        $c = $this->postJson('/api/alba', ['nazev' => 'Cc'])->json('album');
+        [$idA, $idB, $idC] = array_map(fn ($u) => (int) Album::where('uuid', $u)->value('id'), [$a, $b, $c]);
+
+        $this->postJson('/api/alba/'.$b.'/presunout', ['rodic' => $c])->assertOk();
+        $this->postJson('/api/alba/'.$c.'/presunout', ['rodic' => $a])->assertOk();
+
+        $this->assertSame(2, (int) DB::table('album_closure')->where('ancestor_id', $idA)->where('descendant_id', $idB)->value('depth'),
+            'B leží pod C a C pod A — A je předek B ve vzdálenosti 2.');
+        $this->assertSame(1, (int) DB::table('album_closure')->where('ancestor_id', $idC)->where('descendant_id', $idB)->value('depth'));
+        $this->assertSame('Aa / Cc / Bb', Album::find($idB)->full_display_path);
+
+        // A pod vlastní podalbum nesmí — a odmítnutí nesmí skončit zacyklením.
+        $this->postJson('/api/alba/'.$a.'/presunout', ['rodic' => $b])->assertStatus(422);
+        $this->assertNull(Album::find($idA)->parent_id);
+    }
+
+    /** Smazané podalbum se při přesunu nadřazeného alba nevypadne ze stromu. */
+    public function test_presun_nezapomene_smazane_podalbum(): void
+    {
+        $a = $this->postJson('/api/alba', ['nazev' => 'Aa'])->json('album');
+        $b = $this->postJson('/api/alba', ['nazev' => 'Bb'])->json('album');
+        $x = $this->postJson('/api/alba', ['nazev' => 'Xx'])->json('album');
+        [$idA, $idB, $idX] = array_map(fn ($u) => (int) Album::where('uuid', $u)->value('id'), [$a, $b, $x]);
+
+        $this->postJson('/api/alba/'.$b.'/presunout', ['rodic' => $a])->assertOk();
+        $this->deleteJson('/api/alba/'.$b)->assertOk();
+
+        $this->postJson('/api/alba/'.$a.'/presunout', ['rodic' => $x])->assertOk();
+        $this->postJson('/api/alba/'.$b.'/obnovit')->assertOk();
+
+        $this->assertSame(2, (int) DB::table('album_closure')->where('ancestor_id', $idX)->where('descendant_id', $idB)->value('depth'),
+            'Obnovené podalbum leží pod A, a A teď pod X.');
+        $this->assertSame(1, (int) DB::table('album_closure')->where('ancestor_id', $idA)->where('descendant_id', $idB)->value('depth'));
+    }
+
     public function test_titulni_fotka_jen_z_vlastni_viditelne_knihovny(): void
     {
         $foto = $this->fotka();

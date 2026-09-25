@@ -69,6 +69,26 @@ class SdileniOdkazuTest extends TestCase
         $this->assertSame($odkaz->id, $odpoved->json('data.SHARES.0.id'));
     }
 
+    /**
+     * Na smazané album odkaz nevznikne.
+     *
+     * `withoutGlobalScopes()` sundalo kromě rozsahu prostoru i měkké mazání,
+     * takže odkaz šel založit i na album z koše.
+     */
+    public function test_odkaz_na_smazane_album_nevznikne(): void
+    {
+        $album = $this->album();
+        $album->delete();
+
+        $this->postJson('/api/sdileni', [
+            'name' => 'Beskydy s Makinkou',
+            'expirace' => '7',
+            'album' => $album->uuid,
+        ])->assertStatus(422);
+
+        $this->assertSame(0, SharedLink::count());
+    }
+
     /** Vybrané položky se k odkazu připojí. */
     public function test_odkaz_na_vyber_polozek(): void
     {

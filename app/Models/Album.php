@@ -178,29 +178,7 @@ class Album extends Model
 
     public function insertClosureRows(): void
     {
-        // Self-reference
-        \DB::table('album_closure')->insertOrIgnore([
-            'ancestor_id' => $this->id,
-            'descendant_id' => $this->id,
-            'depth' => 0,
-        ]);
-
-        // Inherit from parent's closure
-        if ($this->parent_id) {
-            $rows = \DB::table('album_closure')
-                ->where('descendant_id', $this->parent_id)
-                ->get()
-                ->map(fn ($row) => [
-                    'ancestor_id' => $row->ancestor_id,
-                    'descendant_id' => $this->id,
-                    'depth' => $row->depth + 1,
-                ])
-                ->toArray();
-
-            if (! empty($rows)) {
-                \DB::table('album_closure')->insertOrIgnore($rows);
-            }
-        }
+        static::vlozRadkyUzaveru((int) $this->id, $this->parent_id ? (int) $this->parent_id : null);
     }
 
     /**
@@ -216,31 +194,44 @@ class Album extends Model
                 ->where('depth', '>', 0)
                 ->exists();
 
-            if ($isDescendant || $newParentId === $this->id) {
+            // Druhá pojistka podle `parent_id`: uzávěr mohl rozbít dřívější
+            // přesun (viz níže) a sám o sobě smyčku neodhalí.
+            if ($isDescendant || $newParentId === $this->id || $this->jePredkem($newParentId)) {
                 throw new \InvalidArgumentException('Cannot move album into its own descendant.');
             }
         }
 
         DB::transaction(function () use ($newParentId) {
-            // Remove old closure rows for this subtree (except self-referencing rows)
-            $descendantIds = DB::table('album_closure')
-                ->where('ancestor_id', $this->id)
-                ->pluck('descendant_id')
-                ->toArray();
+            /*
+             * Podstrom se bere z `parent_id` po patrech a přestavuje se od
+             * kořene dolů.
+             *
+             * Dřív se potomci přestavovali v pořadí primárního klíče a každý
+             * kopíroval řádky svého rodiče. Starší album přesunuté pod novější
+             * tak kopírovalo rodiče, který ještě přestavěný nebyl: chyběl mu
+             * předek, cesta v názvu vyšla špatně a pojistka proti vložení do
+             * vlastního podalba pak pustila smyčku. `static::find()` navíc
+             * vynechal smazaná podalba — ta o své předky přišla navždy
+             * a po obnovení visela bez cesty. Dotaz přímo do tabulky smazaná
+             * alba nevynechá.
+             */
+            $patra = $this->podstromPoPatrech();
+            $podstrom = array_merge(...$patra);
 
             DB::table('album_closure')
-                ->whereIn('descendant_id', $descendantIds)
+                ->whereIn('descendant_id', $podstrom)
                 ->where('ancestor_id', '!=', DB::raw('descendant_id'))
                 ->delete();
 
             $this->parent_id = $newParentId;
             $this->save();
 
-            // Rebuild closure for all descendants
-            foreach ($descendantIds as $descendantId) {
-                $descendant = static::find($descendantId);
-                if ($descendant) {
-                    $descendant->insertClosureRows();
+            foreach ($patra as $patro) {
+                $rodice = DB::table('albums')->whereIn('id', $patro)->pluck('parent_id', 'id');
+
+                foreach ($patro as $id) {
+                    $rodic = $rodice[$id] ?? null;
+                    static::vlozRadkyUzaveru((int) $id, $rodic !== null ? (int) $rodic : null);
                 }
             }
 
@@ -248,8 +239,102 @@ class Album extends Model
         });
     }
 
-    public function rebuildPaths(): void
+    /**
+     * Id podstromu (včetně tohoto alba) po patrech, od tohoto alba dolů.
+     *
+     * Jde se po `parent_id`, ne po uzávěru — ten může být z dřívějška
+     * neúplný. Navštívená alba se hlídají, aby stará smyčka v datech
+     * neskončila nekonečným cyklem.
+     *
+     * @return list<list<int>>
+     */
+    private function podstromPoPatrech(): array
     {
+        $navstivene = [$this->id => true];
+        $patra = [[$this->id]];
+        $patro = [$this->id];
+
+        while ($patro !== []) {
+            $deti = DB::table('albums')
+                ->whereIn('parent_id', $patro)
+                ->orderBy('id')
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->reject(fn (int $id) => isset($navstivene[$id]))
+                ->values()
+                ->all();
+
+            foreach ($deti as $id) {
+                $navstivene[$id] = true;
+            }
+
+            if ($deti !== []) {
+                $patra[] = $deti;
+            }
+
+            $patro = $deti;
+        }
+
+        return $patra;
+    }
+
+    /** Leží tohle album nad albem `$id`? Podle `parent_id`, se smazanými alby. */
+    private function jePredkem(int $id): bool
+    {
+        $navstivene = [];
+
+        while ($id !== 0 && ! isset($navstivene[$id])) {
+            if ($id === $this->id) {
+                return true;
+            }
+
+            $navstivene[$id] = true;
+            $id = (int) DB::table('albums')->where('id', $id)->value('parent_id');
+        }
+
+        return false;
+    }
+
+    /** Řádky uzávěru jednoho alba: sebe sama a předky zkopírované od rodiče. */
+    private static function vlozRadkyUzaveru(int $id, ?int $rodic): void
+    {
+        DB::table('album_closure')->insertOrIgnore([
+            'ancestor_id' => $id,
+            'descendant_id' => $id,
+            'depth' => 0,
+        ]);
+
+        if ($rodic === null) {
+            return;
+        }
+
+        $radky = DB::table('album_closure')
+            ->where('descendant_id', $rodic)
+            ->get()
+            ->map(fn ($row) => [
+                'ancestor_id' => $row->ancestor_id,
+                'descendant_id' => $id,
+                'depth' => $row->depth + 1,
+            ])
+            ->all();
+
+        if ($radky !== []) {
+            DB::table('album_closure')->insertOrIgnore($radky);
+        }
+    }
+
+    /**
+     * @param  array<int, true>  $navstivene  alba, která už touhle přestavbou prošla
+     */
+    public function rebuildPaths(array &$navstivene = []): void
+    {
+        // Obrana proti smyčce v `parent_id` (z dřívějšího rozbitého přesunu):
+        // bez ní se přestavba zanořovala donekonečna a skončila 500/OOM.
+        if (isset($navstivene[$this->id])) {
+            return;
+        }
+        $navstivene[$this->id] = true;
+
         $ancestors = $this->ancestors()->orderByPivot('depth', 'desc')->get();
         $pathIds = $ancestors->pluck('id')->concat([$this->id])->implode('/');
         $pathNames = $ancestors->pluck('title')->concat([$this->title])->implode(' / ');
@@ -260,9 +345,9 @@ class Album extends Model
             'full_display_path' => $pathNames,
         ]);
 
-        // Rebuild paths for children
-        foreach ($this->children as $child) {
-            $child->rebuildPaths();
+        // I smazaná podalba: po obnovení se jinak ukazují se starou cestou.
+        foreach ($this->children()->withTrashed()->get() as $child) {
+            $child->rebuildPaths($navstivene);
         }
     }
 

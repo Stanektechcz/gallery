@@ -11,6 +11,7 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\SharedLink;
 use App\Services\Obsah\Sdileni;
+use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -222,7 +223,9 @@ class SdileniController extends Controller
         $uuidy = collect($request->input('polozky', []))->filter()->unique()->values();
 
         if ($uuidy->isNotEmpty()) {
-            $polozky = MediaItem::withoutGlobalScopes()
+            // Jen rozsah prostoru (hlídá se výslovně níž) — `withoutGlobalScopes()`
+            // by sundalo i měkké mazání a pustilo do odkazu smazanou položku.
+            $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
                 ->where('gallery_space_id', $prostor->id)
                 ->whereNull('trashed_at')
                 ->where('is_hidden', false)
@@ -237,7 +240,9 @@ class SdileniController extends Controller
         $album = $request->input('album');
 
         if ($album && Tabulky::je('albums')) {
-            $id = Album::withoutGlobalScopes()
+            // Smazané album se sdílet nedá: `withoutGlobalScopes()` tu dřív
+            // sundalo i měkké mazání, takže odkaz šel založit i na album z koše.
+            $id = Album::withoutGlobalScope(SpaceContext::SCOPE)
                 ->where('gallery_space_id', $prostor->id)
                 ->where('uuid', $album)
                 ->value('id');

@@ -64,6 +64,27 @@ class KosTest extends TestCase
         $this->assertSame('27 dní', $kos[0]['left']);
     }
 
+    /**
+     * Vyhozená fotka z trezoru se v koši se zamčeným trezorem neukáže.
+     *
+     * Do koše jde poslat i fotku z trezoru (smazání se na `is_hidden` neptá)
+     * a seznam koše ji pak vypsal i s názvem souboru komukoli u odemčené
+     * aplikace — trezor přitom zamčený. S odemčeným trezorem se ukáže, aby šla
+     * vrátit dřív, než ji úklid po třiceti dnech smaže.
+     */
+    public function test_fotka_z_trezoru_v_kosi_jen_s_odemcenym_trezorem(): void
+    {
+        $this->fotka(['trashed_at' => now()->subDay()]);
+        $this->fotka(['trashed_at' => now()->subDay(), 'is_hidden' => true, 'original_filename' => 'pas-a-obcanka.jpg'], 2);
+
+        $zamceno = $this->getJson('/api/data/system')->assertOk()->json('data.TRASH');
+        $this->assertSame(['IMG_1.jpg'], array_column($zamceno, 'name'));
+
+        $odemceno = $this->withSession(['vault_unlocked_until' => now()->addMinutes(5)->timestamp])
+            ->getJson('/api/data/system')->assertOk()->json('data.TRASH');
+        $this->assertEqualsCanonicalizing(['IMG_1.jpg', 'pas-a-obcanka.jpg'], array_column($odemceno, 'name'));
+    }
+
     /** Vrácení z koše vrátí položku do knihovny. */
     public function test_vraceni_z_kose_vrati_polozku(): void
     {

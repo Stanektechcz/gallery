@@ -3,9 +3,8 @@
 namespace App\Http\Controllers\Galerie;
 
 use App\Http\Controllers\Controller;
-use App\Models\MediaItem;
 use App\Models\SharedLink;
-use App\Support\SpaceContext;
+use App\Support\AudioUploads;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -60,7 +59,10 @@ class HostKomentarController extends Controller
             'text' => ['nullable', 'string', 'max:2000'],
             'fotka' => ['nullable', 'string', 'max:64'],
             'vterin' => ['nullable', 'integer', 'min:1', 'max:'.self::NEJVIC_VTERIN],
-            'nahravka' => ['nullable', 'file', 'mimetypes:audio/webm,audio/ogg,audio/mpeg,audio/mp4,audio/wav', 'max:'.(self::NEJVIC_BAJTU / 1024)],
+            // Seznam typů ze sdíleného `AudioUploads`: finfo hlasovku z Chrome
+            // a Safari pozná jako video/webm či video/mp4, a vlastní seznam
+            // jen s audio/* tak odmítal skutečné nahrávky z prohlížeče.
+            'nahravka' => ['nullable', 'file', AudioUploads::rule(), 'max:'.(self::NEJVIC_BAJTU / 1024)],
         ]);
 
         $nahravka = $request->file('nahravka');
@@ -108,8 +110,10 @@ class HostKomentarController extends Controller
     /**
      * Fotka, ke které vzkaz patří.
      *
-     * Musí být z téhož prostoru; cizí uuid se tiše ignoruje, aby se vzkazem
-     * nešlo ukázat na fotku, kterou host nikdy neviděl.
+     * Musí to být fotka, kterou odkaz hostovi ukazuje (týž dotaz jako sdílená
+     * stránka a stažení); jiné uuid se tiše ignoruje, aby se vzkazem nešlo
+     * ukázat na fotku, kterou host nikdy neviděl. Dřív stačil týž prostor —
+     * vzkaz se přivázal i k fotce z trezoru nebo mimo sdílené album.
      */
     private function fotka(SharedLink $odkaz, ?string $uuid): ?int
     {
@@ -117,10 +121,9 @@ class HostKomentarController extends Controller
             return null;
         }
 
-        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->where('gallery_space_id', $odkaz->gallery_space_id)
-            ->where('uuid', $uuid)
-            ->value('id');
+        $id = $odkaz->servedMedia()->where('media_items.uuid', $uuid)->value('media_items.id');
+
+        return $id !== null ? (int) $id : null;
     }
 
     /** „1:24" — tak to čte obrazovka. */

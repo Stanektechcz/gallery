@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\SharedLink;
@@ -39,13 +40,22 @@ class ModeraceVzkazuTest extends TestCase
         $this->prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
         $this->prostor->members()->syncWithoutDetaching([$this->adri->id => ['role' => 'owner']]);
 
+        // Skutečné album: odkaz na album, které neexistuje, už neplatí.
+        $album = Album::create([
+            'uuid' => (string) Str::uuid(),
+            'gallery_space_id' => $this->prostor->id,
+            'created_by' => $this->adri->id,
+            'title' => 'Beskydy',
+            'slug' => 'beskydy',
+        ]);
+
         $this->odkaz = SharedLink::create([
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->adri->id,
             'token' => 'tok'.Str::random(8),
             'name' => 'Beskydy',
             'target_type' => 'album',
-            'target_id' => 1,
+            'target_id' => $album->id,
             'allow_comments' => true,
         ]);
 
