@@ -853,6 +853,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                   <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                   <sc-if value="{{ p.pending }}"><i class="ph-duotone ph-cloud-arrow-up" style="position:absolute; right:7px; top:7px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
+                  <sc-if value="{{ p.navrhSmazat }}"><i class="ph-duotone ph-hourglass" title="{{ p.navrhTitle }}" aria-label="{{ p.navrhTitle }}" style="position:absolute; left:7px; bottom:6px; font-size:15px; color:#ffd7a8; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                 </button>
               </sc-for>
             </div>
@@ -973,6 +974,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                             </span>
                           </sc-if>
                           <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; right:7px; top:6px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
+                          <!-- Návrh ke smazání čeká na souhlas druhého. Ne `pending` — to je „zpracovává se". -->
+                          <sc-if value="{{ p.navrhSmazat }}"><i class="ph-duotone ph-hourglass" title="{{ p.navrhTitle }}" aria-label="{{ p.navrhTitle }}" style="position:absolute; right:7px; top:26px; font-size:15px; color:#ffd7a8; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                           <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; display:flex; align-items:center; gap:3px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)"><i class="ph-duotone ph-play-circle" style="font-size:13px"></i>{{ p.dur }}</span></sc-if>
                           <sc-if value="{{ p.pending }}"><i class="ph-duotone ph-cloud-arrow-up" title="Čeká na synchronizaci" style="position:absolute; left:7px; bottom:6px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                           <sc-if value="{{ p.error }}"><i class="ph-duotone ph-warning" title="Originál nelze najít" style="position:absolute; left:7px; bottom:6px; font-size:15px; color:#ffb4c6; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
@@ -1195,6 +1198,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div onClick="{{ p.tileClick }}" role="button" tabIndex="0" aria-label="{{ p.aria }}" style="position:relative; cursor:pointer; aspect-ratio:1; border-radius:2px; overflow:hidden; background:{{ p.bg }}; outline:{{ p.selRing }}; outline-offset:-3px">
                   <sc-if value="{{ p.selected }}"><span style="position:absolute; inset:0; background:var(--g-sel)"></span></sc-if>
                   <sc-if value="{{ p.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; right:7px; top:6px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
+                  <sc-if value="{{ p.navrhSmazat }}"><i class="ph-duotone ph-hourglass" title="{{ p.navrhTitle }}" aria-label="{{ p.navrhTitle }}" style="position:absolute; right:7px; top:26px; font-size:15px; color:#ffd7a8; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
                   <sc-if value="{{ p.isVideo }}"><span style="position:absolute; right:7px; bottom:6px; font-size:11px; color:#fff; text-shadow:0 1px 3px rgba(0,0,0,.6)">{{ p.dur }}</span></sc-if>
                 </div>
               </sc-for>
@@ -2558,6 +2562,43 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             </div>
             <button class="btn btn-secondary" onClick="{{ confirmEmptyTrash }}" style="margin-left:auto; gap:6px; color:var(--g-mag)"><i class="ph-duotone ph-trash" style="font-size:16px"></i>Vyprázdnit koš</button>
           </div>
+          <!--
+            Návrhy ke smazání (`KE_SCHVALENI`). Ve dvojici, která maže jen po
+            společném schválení, „Do koše" fotku jen navrhne — v knihovně zůstává,
+            dokud návrh druhý neschválí. Cizí návrh jde schválit nebo ponechat,
+            vlastní jen stáhnout.
+          -->
+          <sc-if value="{{ kschHas }}">
+            <div style="margin:18px 0 6px; padding:14px 16px 6px; border-radius:2px; background:var(--g-panel)">
+              <div style="display:flex; align-items:baseline; gap:12px; flex-wrap:wrap">
+                <h3 style="margin:0; font-size:19px; display:flex; align-items:center; gap:8px"><i class="ph-duotone ph-hourglass" style="font-size:18px"></i>Čeká na schválení</h3>
+                <span style="font-size:12.5px; color:var(--g-ink2)">{{ kschNote }}</span>
+                <sc-if value="{{ kschAllOn }}">
+                  <button class="btn btn-secondary" onClick="{{ kschAll }}" style="margin-left:auto; font-size:12.5px; color:var(--g-mag)">{{ kschAllLabel }}</button>
+                </sc-if>
+              </div>
+              <div class="tabulka-obal" style="overflow-x:auto; max-width:100%; min-width:0"><table class="table" style="margin-top:8px">
+                <thead><tr><th style="width:48px"></th><th>Položka</th><th>Druh</th><th>Navrhl(a)</th><th>Navrženo</th><th style="text-align:right">Akce</th></tr></thead>
+                <tbody>
+                  <sc-for list="{{ ksch }}" as="k" hint-placeholder-count="2">
+                    <tr>
+                      <td><div style="width:34px; height:34px; border-radius:2px; background:{{ k.bg }}"></div></td>
+                      <td>{{ k.name }}</td><td>{{ k.from }}</td><td>{{ k.by }}</td><td>{{ k.when }}</td>
+                      <td style="text-align:right; white-space:nowrap">
+                        <sc-if value="{{ k.cizi }}">
+                          <button class="btn btn-ghost" onClick="{{ k.ponechat }}">Ponechat</button>
+                          <button class="btn btn-ghost" onClick="{{ k.smazat }}" style="color:var(--g-mag)">Smazat</button>
+                        </sc-if>
+                        <sc-if value="{{ k.ja }}">
+                          <button class="btn btn-ghost" onClick="{{ k.ponechat }}">Stáhnout návrh</button>
+                        </sc-if>
+                      </td>
+                    </tr>
+                  </sc-for>
+                </tbody>
+              </table></div>
+            </div>
+          </sc-if>
           <sc-if value="{{ trashEmpty }}">
             <div style="max-width:420px; margin:70px auto; text-align:center">
               <i class="ph-duotone ph-trash" style="font-size:42px; color:var(--g-ink3)"></i>
@@ -14555,6 +14596,10 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <sc-if value="{{ acCancelOn }}">
             <button class="btn btn-secondary" onClick="{{ acClose }}">Zrušit</button>
           </sc-if>
+          <!-- Druhá volba dialogu (odmítnout návrh pravidla mazání); ostatní dialogy ji nemají. -->
+          <sc-if value="{{ acAltOn }}">
+            <button class="btn btn-ghost" onClick="{{ acAlt }}">{{ acAltLabel }}</button>
+          </sc-if>
           <button class="btn btn-primary" onClick="{{ acSave }}">{{ acCta }}</button>
         </div>
       </div>
@@ -14633,8 +14678,27 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         <button onClick="{{ startSlideshow }}" title="Prezentace" aria-label="Spustit prezentaci" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-play" style="font-size:21px"></i></button>
         <button onClick="{{ celaObrazovka }}" title="Celá obrazovka" aria-label="Celá obrazovka" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-corners-out" style="font-size:21px"></i></button>
         <button onClick="{{ toggleInfo }}" title="Informace" aria-label="Informace o položce" style="border:0; background:transparent; cursor:pointer; padding:7px; color:{{ infoColor }}"><i class="ph-duotone ph-info" style="font-size:21px"></i></button>
-        <button onClick="{{ trashCurrent }}" title="Přesunout do koše" aria-label="Přesunout do koše" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-trash" style="font-size:21px"></i></button>
+        <button onClick="{{ trashCurrent }}" title="{{ lbTrashTitle }}" aria-label="{{ lbTrashTitle }}" style="border:0; background:transparent; color:inherit; cursor:pointer; padding:7px"><i class="ph-duotone ph-trash" style="font-size:21px"></i></button>
       </div>
+
+      <!--
+        Návrh ke smazání. Ve dvojici, která maže jen po společném schválení,
+        „Do koše" fotku jen navrhne; smaže ji až souhlas druhého. Druhý tu
+        návrh schválí nebo odmítne, kdo ho podal, ho může stáhnout.
+      -->
+      <sc-if value="{{ lbNavrhOn }}">
+        <div role="status" style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:0 16px 8px; padding:9px 12px; border-radius:2px; background:var(--g-lb-panel); border:1px solid var(--g-lb-line); font-size:13.5px">
+          <i class="ph-duotone ph-hourglass" style="font-size:18px; flex:none"></i>
+          <span style="flex:1; min-width:180px">{{ lbNavrhText }}</span>
+          <sc-if value="{{ lbNavrhCizi }}">
+            <button class="btn btn-ghost" onClick="{{ lbNavrhPonechat }}" style="font-size:13px">Ponechat</button>
+            <button class="btn btn-primary" onClick="{{ lbNavrhSmazat }}" style="font-size:13px; background:var(--g-mag)">Smazat</button>
+          </sc-if>
+          <sc-if value="{{ lbNavrhJa }}">
+            <button class="btn btn-ghost" onClick="{{ lbNavrhPonechat }}" style="font-size:13px">Stáhnout návrh</button>
+          </sc-if>
+        </div>
+      </sc-if>
 
       <div style="flex:1; display:flex; min-height:0">
         <div style="flex:1; position:relative; display:flex; align-items:center; justify-content:center; min-width:0; padding:8px 8px 0; background:var(--g-lb-mat)">
@@ -17428,23 +17492,36 @@ class Component extends DCLogic {
     const gone = s.quarGone || {};
     const asked = s.quarAsked || 0;
     const one = list[asked % Math.max(1, list.length)] || null;
+    /*
+     * „Pustit" posílá položku přes koš (`quarGone: 'drop'`) — tam leží třicet
+     * dní. Ve dvojici, která maže jen po společném schválení, je to jen
+     * návrh: fotka se vrátí do knihovny s označením a smaže se, až to
+     * potvrdí i druhý. Dřívější hláška slibovala sedmidenní lhůtu, která
+     * neplatila ani v jednom případě.
+     */
+    const sam = this.muzuMazatSam();
+    const pustitRekni = n => sam
+      ? (n === 1 ? 'Puštěno do koše' : this.pl(n, 'položka puštěna', 'položky puštěny', 'položek puštěno') + ' do koše') + ' · 30 dní na vrácení'
+      : (n === 1 ? 'Navrženo ke smazání' : 'Navrženo ke smazání (' + this.pl(n, 'položka', 'položky', 'položek') + ')') + ' · ' + this.cekaNaPotvrzeni() + ' · do té doby zůstává v knihovně';
     const setGone = (id, how) => {
       const prev = gone;
       this.setState({ quarGone: { ...gone, [id]: how }, quarAsked: asked + 1 });
-      this.toast(how === 'keep' ? 'Vrátíme zpět do knihovny' : 'Pustíme · originál se odstraní za 7 dní', {
-        icon: how === 'keep' ? 'ph-arrow-counter-clockwise' : 'ph-trash',
+      this.toast(how === 'keep' ? 'Vrátíme zpět do knihovny' : pustitRekni(1), {
+        icon: how === 'keep' ? 'ph-arrow-counter-clockwise' : sam ? 'ph-trash' : 'ph-hourglass',
         undo: () => this.setState({ quarGone: prev, quarAsked: asked })
       });
     };
     // Uvolněné místo je součet skutečných velikostí. Odhad 3,4 MB na položku
     // zůstává jen tam, kde server velikost neposlal — u 184MB videa byl vedle
-    // o dva řády.
+    // o dva řády. Návrh ke smazání místo neuvolní, dokud ho druhý nepotvrdí.
     const zaklad = (s.quar === null || s.quar === undefined ? QUAR : s.quar);
-    const freed = zaklad.reduce((a, q) => a + (gone[q.id] === 'drop' ? (typeof q.mb === 'number' ? q.mb : 3.4) : 0), 0);
+    const pustene = zaklad.filter(q => gone[q.id] === 'drop');
+    const freed = sam ? pustene.reduce((a, q) => a + (typeof q.mb === 'number' ? q.mb : 3.4), 0) : 0;
     return {
       quarHead: this.pl(this.uklidPocet('quar', list.length), 'položka v karanténě', 'položky v karanténě', 'položek v karanténě')
         + (this.uklidPocet('quar', list.length) > list.length ? ' · ukazujeme ' + list.length : '')
-        + ' · uvolněno ' + freed.toFixed(1).replace('.', ',') + ' MB',
+        + (sam ? ' · uvolněno ' + freed.toFixed(1).replace('.', ',') + ' MB'
+          : pustene.length ? ' · ' + this.pl(pustene.length, 'navržena', 'navrženy', 'navrženo') + ' ke smazání' : ''),
       quarOne: !!one,
       quarOneBg: one ? this.bg(one.n) : 'none',
       quarOneTitle: one ? one.name : '',
@@ -17468,15 +17545,17 @@ class Component extends DCLogic {
           // `expired` znamená „lhůta vypršela", ne „leží tu půl roku" — lhůta
           // se dá nastavit i na měsíc a třicetidenní položka se tím pádem
           // označovala za půlroční.
-          body: this.pl(list.filter(q => q.expired).length, 'položka má karanténu za sebou', 'položky mají karanténu za sebou', 'položek má karanténu za sebou') + '. Zmizí za sedm dní, do té doby je jde vrátit.',
+          body: this.pl(list.filter(q => q.expired).length, 'položka má karanténu za sebou', 'položky mají karanténu za sebou', 'položek má karanténu za sebou')
+            + (sam ? '. Půjdou do koše — odtud je jde 30 dní vrátit.' : '. Navrhnou se ke smazání — do koše půjdou, až to potvrdí i druhý z vás.'),
           cta: 'Pustit staré',
           btnBg: 'var(--g-mag)',
           go: () => {
             const prev = gone;
             const next = { ...gone };
-            list.filter(q => q.expired).forEach(q => { next[q.id] = 'drop'; });
+            const stare = list.filter(q => q.expired);
+            stare.forEach(q => { next[q.id] = 'drop'; });
             this.setState({ confirm: null, quarGone: next });
-            this.toast('Staré položky puštěny · sedm dní na vrácení', { icon: 'ph-trash', undo: () => this.setState({ quarGone: prev }) });
+            this.toast(pustitRekni(stare.length), { icon: sam ? 'ph-trash' : 'ph-hourglass', undo: () => this.setState({ quarGone: prev }) });
           }
         }
       })
@@ -17518,14 +17597,28 @@ class Component extends DCLogic {
     const navrhData = p => p.dateShort && /\d/.test(p.dateShort) ? p.dateShort : null;
     const navrh = p => fixing === 'place' ? navrhMista(p) : navrhData(p);
     const toCompare = ids => this.setState({ clnTab: 'compare', cmpSel: ids.slice(0, 4) });
+    // Ve dvojici, která maže jen po společném schválení, jdou ostatní kopie jen k návrhu — místo se neuvolní hned.
+    const sam = this.muzuMazatSam();
+    const vybranaKopie = (g, sel) => sel === undefined ? null : (g.items.find(i => i.id && i.id === sel) || (typeof sel === 'number' ? g.items[sel] : null) || null);
     const mergeGroups = list => {
-      const prev = { done: done, freed: freed };
-      const gained = list.reduce((a, g) => a + g.freed, 0);
-      this.setState({ dupDone: done.concat(list.map(g => g.id)), clnFreed: freed + gained });
-      this.toast(list.length === 1
-        ? 'Sloučeno · uvolněno ' + gained.toFixed(1).replace('.', ',') + ' MB'
-        : this.pl(list.length, 'nález', 'nálezy', 'nálezů') + ' sloučeno · uvolněno ' + gained.toFixed(1).replace('.', ',') + ' MB',
-        { icon: 'ph-broom', undo: () => this.setState({ dupDone: prev.done, clnFreed: prev.freed }) });
+      const prev = { done: done, freed: freed, keep: keep };
+      const gained = sam ? list.reduce((a, g) => a + g.freed, 0) : 0;
+      /*
+       * Vítěz jde v témže zápisu jako uzavření nálezu.
+       *
+       * Stav se posílá po změněných klíčích a server čte vítěze z téhož
+       * zápisu jako `dupDone`: vybraná kopie odešla dřív, samostatným
+       * zápisem, a sloučení pak bez vítěze neudělalo nic. Pořadí z ukázky
+       * se převádí na identifikátor kopie, kde ho kopie má.
+       */
+      const vitezove = { ...keep };
+      list.forEach(g => { const k = vybranaKopie(g, keep[g.id]); if (k && k.id) vitezove[g.id] = k.id; });
+      this.setState({ dupDone: done.concat(list.map(g => g.id)), dupKeep: vitezove, clnFreed: freed + gained });
+      const co = list.length === 1 ? 'Sloučeno' : this.pl(list.length, 'nález', 'nálezy', 'nálezů') + ' sloučeno';
+      this.toast(sam
+        ? co + ' · uvolněno ' + gained.toFixed(1).replace('.', ',') + ' MB'
+        : co + ' · ostatní kopie navrženy ke smazání · ' + this.cekaNaPotvrzeni(),
+        { icon: sam ? 'ph-broom' : 'ph-hourglass', undo: () => this.setState({ dupDone: prev.done, dupKeep: prev.keep, clnFreed: prev.freed }) });
     };
 
     return {
@@ -17547,7 +17640,9 @@ class Component extends DCLogic {
       ...(tab === 'series' ? this.serVals() : { appIsSer: false }),
 
       dupHeadTitle: open.length ? this.pl(open.length, 'nález', 'nálezy', 'nálezů') + ' · uvolní se až ' + open.reduce((a, g) => a + g.freed, 0).toFixed(1).replace('.', ',') + ' MB' : 'Knihovna je uklizená',
-      dupHeadNote: 'Sloučení nechá vybranou kopii a ostatní pošle do koše — odtud jde 30 dní vrátit.',
+      dupHeadNote: sam
+        ? 'Sloučení nechá vybranou kopii a ostatní pošle do koše — odtud jde 30 dní vrátit.'
+        : 'Sloučení nechá vybranou kopii a ostatní navrhne ke smazání — do koše půjdou, až to potvrdí i druhý z vás.',
       dupAutoPick: () => {
         const next = Object.assign({}, keep);
         // Identifikátor, ne pořadí — stejně jako u ručního výběru níž.
@@ -17565,16 +17660,27 @@ class Component extends DCLogic {
       dupEmpty: open.length === 0,
       dupGroups: open.map(g => {
         const sel = keep[g.id];
+        // Vybraná kopie podle identifikátoru (u ukázky podle pořadí); `g.items[sel]`
+        // s identifikátorem nenašlo nic a popisek tlačítka spadl.
+        const vybrana = vybranaKopie(g, sel);
+        const kopie = this.pl(g.items.length - 1, 'kopie se navrhne', 'kopie se navrhnou', 'kopií se navrhne');
         return {
           match: g.match, reason: g.reason,
-          effect: g.freed ? 'Uvolní ' + g.freed.toFixed(1).replace('.', ',') + ' MB · ' + this.pl(g.items.length - 1, 'kopie půjde', 'kopie půjdou', 'kopií půjde') + ' do koše' : 'Nic se neuvolní — snímky nejsou totožné',
+          effect: !g.freed ? 'Nic se neuvolní — snímky nejsou totožné'
+            : sam ? 'Uvolní ' + g.freed.toFixed(1).replace('.', ',') + ' MB · ' + this.pl(g.items.length - 1, 'kopie půjde', 'kopie půjdou', 'kopií půjde') + ' do koše'
+            : kopie + ' ke smazání · uvolní ' + g.freed.toFixed(1).replace('.', ',') + ' MB, až to potvrdí i druhý z vás',
           blocked: sel === undefined, opacity: sel === undefined ? '.45' : '1',
-          mergeLabel: sel === undefined ? 'Vyberte, kterou nechat' : 'Sloučit — nechat ' + g.items[sel].name,
+          mergeLabel: vybrana ? 'Sloučit — nechat ' + vybrana.name : 'Vyberte, kterou nechat',
           merge: () => { if (sel !== undefined) mergeGroups([g]); },
+          /*
+           * „Necháváme obě" = `dupKeep[nález] = '*'` v témže zápisu jako
+           * `dupDone`. Samotné `dupDone` server bral jako sloučení bez vítěze
+           * a dřív podle něj vybral největší kopii a ostatní vyhodil.
+           */
           keepBoth: () => {
-            const prev = done;
-            this.setState({ dupDone: done.concat(g.id) });
-            this.toast('Necháváme obě · nález se už nepřipomene', { icon: 'ph-check-circle', undo: () => this.setState({ dupDone: prev }) });
+            const prev = { done: done, keep: keep };
+            this.setState({ dupDone: done.concat(g.id), dupKeep: { ...keep, [g.id]: '*' } });
+            this.toast('Necháváme obě · nález se už nepřipomene', { icon: 'ph-check-circle', undo: () => this.setState({ dupDone: prev.done, dupKeep: prev.keep }) });
           },
           // Skutečná fotka má vlastní identifikátor i náhled; u napsaného nálezu
           // se obojí odvozuje z pořadí, jak to prototyp dělal vždycky.
@@ -17612,18 +17718,14 @@ class Component extends DCLogic {
            * Se serverem jdou ostatní do koše doopravdy. Dřív se jen připsaly
            * do seznamu koše v prohlížeči: hláška řekla „šly do koše" a fotky
            * dál ležely v knihovně, na Disku i u druhého.
+           *
+           * Jedním požadavkem (`media/do-kose`), ne `DELETE` na každou: dávka
+           * požadavků najednou vyčerpá limit API. Ve dvojici, která maže jen
+           * po společném schválení, server ostatní jen navrhne — hlášku
+           * i „Zpět" proto skládá `doKoseNaServeru` podle odpovědi.
            */
-          const api = window.GalerieApi;
-          if (api && api.del && api.mode === 'http' && others.every(o => /^[0-9a-f-]{36}$/.test(o.id))) {
-            Promise.all(others.map(o => api.del('media/' + o.id).then(() => this.odeberZKnihovny(o.id))))
-              .then(() => {
-                this.setState({ cmpSel: [p.id] });
-                this.toast('Necháváme ' + p.name + ' · ' + this.pl(others.length, 'ostatní šla', 'ostatní šly', 'ostatních šlo') + ' do koše · 30 dní na vrácení', { icon: 'ph-trash' });
-                if (window.GalerieObnovit) window.GalerieObnovit('system');
-              })
-              .catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
-            return;
-          }
+          if (!others.length) { this.toast('Ve srovnání není nic dalšího, co by šlo pryč', { icon: 'ph-info' }); return; }
+          if (this.doKoseNaServeru(others.map(o => o.id), () => this.setState({ cmpSel: [p.id] }), 'Necháváme ' + p.name)) return;
           const rows = (this._trashNow || []).concat(others.map(o => ({
             name: o.name, from: o.album || 'Knihovna', by: this.meWho(), when: 'právě teď', left: '30 dní', n: o.n
           })));
@@ -19226,20 +19328,75 @@ class Component extends DCLogic {
     return !!(t && t.id) && window.GalerieApi && window.GalerieApi.mode === 'http';
   }
 
+  /*
+   * Sekce „Čeká na schválení" nad tabulkou koše.
+   *
+   * `KE_SCHVALENI` = `[{ id, name, from, bg?, by, when, ja, n }]` ze skupiny
+   * `system`. Bez serveru (ukázka) je prázdné a sekce se nekreslí. „Schválit
+   * vše" se týká jen návrhů druhého — vlastní schválit nejde.
+   */
+  keSchvaleniVals() {
+    const list = (window.GalerieData || {}).KE_SCHVALENI;
+    const rows = Array.isArray(list) ? list.filter(k => k && k.id) : [];
+    if (!rows.length) return { kschHas: false };
+    const cizi = rows.filter(k => !k.ja);
+    const vlastni = rows.length - cizi.length;
+    return {
+      kschHas: true,
+      kschNote: [
+        cizi.length ? this.pl(cizi.length, 'návrh čeká', 'návrhy čekají', 'návrhů čeká') + ' na váš souhlas' : '',
+        vlastni ? this.pl(vlastni, 'váš návrh', 'vaše návrhy', 'vašich návrhů') + ' · ' + this.cekaNaPotvrzeni() : ''
+      ].filter(Boolean).join(' · ') + ' · do té doby zůstávají v knihovně',
+      kschAllOn: cizi.length > 1,
+      kschAllLabel: 'Schválit vše (' + cizi.length + ')',
+      kschAll: () => this.setState({ confirm: {
+        title: 'Schválit všechny návrhy?',
+        body: this.pl(cizi.length, 'položka půjde', 'položky půjdou', 'položek půjde') + ' do koše. Odtud je jde 30 dní vrátit.',
+        cta: 'Schválit a smazat', btnBg: 'var(--g-mag)',
+        go: () => { this.setState({ confirm: null }); this.kosVolej('schvalit', { ids: cizi.map(k => k.id) }); }
+      } }),
+      ksch: rows.map(k => ({
+        ...k, bg: k.bg || this.bg(k.n), ja: !!k.ja, cizi: !k.ja,
+        smazat: () => this.kosVolej('schvalit', { ids: [k.id] }),
+        ponechat: () => this.kosVolej('ponechat', { ids: [k.id] })
+      }))
+    };
+  }
+
+  /*
+   * Akce koše na serveru (`kos/` + akce).
+   *
+   * `schvalit` a `ponechat` vyřizují návrhy ke smazání (`KE_SCHVALENI`):
+   * schválené odchází z knihovny do koše, ponechané v ní zůstávají bez
+   * označení. Odpověď nese jen obsah skupiny `system`, označení na dlaždicích
+   * je v knihovně — ta se proto obnoví zvlášť.
+   */
   kosVolej(akce, telo) {
     const api = window.GalerieApi;
-    if (!api || !api.post) return;
+    if (!api || !api.post || api.mode !== 'http') {
+      this.toast('Koš spravuje server a ten teď neodpovídá', { icon: 'ph-warning' });
+      return;
+    }
+    const navrh = akce === 'schvalit' || akce === 'ponechat';
 
     api.post('kos/' + akce, telo).then(res => {
       if (!res) return;
       if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (navrh) {
+        const ids = res.ids || [];
+        if (akce === 'schvalit') ids.forEach(id => this.odeberZKnihovny(id));
+        else this.oznacNavrh(ids, null);
+      }
+      if (window.GalerieObnovit && (navrh || akce === 'vratit')) window.GalerieObnovit('knihovna');
       // Seznam se překreslí z toho, co vrátil server; místní přepis stavu by
       // se s ním rozešel při první chybě.
       this.setState({ trashRows: null });
-      this.toast(res.zprava, { icon: akce === 'vratit' ? 'ph-arrow-counter-clockwise' : 'ph-trash' });
+      this.toast(res.zprava || 'Hotovo', {
+        icon: akce === 'vratit' || (akce === 'ponechat' && res.ok) ? 'ph-arrow-counter-clockwise' : akce === 'ponechat' ? 'ph-info' : 'ph-trash'
+      });
     }).catch(e => {
       const t = (e && e.body) || {};
-      this.toast(t.zprava || 'Nepodařilo se to provést', { icon: 'ph-warning', color: 'var(--g-mag)' });
+      this.toast(t.chyba || t.zprava || t.message || 'Nepodařilo se to provést', { icon: 'ph-warning', color: 'var(--g-mag)' });
     });
   }
 
@@ -21980,15 +22137,33 @@ class Component extends DCLogic {
     const ze = (window.GalerieData || {}).CKMENU;
     const zeServeru = !!ze && (Object.keys(ze).length > 0 || this.zeServeru('CKMENU'));
     if (zeServeru && !this._menuVRelaci) return ze;
-    if (this.state.ckMenu) return this.state.ckMenu;
+    // Uvolněný den je ve stavu `''` (viz `nastavMenu`) — do menu nepatří.
+    if (this.state.ckMenu) {
+      const m = this.state.ckMenu, bez = {};
+      Object.keys(m).forEach(d => { if (m[d]) bez[d] = m[d]; });
+      return bez;
+    }
     if (zeServeru) return ze;
     return this.ukazka() ? { 'Pondělí': 'polevka', 'Středa': 'peka', 'Sobota': 'buchty' } : {};
   }
   /*
    * Změna menu: zapíše se do stavu (server ji převede do plánu jídel) a za
    * chvíli se kuchařka načte znovu — nákupní seznam se z plánu počítá.
+   *
+   * Server zpracuje jen dny, které v `ckMenu` jsou, a den vymaže jen
+   * výslovné `''` — opis ze staré karty tak nesmaže, co mezitím naplánoval
+   * druhý. Den, který v novém menu chybí, ale dosud v něm byl (uvolněný den,
+   * „Zpět" po přidání), se proto posílá jako `''`. `celyTyden` = nové menu
+   * nahrazuje celý týden (vygenerování): ostatní dny jdou jako `''` taky.
    */
-  nastavMenu(zmena) {
+  nastavMenu(zmena, celyTyden) {
+    if (zmena && zmena.ckMenu && typeof zmena.ckMenu === 'object') {
+      const pred = this.menuOf(), nove = zmena.ckMenu, plna = {};
+      Object.keys(nove).forEach(d => { plna[d] = nove[d] || ''; });
+      Object.keys(pred).forEach(d => { if (!nove[d]) plna[d] = ''; });
+      if (celyTyden) ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'].forEach(d => { if (!(d in plna)) plna[d] = ''; });
+      zmena = { ...zmena, ckMenu: plna };
+    }
     this._menuVRelaci = true;
     this.setState(zmena);
     if (!this.ukazka() && window.GalerieObnovit) {
@@ -22215,7 +22390,8 @@ class Component extends DCLogic {
             const prev = menu, v = RECIPES[e.target.value] ? e.target.value : '';
             if (e.target.value && !v) return;
             const next = { ...menu };
-            if (v) next[d] = v; else delete next[d];
+            // Uvolněný den jde jako `''` — chybějící den server nechá, jak byl.
+            next[d] = v || '';
             this.nastavMenu({ ckMenu: next });
             this.toast(v ? RECIPES[v].title + ' na ' + d.toLowerCase() : d + ' uvolněn', { icon: 'ph-calendar-plus', undo: () => this.nastavMenu({ ckMenu: prev }) });
           },
@@ -22226,7 +22402,7 @@ class Component extends DCLogic {
         const keys = Object.keys(RECIPES), prev = menu;
         const next = {};
         [0, 2, 4, 6].forEach((di, i) => { next[DAYS[di]] = keys[(i + Math.floor(Math.random() * keys.length)) % keys.length]; });
-        this.nastavMenu({ ckMenu: next });
+        this.nastavMenu({ ckMenu: next }, true);
         this.toast('Menu na týden vygenerováno ze čtyř receptů — přehoďte, co nesedí', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
       },
       ckMenuToShop: () => {
@@ -22822,7 +22998,7 @@ class Component extends DCLogic {
         best: sharp !== null && sharp >= 88,
         on: i === kept,
         ring: i === kept ? '3px solid var(--g-acc)' : '1px solid var(--g-line2)',
-        label: i === kept ? 'ponecháme' : 'do koše',
+        label: i === kept ? 'ponecháme' : this.muzuMazatSam() ? 'do koše' : 'navrhneme smazat',
         labelColor: i === kept ? 'var(--g-ok)' : 'var(--g-ink3)',
         pick: () => this.setState({ serKeep: { ...keep, [g.id]: i } }),
         open: () => this.openLb(p.id),
@@ -22854,8 +23030,11 @@ class Component extends DCLogic {
         const prevDone = resolved, prevTrash = s.trashRows;
         const drop = items.filter((it, i) => i !== keptIdx);
         // Se serverem doopravdy do koše. Série po smazání sama zmizí (zbude
-        // z ní jeden snímek), takže index zůstává — ukáže se další.
-        if (this.doKoseNaServeru(drop.map(d => d.id), () => this.setState({ serDone: { ...this.state.serDone, [g.id]: true }, serIdx: gi }))) return;
+        // z ní jeden snímek), takže index zůstává — ukáže se další. Ve dvojici,
+        // která maže jen po společném schválení, zbytek jen čeká na souhlas
+        // druhého a snímky v knihovně zůstanou; série se proto označí za
+        // prošlou, ať se nenabízí znovu. Hlášku skládá server.
+        if (this.doKoseNaServeru(drop.map(d => d.id), () => this.setState({ serDone: { ...this.state.serDone, [g.id]: true }, serIdx: gi }), 'Ponechán ' + items[keptIdx].name)) return;
         const rows = (this._trashNow || []).slice();
         drop.forEach(d => rows.unshift({ name: d.name, from: 'Srovnání série', by: this.meWho(), when: 'právě teď', left: '30 dní', n: 4 }));
         this.setState({ serDone: { ...prevDone, [g.id]: true }, trashRows: rows, serIdx: Math.min(groups.length - 1, gi + 1) });
@@ -26474,7 +26653,7 @@ class Component extends DCLogic {
         const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
         const next = {};
         ranked.slice(0, 4).forEach((x, i) => { next[D[i * 2]] = x.rk; });
-        this.nastavMenu({ ckMenu: next, appTab: 4 });
+        this.nastavMenu({ ckMenu: next, appTab: 4 }, true);
         this.toast('Týden složený z nejlépe hodnocených návrhů', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
       },
       ckSugPantry: () => this.setState({ appTab: 2 })
@@ -27429,7 +27608,7 @@ class Component extends DCLogic {
             const D = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
             const next = {};
             [0, 2, 4, 6].forEach((di, i) => { next[D[di]] = keys[i % keys.length]; });
-            this.nastavMenu({ ckMenu: next });
+            this.nastavMenu({ ckMenu: next }, true);
             this.toast('Menu na týden vygenerováno', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
             return;
           }
@@ -31944,7 +32123,11 @@ class Component extends DCLogic {
     return {
       ...p, fav: this.isFav(p), selected: sel, showCheck: this.state.selectMode || sel,
       checkBg: sel ? 'var(--g-acc)' : 'rgba(0,0,0,.25)', selRing: sel ? '3px solid var(--g-acc)' : 'none',
-      aria: this.popisFotky(p),
+      aria: this.popisFotky(p) + (p.navrhSmazat ? ', čeká na schválení smazání' : ''),
+      // `navrhSmazat` = `{ kdo, ja, kdy }` ze serveru, chybí u nenavržené fotky.
+      navrhTitle: p.navrhSmazat
+        ? 'Čeká na schválení smazání · ' + (p.navrhSmazat.ja ? 'navrhli jste vy' : 'navrhl(a) ' + (p.navrhSmazat.kdo || 'druhý z vás'))
+        : '',
       isVideo: p.isVideo, tileClick: () => this.state.selectMode ? this.toggleSel(p.id) : this.openLb(p.id),
       open: () => this.openLb(p.id),
       missing: p.missingDate ? 'Chybí datum' : p.missingPlace ? 'Chybí místo' : null,
@@ -32561,7 +32744,8 @@ class Component extends DCLogic {
         msList: typeof STORYMS !== 'undefined' ? STORYMS : null, emItems: typeof EM_ITEMS !== 'undefined' ? EM_ITEMS : null,
         paper: typeof PAPER_ROWS !== 'undefined' ? PAPER_ROWS : null, proms: typeof PROMISES !== 'undefined' ? PROMISES : null,
         nudges: typeof NUDGES !== 'undefined' ? NUDGES : null, cools: typeof DEC_COOL !== 'undefined' ? DEC_COOL : null,
-        truths: typeof TRUTHS !== 'undefined' ? TRUTHS : null
+        truths: typeof TRUTHS !== 'undefined' ? TRUTHS : null,
+        season: typeof SEASON !== 'undefined' ? SEASON : null
       };
       return Z[k] || [];
     };
@@ -32590,8 +32774,10 @@ class Component extends DCLogic {
      * v kartě přepsal úpravu druhého u jiné položky téhož seznamu. Základ je
      * seznam ze serveru (data nebo odpověď na zápis); pořadí je součást
      * podpisu (řazení je úprava). Neznámý základ = změněné všechno, jako dřív.
+     * Sezónní obálky (`season`) server zapisuje jen podle tohohle seznamu —
+     * opis z jiné karty by jinak vrátil ostatním obálkám starý termín.
      */
-    const ZMENY = ['wishes', 'ideas', 'buys', 'chores', 'dues', 'inv', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools', 'truths'];
+    const ZMENY = ['wishes', 'ideas', 'buys', 'chores', 'dues', 'inv', 'klTasks', 'fam', 'favList', 'forgList', 'antiList', 'rules', 'storyList', 'msList', 'emItems', 'paper', 'proms', 'nudges', 'cools', 'truths', 'season'];
     const zakladZmen = k => k === 'chores' ? (typeof HOUSE_CHORES !== 'undefined' ? HOUSE_CHORES : []) : k === 'inv' ? (typeof HOUSE_INV !== 'undefined' ? HOUSE_INV : []) : zaklad(k);
     const podpis = list => {
       const m = {};
@@ -32649,6 +32835,19 @@ class Component extends DCLogic {
     if (this._pQuiet) return;
     if (!Object.keys(patch).length) return;
     if ('evList' in patch || 'xBoard' in patch) this.planRozdil(prev, patch);
+    /*
+     * Přepínače (`sw`): server zapíše jen ty, které jsou v `__zmenene.sw`.
+     *
+     * Mapa přepínačů se posílá celá, a opis ze staré karty tak přepínal
+     * zpátky, co mezitím změnil druhý. Změněné se počítají proti minulému
+     * stavu a přidávají se k tomu, co do `__zmenene` napsal `odebraneRozdil`
+     * — nepřepisují ho. Fronta v `GalerieApi.save` je sčítá.
+     */
+    if ('sw' in patch) {
+      const pred = prev.sw || {}, ted = this.state.sw || {};
+      const sw = Object.keys(Object.assign({}, pred, ted)).filter(id => pred[id] !== ted[id]);
+      patch.__zmenene = Object.assign({}, patch.__zmenene || {}, { sw });
+    }
     /*
      * Trezor: co z něj prohlížeč vyjmul, se posílá výslovně.
      *
@@ -32993,30 +33192,94 @@ class Component extends DCLogic {
    *
    * Vrací `false`, když server není nebo nejde o jeho položky (ukázka) —
    * volající pak nechá původní chování prototypu.
+   *
+   * Ve dvojici, která maže jen po společném schválení, server fotky jen
+   * navrhne (`navrzeno`, dřív navržené `uzNavrzeno`) a v `ids` vrací jen to,
+   * co opravdu odešlo do koše. Z knihovny se proto odebírá jen `ids`;
+   * navržené v ní zůstanou s označením a „Zpět" návrh stáhne (`kos/ponechat`),
+   * místo aby vracelo z koše, kde nic není. `uvod` je začátek hlášky
+   * („Necháváme IMG_1.HEIC"), zbytek píše server — ví, co se opravdu stalo.
    */
-  doKoseNaServeru(ids, hotovo) {
+  doKoseNaServeru(ids, hotovo, uvod) {
     const api = window.GalerieApi;
     if (!api || !api.post || api.mode !== 'http' || !ids.length || !ids.every(id => /^[0-9a-f-]{36}$/.test(id))) return false;
 
     api.post('media/do-kose', { ids }).then(res => {
       const presunute = (res && res.ids) || [];
-      const selhalo = ids.length - presunute.length;
+      const navrzeno = (res && res.navrzeno) || [];
+      const uzNavrzeno = (res && res.uzNavrzeno) || [];
+      const vyrizene = presunute.concat(navrzeno, uzNavrzeno);
       presunute.forEach(id => this.odeberZKnihovny(id));
+      this.oznacNavrh(navrzeno, { kdo: this.meWho(), ja: true, kdy: 'právě teď' });
       if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); }
-      if (!presunute.length) { this.toast('Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
-      if (hotovo) hotovo(presunute);
-      this.toast(this.pl(presunute.length, 'položka přesunuta', 'položky přesunuty', 'položek přesunuto') + ' do koše · 30 dní na vrácení'
-        + (selhalo ? ' · ' + this.pl(selhalo, 'položka už v knihovně nebyla', 'položky už v knihovně nebyly', 'položek už v knihovně nebylo') : ''), {
-        icon: 'ph-trash',
-        undo: () => api.post('kos/vratit', { ids: presunute }).then(res2 => {
-          if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
-          if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
-          this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
-        }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }))
+      if (!vyrizene.length) { this.toast((res && res.zprava) || 'Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
+      if (hotovo) hotovo(vyrizene);
+      const zbylo = ids.length - vyrizene.length;
+      const zprava = (res && res.zprava) || this.zpravaDoKose(presunute.length, navrzeno.length + uzNavrzeno.length);
+      const vratit = () => api.post('kos/vratit', { ids: presunute }).then(res2 => {
+        if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
+        if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+        this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
+      }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+      const stahnout = () => api.post('kos/ponechat', { ids: navrzeno }).then(res2 => {
+        if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
+        this.oznacNavrh(navrzeno, null);
+        if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+        this.toast((res2 && res2.zprava) || 'Návrh stažen', { icon: 'ph-arrow-counter-clockwise' });
+      }).catch(() => this.toast('Návrh se nepodařilo stáhnout', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+      this.toast((uvod ? uvod + ' · ' : '') + zprava
+        + (zbylo > 0 ? ' · ' + this.pl(zbylo, 'položka už v knihovně nebyla', 'položky už v knihovně nebyly', 'položek už v knihovně nebylo') : ''), {
+        icon: presunute.length ? 'ph-trash' : 'ph-hourglass',
+        // „Zpět" vrací, co se opravdu stalo: z koše vyhozené, návrh stažením.
+        undo: presunute.length || navrzeno.length
+          ? () => { if (presunute.length) vratit(); if (navrzeno.length) stahnout(); }
+          : undefined
       });
-    }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+    }).catch(e => this.toast(((e && e.body) || {}).message || 'Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
 
     return true;
+  }
+
+  /*
+   * Smí přihlášený mazat sám, bez souhlasu druhého?
+   *
+   * `MAZANI` chodí ze skupiny `system`; než dorazí (a v ukázce bez serveru),
+   * platí chování prototypu — maže se rovnou. Server stejně rozhoduje sám:
+   * tohle jen volí, co obrazovka slíbí, než odpoví.
+   */
+  muzuMazatSam() {
+    const m = (window.GalerieData || {}).MAZANI;
+    return !m || m.muzuSam !== false;
+  }
+
+  // „čeká, až to potvrdí Adrian" — jméno v prvním pádě, jako to píše server.
+  cekaNaPotvrzeni() {
+    const m = (window.GalerieData || {}).MAZANI || {};
+    return m.partner ? 'čeká, až to potvrdí ' + m.partner : 'čeká na druhého z vás';
+  }
+
+  // Náhradní hláška, když server `zprava` nepošle (starší server).
+  zpravaDoKose(vKosi, ceka) {
+    return [
+      vKosi ? this.pl(vKosi, 'položka přesunuta', 'položky přesunuty', 'položek přesunuto') + ' do koše · 30 dní na vrácení' : '',
+      ceka ? (ceka === 1 ? 'Navrženo ke smazání' : 'Navrženo ke smazání (' + this.pl(ceka, 'položka', 'položky', 'položek') + ')') + ' · ' + this.cekaNaPotvrzeni() : ''
+    ].filter(Boolean).join(' · ') || 'Nic se nezměnilo';
+  }
+
+  /*
+   * Označení „čeká na schválení smazání" u dlaždic hned, bez čekání na
+   * obnovení knihovny. Mění se položky **v poli** (jako `odeberZKnihovny`) —
+   * dokument si kolekce rozebral do konstant. `null` označení sundá.
+   */
+  oznacNavrh(ids, navrh) {
+    const pole = (window.GalerieData || {}).PHOTOS;
+    if (!Array.isArray(pole) || !ids || !ids.length) return;
+    pole.forEach(p => {
+      if (!p || ids.indexOf(p.id) < 0) return;
+      if (navrh) p.navrhSmazat = navrh;
+      else delete p.navrhSmazat;
+    });
+    if (window.GalerieObnovObrazovku) window.GalerieObnovObrazovku();
   }
 
   /* Celá obrazovka — prohlížeč to umí sám, jen se ho nikdo neptal. */
@@ -33431,6 +33694,7 @@ class Component extends DCLogic {
     const s = this.state, d = s.acDlg;
     if (!d) return { acOpen: false };
     if (String(d.mode || '').indexOf('2fa') === 0) return this.dvaFVals(d);
+    if (d.mode === 'mazani-potvrdit') return this.mazaniPotvrzeniVals(d);
     const heslo = d.mode === 'heslo';
     const set = patch => this.setState({ acDlg: { ...this.state.acDlg, ...patch, err: null } });
     const save = () => {
@@ -33561,7 +33825,101 @@ class Component extends DCLogic {
       return true;
     }
     if (kind === 'offline-obrazovka') { this.setState({ route: 'x-offline', appTab: 1 }); return true; }
+    /*
+     * Pravidlo mazání fotek (`MAZANI`) — dvojice ho mění jen společně.
+     *
+     * „Každý sám" jeden navrhne a druhý potvrdí kódem zámku (nebo heslem,
+     * když kód nemá); návrat ke společnému schvalování platí hned. Stav řádku
+     * i tlačítko posílá server v odpovědi (`data` → `SETROWS`, `MAZANI`).
+     */
+    if (kind === 'mazani-navrh' || kind === 'mazani-spolecne' || kind === 'mazani-zrusit') {
+      if (!naServeru) { this.toast('Pravidlo mazání mění jen server', { icon: 'ph-info' }); return true; }
+      if (kind === 'mazani-zrusit') { this.mazaniRezim('mazani/rezim/zrusit', {}); return true; }
+      this.mazaniRezim('mazani/rezim', { rezim: kind === 'mazani-navrh' ? 'kazdy' : 'spolecne' }, (text, e) => {
+        // Druhý mezitím navrhl totéž — z návrhu se stalo potvrzení a server chce kód.
+        if (kind === 'mazani-navrh' && e && e.status === 422) { this.setState({ acDlg: { mode: 'mazani-potvrdit', a: '', err: text } }); return; }
+        this.toast(text, { icon: 'ph-warning', color: 'var(--g-mag)' });
+      });
+      return true;
+    }
+    if (kind === 'mazani-potvrdit') {
+      if (!naServeru) { this.toast('Pravidlo mazání mění jen server', { icon: 'ph-info' }); return true; }
+      this.setState({ acDlg: { mode: 'mazani-potvrdit', a: '' } });
+      return true;
+    }
     return false;
+  }
+
+  /*
+   * Zápis pravidla mazání a hláška ze serveru. `chyba(text, e)` převezme
+   * odmítnutí (špatný kód 422, uzavřeno 429, nic nečeká 409).
+   */
+  mazaniRezim(cesta, telo, chyba, hotovo) {
+    const api = window.GalerieApi;
+    if (!api || !api.post || api.mode !== 'http') { this.toast('Pravidlo mazání mění jen server', { icon: 'ph-info' }); return; }
+    api.post(cesta, telo).then(res => {
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (hotovo) { hotovo(res); return; }
+      this.toast((res && res.zprava) || 'Uloženo', { icon: res && res.rezim === 'kazdy' ? 'ph-users' : 'ph-shield-check' });
+    }).catch(e => {
+      const b = (e && e.body) || {};
+      const prvni = b.errors ? (Object.values(b.errors)[0] || [])[0] : null;
+      const text = b.chyba || prvni || b.message || 'Pravidlo mazání se nepodařilo změnit';
+      if (chyba) chyba(text, e);
+      else this.toast(text, { icon: 'ph-warning', color: 'var(--g-mag)' });
+    });
+  }
+
+  /*
+   * Potvrzení návrhu „každý maže sám" kódem zámku.
+   *
+   * Kdo kód zámku nemá, prokáže se heslem do galerie — stejně jako při
+   * nastavení kódu (`PotvrzeniZamkem`). Hodnota žije jen v `acDlg`, který se
+   * nesdílí ani neukládá do zařízení, jde jen do požadavku a po odpovědi se
+   * zahodí. Návrh jde tady i odmítnout.
+   */
+  mazaniPotvrzeniVals(d) {
+    const z = this.zamek();
+    const maKod = !!z.nastaveno;
+    const delka = typeof z.delka === 'number' && z.delka > 0 ? z.delka : 6;
+    const m = (window.GalerieData || {}).MAZANI || {};
+    const kdo = (m.navrhRezimu && m.navrhRezimu.kdo) || 'Druhý z vás';
+    const set = patch => this.setState({ acDlg: { ...this.state.acDlg, ...patch, err: null } });
+    const chyba = zprava => this.setState({ acDlg: { ...this.state.acDlg, a: '', busy: false, err: zprava } });
+    const save = () => {
+      if (d.busy) return;
+      const hodnota = String(d.a || '');
+      if (maKod ? !new RegExp('^\\d{' + delka + '}$').test(hodnota) : !hodnota) { chyba(maKod ? 'Kód zámku má ' + delka + ' číslic.' : 'Napište heslo do galerie.'); return; }
+      this.setState({ acDlg: { ...d, busy: true, err: null } });
+      this.mazaniRezim('mazani/rezim/potvrdit', maKod ? { kod: hodnota } : { heslo: hodnota }, text => chyba(text), res => {
+        this.setState({ acDlg: null });
+        this.toast((res && res.zprava) || 'Každý teď maže sám — potvrdili jste oba', { icon: 'ph-users' });
+      });
+    };
+    const odmitnout = () => {
+      if (d.busy) return;
+      this.setState({ acDlg: null });
+      this.mazaniRezim('mazani/rezim/zrusit', {}, null, res => this.toast(res && res.ok
+        ? 'Návrh odmítnut — mazání dál jen po společném schválení'
+        : (res && res.zprava) || 'Žádný návrh nečekal', { icon: 'ph-shield-check' }));
+    };
+    return {
+      acOpen: true, acShowA: true, acShowB: false, acShowC: false, acCancelOn: true, acInfoOn: false, acInfo: '',
+      acTitle: 'Mazat fotky bez schválení druhého?',
+      acBody: kdo + ' navrhuje, aby každý z vás mazal fotky sám — „Do koše" by pak fotku rovnou vyhodilo, bez souhlasu druhého. '
+        + 'Platit to začne, až to potvrdíte ' + (maKod ? 'svým kódem zámku.' : 'heslem do galerie.')
+        + ' Ke společnému schvalování se jde vrátit kdykoli a platí to hned.',
+      acLabelA: maKod ? 'Kód zámku' : 'Heslo do galerie', acTypeA: 'password', acAutoA: maKod ? 'off' : 'current-password',
+      acLabelB: '', acTypeB: 'text', acAutoB: 'off', acLabelC: '', acAutoC: 'off',
+      acA: d.a || '', acB: '', acC: '',
+      acSetA: e => set({ a: maKod ? e.target.value.replace(/\D/g, '').slice(0, delka) : e.target.value }), acSetB: () => {}, acSetC: () => {},
+      acKey: e => { if (e.key === 'Enter') save(); if (e.key === 'Escape') this.setState({ acDlg: null }); },
+      acHasErr: !!d.err, acErr: d.err || '',
+      acCta: d.busy ? 'Ověřuji…' : 'Potvrdit změnu',
+      acAltOn: true, acAltLabel: 'Odmítnout návrh', acAlt: odmitnout,
+      acClose: () => this.setState({ acDlg: null }),
+      acSave: save
+    };
   }
   pinVals() {
     const s = this.state;
@@ -34836,7 +35194,7 @@ class Component extends DCLogic {
           const keys = Object.keys(RECIPES), prev = this.menuOf(), DAYS = ['Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota', 'Neděle'];
           const next = {};
           [0, 2, 4, 6].forEach((di, i) => { next[DAYS[di]] = keys[(i + Math.floor(Math.random() * keys.length)) % keys.length]; });
-          this.nastavMenu({ ckMenu: next, appTab: 2 });
+          this.nastavMenu({ ckMenu: next, appTab: 2 }, true);
           this.toast('Menu na týden vygenerováno ze čtyř receptů', { icon: 'ph-magic-wand', undo: () => this.nastavMenu({ ckMenu: prev }) });
           return;
         }
@@ -36211,6 +36569,7 @@ class Component extends DCLogic {
         } })
       })),
       trashEmpty: trashRows.length === 0,
+      ...(R === 'trash' ? this.keSchvaleniVals() : { kschHas: false }),
       // Počet v otázce je skutečný. „Trvale se odstraní 4 položky" stálo
       // v dialogu napevno, i když v koši byla jedna nebo žádná.
       confirmEmptyTrash: () => this.setState({ confirm: {
@@ -36583,6 +36942,7 @@ class Component extends DCLogic {
        * bez obsluhy. Teď se položka opravdu označí a vrácení jde toutéž cestou
        * jako z obrazovky koše.
        */
+      lbTrashTitle: this.muzuMazatSam() ? 'Přesunout do koše' : 'Navrhnout smazání — smaže se, až to potvrdí i druhý z vás',
       trashCurrent: () => {
         const api = window.GalerieApi;
         const id = cur && cur.id;
@@ -36593,18 +36953,64 @@ class Component extends DCLogic {
           return;
         }
 
-        api.del('media/' + id).then(() => {
-          this.odeberZKnihovny(id);
-          this.toast('Fotka přesunuta do koše · 30 dní na vrácení', {
-            icon: 'ph-trash',
-            undo: () => api.post('kos/vratit', { id: id }).then(res => {
-              if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
-              if (window.GalerieAdminObnov) window.GalerieAdminObnov();
-              this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
-            }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }))
+        /*
+         * Ve dvojici, která maže jen po společném schválení, server fotku
+         * jen navrhne (`proposed`) — nebo ji navrhl už dřív (`uz_navrzeno`).
+         * Z knihovny se pak neodebírá a „Zpět" návrh stáhne; z koše vracet
+         * není co. Starší server bez `status` vyhazoval vždycky.
+         */
+        api.del('media/' + id).then(res => {
+          const stav = (res && res.status) || 'trashed';
+          if (window.GalerieObnovit) window.GalerieObnovit('system');
+          if (stav === 'trashed') {
+            this.odeberZKnihovny(id);
+            this.toast((res && res.zprava) || 'Fotka přesunuta do koše · 30 dní na vrácení', {
+              icon: 'ph-trash',
+              undo: () => api.post('kos/vratit', { id: id }).then(res2 => {
+                if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
+                if (window.GalerieAdminObnov) window.GalerieAdminObnov();
+                if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+                this.toast('Vráceno z koše', { icon: 'ph-arrow-counter-clockwise' });
+              }).catch(() => this.toast('Vrácení se nepodařilo', { icon: 'ph-warning', color: 'var(--g-mag)' }))
+            });
+            return;
+          }
+          const novy = stav === 'proposed';
+          if (novy) this.oznacNavrh([id], { kdo: this.meWho(), ja: true, kdy: 'právě teď' });
+          if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+          this.toast((res && res.zprava) || (novy ? 'Navrženo ke smazání · ' + this.cekaNaPotvrzeni() : 'Návrh už čeká · ' + this.cekaNaPotvrzeni()), {
+            icon: 'ph-hourglass',
+            // Dřívější návrh tímhle kliknutím nevznikl — není co vracet.
+            undo: novy ? () => api.post('kos/ponechat', { ids: [id] }).then(res2 => {
+              if (res2 && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res2.data, res2.prazdne);
+              this.oznacNavrh([id], null);
+              if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+              this.toast((res2 && res2.zprava) || 'Návrh stažen', { icon: 'ph-arrow-counter-clockwise' });
+            }).catch(() => this.toast('Návrh se nepodařilo stáhnout', { icon: 'ph-warning', color: 'var(--g-mag)' })) : undefined
           });
-        }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
+        }).catch(e => this.toast(((e && e.body) || {}).message || 'Přesun do koše se nepodařil', { icon: 'ph-warning', color: 'var(--g-mag)' }));
       },
+      /*
+       * Návrh ke smazání u otevřené fotky.
+       *
+       * Druhý z dvojice ho tu schválí (fotka jde do koše) nebo odmítne
+       * (zůstane); kdo ho podal, ho jen stáhne — vlastní návrh schválit nejde.
+       */
+      ...(() => {
+        const n = cur && cur.navrhSmazat;
+        if (!n) return { lbNavrhOn: false };
+        const id = cur.id;
+        const zavrit = () => this.setState({ lb: null });
+        return {
+          lbNavrhOn: true,
+          lbNavrhJa: !!n.ja, lbNavrhCizi: !n.ja,
+          lbNavrhText: n.ja
+            ? 'Navrhli jste smazat · ' + this.cekaNaPotvrzeni()
+            : (n.kdo || 'Druhý z vás') + ' navrhuje smazat' + (n.kdy ? ' · ' + n.kdy : ''),
+          lbNavrhSmazat: () => { zavrit(); this.kosVolej('schvalit', { ids: [id] }); },
+          lbNavrhPonechat: () => this.kosVolej('ponechat', { ids: [id] })
+        };
+      })(),
       lbDownload: () => this.stahniOriginal(cur && cur.id),
       current: cur ? {
         // Kolikátá z kolika: druhé číslo bylo napevno 24 316 bez ohledu na to,

@@ -6140,6 +6140,22 @@
     "Zamknout": [
       "ph-lock-simple",
       "lock-now"
+    ],
+    "Navrhnout mazání bez schválení": [
+      "ph-users",
+      "mazani-navrh"
+    ],
+    "Potvrdit změnu": [
+      "ph-check",
+      "mazani-potvrdit"
+    ],
+    "Zrušit návrh": [
+      "ph-x",
+      "mazani-zrusit"
+    ],
+    "Vrátit společné schvalování": [
+      "ph-shield-check",
+      "mazani-spolecne"
     ]
   },
   "MSGS": [
