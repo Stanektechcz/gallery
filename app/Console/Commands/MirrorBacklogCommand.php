@@ -50,8 +50,19 @@ class MirrorBacklogCommand extends Command
                 ->where('gallery_space_id', $space->id)
                 ->where('status', 'ready')
                 ->whereNull('trashed_at')
-                ->whereDoesntHave('variants', fn ($query) => $query->where('disk', $connection->provider))
+                // Google Drive keeps its copy in `drive_file_id`, not as a variant on its
+                // disk, so the variant test matched every photo already on the Drive and
+                // the limit was spent on them night after night. An upload still running
+                // is left alone as well — another initiation is another remote file.
+                ->when(
+                    $connection->provider === 'google_drive',
+                    fn ($query) => $query->bezKopieNaDisku(),
+                    fn ($query) => $query->whereDoesntHave('variants', fn ($variants) => $variants->where('disk', $connection->provider)),
+                )
                 ->whereHas('variants', fn ($query) => $query->where('type', 'original'))
+                // A stable order, so a limited run works through the backlog rather than
+                // picking whatever the database happens to return first.
+                ->orderBy('id')
                 ->limit($limit)
                 ->pluck('id');
 

@@ -57,6 +57,13 @@ class MirrorMediaToCloud implements ShouldQueue
             return;
         }
 
+        // Checked again here, not only when queued: the bin can happen while the job
+        // waits, and something in the bin is not a thing to push into somebody's cloud
+        // on their behalf (the nightly backlog skips it for the same reason).
+        if ($media->trashed_at !== null) {
+            return;
+        }
+
         $connection = $resolver->activeConnection($media->gallerySpace);
         if (! $connection) {
             return;
@@ -71,7 +78,7 @@ class MirrorMediaToCloud implements ShouldQueue
         // a pro Drive tiše nedělal nic. Kdo připojil Drive, žádnou zálohu nedostal a
         // nikde se to nedozvěděl.
         if ($connection->provider === 'google_drive') {
-            if (! $media->drive_file_id) {
+            if (! $media->drive_file_id && ! $media->nahravaNaDisk()) {
                 InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
             }
 

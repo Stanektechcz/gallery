@@ -5,9 +5,6 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
-use App\Jobs\Media\ExtractMediaMetadataJob;
-use App\Jobs\Media\GenerateImageVariantsJob;
-use App\Jobs\Media\GenerateVideoPosterJob;
 use App\Jobs\MirrorMediaToCloud;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
@@ -570,20 +567,20 @@ class MediaController extends Controller
      */
     private function dopocitej(MediaItem $media): void
     {
-        $ulohy = $media->media_type === 'video'
-            ? [GenerateVideoPosterJob::class, ExtractMediaMetadataJob::class, CalculateMediaHashesJob::class]
-            : [GenerateImageVariantsJob::class, ExtractMediaMetadataJob::class, CalculateMediaHashesJob::class];
-
-        foreach ($ulohy as $uloha) {
-            try {
-                $uloha::dispatch($media->id)->onQueue('media');
-            } catch (\Throwable $e) {
-                Log::warning('Doplňkové zpracování média se nepodařilo zařadit', [
-                    'media_id' => $media->id,
-                    'uloha' => $uloha,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+        /*
+         * Jeden řetěz, ne tři úlohy vedle sebe.
+         *
+         * Otisky zařadí metadata a metadata náhledy (u videa plakát). Zařazovat
+         * sem náhledy i metadata zvlášť znamenalo počítat náhledy dvakrát
+         * — a dvakrát z nich startovat nahrávání na Disk.
+         */
+        try {
+            CalculateMediaHashesJob::dispatch($media->id)->onQueue('media');
+        } catch (\Throwable $e) {
+            Log::warning('Doplňkové zpracování média se nepodařilo zařadit', [
+                'media_id' => $media->id,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         /*
@@ -598,6 +595,11 @@ class MediaController extends Controller
          * `sync` běží úloha přímo v požadavku a výpadek Disku nesmí shodit
          * nahrání, které už je v bezpečí. Když prostor žádné napojení nemá,
          * úloha skončí sama (`activeConnection` vrátí nic).
+         *
+         * Nahrávání na Disk zařadí i konec řetězu náhledů (kvůli připojením
+         * bez `gallery_space_id`, která najde jen DriveConnectionResolver);
+         * že z toho na Disku nevzniknou dvě kopie, hlídá sama
+         * InitiateDriveResumableUploadJob.
          */
         try {
             MirrorMediaToCloud::dispatch($media->id);

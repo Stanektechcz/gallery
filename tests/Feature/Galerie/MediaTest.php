@@ -73,14 +73,20 @@ class MediaTest extends TestCase
         Storage::disk('public')->assertExists($originál->path);
     }
 
-    /** Náhledy a metadata patří do fronty — nahrávání má skončit hned. */
+    /**
+     * Náhledy a metadata patří do fronty — nahrávání má skončit hned.
+     *
+     * Zařadí se jen začátek řetězu (otisky → metadata → náhledy); náhledy
+     * a metadata zvlášť vedle něj znamenaly počítat náhledy dvakrát. Že řetěz
+     * doběhne, hlídá ZpracovaniNahravkyTest.
+     */
     public function test_nahrani_zaradi_dopocitani_do_fronty(): void
     {
         $this->post('/api/media', ['file' => $this->fotka('vylet.jpg')])->assertCreated();
 
-        Queue::assertPushed(GenerateImageVariantsJob::class);
-        Queue::assertPushed(ExtractMediaMetadataJob::class);
-        Queue::assertPushed(CalculateMediaHashesJob::class);
+        Queue::assertPushedOn('media', CalculateMediaHashesJob::class);
+        Queue::assertNotPushed(GenerateImageVariantsJob::class);
+        Queue::assertNotPushed(ExtractMediaMetadataJob::class);
     }
 
     /**

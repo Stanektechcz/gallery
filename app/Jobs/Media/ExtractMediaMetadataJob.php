@@ -2,8 +2,8 @@
 
 namespace App\Jobs\Media;
 
+use App\Jobs\Media\Concerns\NajdeZdrojMedia;
 use App\Models\MediaItem;
-use App\Models\UploadSession;
 use App\Services\Media\ExifExtractionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -12,9 +12,17 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Druhý krok zpracování (viz CalculateMediaHashesJob): EXIF, pak náhledy.
+ *
+ * Datum pořízení z EXIFu přepíše `taken_at`, které přišlo z prohlížeče —
+ * to je jen čas poslední změny souboru. Úloha běží hned po nahrání, zpravidla
+ * dřív, než by datum mohl kdokoli upravit ručně; příznak „datum zadal člověk"
+ * knihovna nemá, takže ruční úpravu z té krátké chvíle by EXIF přepsal.
+ */
 class ExtractMediaMetadataJob implements ShouldQueue
 {
-    use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
+    use Dispatchable, InteractsWithQueue, NajdeZdrojMedia, Queueable, SerializesModels;
 
     public int $tries = 3;
 
@@ -29,10 +37,9 @@ class ExtractMediaMetadataJob implements ShouldQueue
             return;
         }
 
-        $session = UploadSession::where('resulting_media_id', $media->id)->first();
-        $path = $session?->assembled_path;
+        $path = $this->zdrojovySoubor($media);
 
-        if (! $path || ! file_exists($path)) {
+        if (! $path) {
             Log::warning("File not found for EXIF extraction, media #{$media->id}");
             if ($media->media_type === 'video') {
                 GenerateVideoPosterJob::dispatch($media->id)->onQueue('media');

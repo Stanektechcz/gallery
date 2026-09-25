@@ -25,7 +25,10 @@ class EnqueueDriveMediaSyncJob implements ShouldQueue
         MediaItem::query()
             ->where('gallery_space_id', $this->gallerySpaceId)
             ->whereNull('trashed_at')
-            ->whereNull('drive_file_id')
+            // Bez kopie na Disku a bez rozběhnutého nahrávání — „Zkusit znovu"
+            // zmáčknuté během nahrávání by jinak založilo na Disku druhý soubor.
+            // Zaseknuté nahrávání (viz MediaItem) se znovu zkusit smí.
+            ->bezKopieNaDisku()
             ->orderBy('id')
             ->select('id')
             ->lazyById(100)

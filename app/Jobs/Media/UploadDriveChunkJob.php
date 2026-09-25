@@ -112,6 +112,9 @@ class UploadDriveChunkJob implements ShouldQueue
                  * identifikátory, jak čeká zděděný `Dispatchable`.
                  */
                 $session?->update(['drive_uploaded_bytes' => $endByte + 1]);
+                // Známka života: podle `updated_at` se pozná zaseknuté
+                // nahrávání (viz MediaItem::nahravaNaDisk) od dlouhého videa.
+                $media->touch();
                 static::dispatch(
                     $media->id, $session?->id, $this->driveSessionUri, $endByte + 1, $this->totalSize
                 )->onQueue('drive');

@@ -7,6 +7,7 @@ use App\Models\UploadSession;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -14,7 +15,19 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
-class InitiateDriveResumableUploadJob implements ShouldQueue
+/**
+ * Založí na Google Disku obnovitelné nahrávání originálu.
+ *
+ * Zařazuje ji víc míst naráz — konec řetězu náhledů, MirrorMediaToCloud,
+ * starší UploadController, noční dorovnání i „Zkusit znovu" — a všechna
+ * ve chvíli, kdy `drive_file_id` ještě nikde není. Každé zařazení tak dřív
+ * založilo na Disku vlastní soubor a koš (MediaPurger) pak smazal jen jeden.
+ *
+ * Proto dvě pojistky: jedinečnost ve frontě podle média (druhé zařazení,
+ * dokud první čeká nebo běží, se zahodí) a stav `uploading` pro pozdější
+ * opakování, které už zámek nechytí.
+ */
+class InitiateDriveResumableUploadJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -24,10 +37,27 @@ class InitiateDriveResumableUploadJob implements ShouldQueue
 
     public function __construct(private readonly int $mediaItemId) {}
 
+    public function uniqueId(): string
+    {
+        return (string) $this->mediaItemId;
+    }
+
+    /** Pojistka pro pracovníka, který umřel se zámkem v ruce. */
+    public function uniqueFor(): int
+    {
+        return MediaItem::NAHRAVANI_NA_DISK_ZASEKNUTE_PO_HODINACH * 3600;
+    }
+
     public function handle(): void
     {
         $media = MediaItem::find($this->mediaItemId);
         if (! $media) {
+            return;
+        }
+
+        // Do koše mohla fotka odejít, zatímco čekala ve frontě. Kopii na cizí
+        // úložiště za člověka neposíláme — noční dorovnání koš vynechává taky.
+        if ($media->trashed_at !== null) {
             return;
         }
 
@@ -38,6 +68,12 @@ class InitiateDriveResumableUploadJob implements ShouldQueue
                 $media->update(['storage_status' => 'synced']);
             }
 
+            return;
+        }
+
+        // Nahrávání už běží z dřívějšího zařazení. Vlastní opakování (druhý
+        // pokus po výjimce) projde: stav `uploading` mohl nastavit on sám.
+        if ($this->attempts() <= 1 && $media->nahravaNaDisk()) {
             return;
         }
 

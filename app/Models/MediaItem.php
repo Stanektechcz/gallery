@@ -204,6 +204,38 @@ class MediaItem extends Model
         return $query->where('status', 'ready');
     }
 
+    /**
+     * Za jak dlouho se `uploading` bez pohybu bere jako zaseknuté.
+     *
+     * Každá odeslaná část souboru řádek osvěží (viz UploadDriveChunkJob), takže
+     * i dlouhé video se sem nedostane, dokud se nahrává. Tohle je nahrávání,
+     * kterému umřel pracovník nebo došly pokusy — to se znovu zkusit smí.
+     */
+    public const NAHRAVANI_NA_DISK_ZASEKNUTE_PO_HODINACH = 6;
+
+    /**
+     * Originály, které na Google Disku ještě nejsou a ani se tam právě nenahrávají.
+     *
+     * Disk si kopii nepamatuje variantou (`disk = google_drive`), ale sloupcem
+     * `drive_file_id`. Rozběhnuté nahrávání se přeskočí, jinak by noční
+     * dorovnání nebo „Zkusit znovu" založilo na Disku druhý soubor.
+     */
+    public function scopeBezKopieNaDisku($query)
+    {
+        return $query->whereNull('drive_file_id')
+            ->where(fn ($q) => $q->whereNull('storage_status')
+                ->orWhere('storage_status', '!=', 'uploading')
+                ->orWhere('updated_at', '<', now()->subHours(self::NAHRAVANI_NA_DISK_ZASEKNUTE_PO_HODINACH)));
+    }
+
+    /** Nahrávání na Disk právě běží (a není zaseknuté). */
+    public function nahravaNaDisk(): bool
+    {
+        return $this->storage_status === 'uploading'
+            && $this->updated_at !== null
+            && $this->updated_at->gt(now()->subHours(self::NAHRAVANI_NA_DISK_ZASEKNUTE_PO_HODINACH));
+    }
+
     // Relations
     public function gallerySpace()
     {
