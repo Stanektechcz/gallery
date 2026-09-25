@@ -21150,7 +21150,8 @@ class Component extends DCLogic {
         if (!jmeno) { this.toast('Napište, o jakou práci jde', { icon: 'ph-pencil-simple' }); return; }
         const prev = klTasks;
         this.setState({
-          klTasks: klTasks.concat([{ id: 0, name: jmeno, need: s.klTaskNeed === undefined ? 2 : s.klTaskNeed, route: null, tab: null, label: '' }]),
+          // Vlastní klíč místo 0: server podle něj pozná opakovaně poslanou novou věc a nezaloží ji podruhé.
+          klTasks: klTasks.concat([{ id: 'k' + Date.now(), name: jmeno, need: s.klTaskNeed === undefined ? 2 : s.klTaskNeed, route: null, tab: null, label: '' }]),
           klTaskDraft: ''
         });
         this.toast('„' + jmeno + '“ čeká na okno', { icon: 'ph-hourglass-medium', undo: () => this.setState({ klTasks: prev }) });

@@ -289,6 +289,71 @@ class KlidVeStavuTest extends TestCase
         $this->assertSame(0, DB::table('wellbeing_tasks')->whereNull('done_at')->count());
     }
 
+    /**
+     * Znovu poslaná nová věc se nezaloží podruhé.
+     *
+     * Nová věc měla `id: 0` a každá nula se založila — seznam poslaný
+     * podruhé (úprava během rozjetého zápisu, opakování po chybě) přidal
+     * „Zavolat na úřad" dvakrát. Obrazovka teď posílá vlastní klíč.
+     */
+    public function test_znovu_poslana_nova_vec_se_nezalozi_podruhe(): void
+    {
+        $ukol = ['id' => 'k1757000000000', 'name' => 'Zavolat na úřad', 'need' => 1];
+
+        $this->stav(['klTasks' => [$ukol]])->assertOk();
+        $odpoved = $this->stav(['klTasks' => [$ukol]])->assertOk();
+
+        $this->assertSame(1, DB::table('wellbeing_tasks')->count());
+        $this->assertSame('k1757000000000', DB::table('wellbeing_tasks')->value('client_id'));
+        $this->assertIsInt($odpoved->json('data.klTasks.0.id'), 'Obrazovka dostane zpátky číslo řádku.');
+        $this->assertNull(DB::table('wellbeing_tasks')->value('done_at'));
+    }
+
+    /** Starší obrazovka posílá u nové věci pořád `0` — a ta se zakládá jako dřív. */
+    public function test_starsi_obrazovka_s_nulou_dal_zaklada(): void
+    {
+        $this->stav(['klTasks' => [['id' => 0, 'name' => 'Vyklidit sklep', 'need' => 1]]])->assertOk();
+        $id = (int) DB::table('wellbeing_tasks')->value('id');
+
+        $this->stav(['klTasks' => [
+            ['id' => $id, 'name' => 'Vyklidit sklep', 'need' => 1],
+            ['id' => 0, 'name' => 'Zavolat na úřad', 'need' => 1],
+        ]])->assertOk();
+
+        $this->assertSame(2, DB::table('wellbeing_tasks')->whereNull('done_at')->count());
+        $this->assertNull(DB::table('wellbeing_tasks')->where('name', 'Zavolat na úřad')->value('client_id'));
+    }
+
+    /** Věc odškrtnutá dřív, než obrazovka dostala její číslo, je hotová. */
+    public function test_nova_vec_odskrtnuta_pred_cislem_je_hotova(): void
+    {
+        $this->stav(['klTasks' => [['id' => 'k1757000000000', 'name' => 'Zavolat na úřad', 'need' => 1]]])->assertOk();
+
+        $this->stav(['klTasks' => [], '__odebrane' => ['klTasks' => ['k1757000000000']]])->assertOk();
+
+        $this->assertNotNull(DB::table('wellbeing_tasks')->value('done_at'));
+
+        // A starší opis s tímtéž klíčem ji do čekání nevrátí.
+        $this->stav(['klTasks' => [['id' => 'k1757000000000', 'name' => 'Zavolat na úřad', 'need' => 1]], '__odebrane' => ['klTasks' => []]])->assertOk();
+
+        $this->assertSame(1, DB::table('wellbeing_tasks')->count());
+        $this->assertSame(0, DB::table('wellbeing_tasks')->whereNull('done_at')->count());
+    }
+
+    /** Starý klíč v odebraných neodškrtne věc, která v seznamu je pod číslem. */
+    public function test_stary_klic_v_odebranych_neodskrtne_vec_s_cislem(): void
+    {
+        $this->stav(['klTasks' => [['id' => 'k1757000000000', 'name' => 'Zavolat na úřad', 'need' => 1]]])->assertOk();
+        $id = (int) DB::table('wellbeing_tasks')->value('id');
+
+        $this->stav([
+            'klTasks' => [['id' => $id, 'name' => 'Zavolat na úřad', 'need' => 1]],
+            '__odebrane' => ['klTasks' => ['k1757000000000']],
+        ])->assertOk();
+
+        $this->assertNull(DB::table('wellbeing_tasks')->value('done_at'));
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

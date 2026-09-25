@@ -2,6 +2,8 @@
 
 namespace App\Services\Provoz;
 
+use App\Support\Vejde;
+
 /**
  * Co prohlížeč ze seznamu výslovně odebral.
  *
@@ -38,8 +40,14 @@ final class OdebraneVStavu
             return [];
         }
 
+        /*
+         * Zkracuje se na šířku `client_id` (64), ne na 80: řádek se ukládá
+         * se zkráceným klíčem a odebraný identifikátor delší než 64 znaků by
+         * se s ním nikdy neshodl — řádek by nešel odebrat. Uuid (36) i
+         * `films-<uuid>` se vejdou beze změny.
+         */
         return array_values(array_filter(
-            array_map(fn ($id) => is_scalar($id) ? mb_substr((string) $id, 0, 80) : '', array_slice($seznam, 0, 2000)),
+            array_map(fn ($id) => is_scalar($id) ? Vejde::do($id, Vejde::KLIENT) : '', array_slice($seznam, 0, 2000)),
             fn (string $id) => $id !== '',
         ));
     }

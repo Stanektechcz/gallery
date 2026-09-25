@@ -337,6 +337,83 @@ class DarkyVeStavuTest extends TestCase
         $this->assertSame($this->adri->id, (int) $radek->private_to_user_id);
     }
 
+    /**
+     * Znovu poslané nové přání se nezaloží podruhé.
+     *
+     * Identifikátor z obrazovky (`w1757…`) se nikam neukládal, takže seznam
+     * poslaný podruhé — druhá úprava během rozjetého zápisu, opakování po
+     * chybě — přidal totéž přání znovu.
+     */
+    public function test_znovu_poslane_nove_prani_se_nezalozi_podruhe(): void
+    {
+        $prani = ['id' => 'w1757000000000', 'title' => 'Kolo', 'who' => 'Makinka'];
+
+        // Jako skutečná obrazovka: s rozdílem, takže se nic „chybějícího" nemaže.
+        $this->stav(['wishes' => [$prani], '__odebrane' => ['wishes' => []]])->assertOk();
+        $this->stav(['wishes' => [$prani], '__odebrane' => ['wishes' => []]])->assertOk();
+
+        $this->assertSame(1, DB::table('gift_ideas')->count());
+        $this->assertSame('w1757000000000', DB::table('gift_ideas')->value('client_id'));
+        $this->assertTrue(Str::isUuid((string) DB::table('gift_ideas')->value('uuid')), 'Uuid vydává dál server.');
+    }
+
+    /** Úprava přání, které ještě nemá uuid, mění tentýž řádek. */
+    public function test_uprava_noveho_prani_pred_uuid_meni_stejny_radek(): void
+    {
+        $this->stav(['wishes' => [['id' => 'w1757000000000', 'title' => 'Kolo', 'who' => 'Makinka']]])->assertOk();
+
+        $this->stav([
+            'wishes' => [['id' => 'w1757000000000', 'title' => 'Horské kolo', 'who' => 'Makinka']],
+            '__odebrane' => ['wishes' => []],
+            '__zmenene' => ['wishes' => ['w1757000000000']],
+        ])->assertOk();
+
+        $this->assertSame(1, DB::table('gift_ideas')->count());
+        $this->assertSame('Horské kolo', DB::table('gift_ideas')->value('title'));
+    }
+
+    /** Nový chystaný dárek poslaný znovu zůstane jeden — a soukromý. */
+    public function test_znovu_poslany_nakup_se_nezalozi_podruhe(): void
+    {
+        $nakup = ['id' => 'b1757000000009', 'owner' => 'Adrian', 'what' => 'Hodinky', 'price' => 900, 'status' => 'reserved'];
+
+        $this->stav(['buys' => [$nakup], '__odebrane' => ['buys' => []]])->assertOk();
+        $this->stav(['buys' => [$nakup], '__odebrane' => ['buys' => []]])->assertOk();
+
+        $this->assertSame(1, DB::table('gift_ideas')->count());
+        $this->assertSame($this->adri->id, (int) DB::table('gift_ideas')->value('private_to_user_id'));
+    }
+
+    /** Přání smazané dřív, než obrazovka dostala jeho uuid, zmizí i z tabulky. */
+    public function test_prani_odebrane_pred_uuid_se_smaze(): void
+    {
+        $this->stav(['wishes' => [['id' => 'w1757000000000', 'title' => 'Kolo', 'who' => 'Makinka']]])->assertOk();
+
+        $this->stav(['wishes' => [], '__odebrane' => ['wishes' => ['w1757000000000']]])->assertOk();
+
+        $this->assertSame(0, DB::table('gift_ideas')->count());
+    }
+
+    /**
+     * Starý klíč v odebraných nesmaže přání, které v seznamu je pod uuid.
+     *
+     * Prohlížeč si pamatuje všechno, co v seznamu kdy bylo — i `w1757…`,
+     * které odpověď serveru nahradila uuid. V dalších odebraných pak visí.
+     */
+    public function test_stary_klic_v_odebranych_nesmaze_prani_s_uuid(): void
+    {
+        $this->stav(['wishes' => [['id' => 'w1757000000000', 'title' => 'Kolo', 'who' => 'Makinka']]])->assertOk();
+        $uuid = (string) DB::table('gift_ideas')->value('uuid');
+
+        $this->stav([
+            'wishes' => [['id' => $uuid, 'title' => 'Kolo', 'who' => 'Makinka']],
+            '__odebrane' => ['wishes' => ['w1757000000000']],
+            '__zmenene' => ['wishes' => []],
+        ])->assertOk();
+
+        $this->assertSame(1, DB::table('gift_ideas')->count());
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

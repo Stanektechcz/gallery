@@ -58,6 +58,10 @@ class DarkyVeStavu
             return [];
         }
 
+        // Identifikátor z prohlížeče se ukládá zkrácený na šířku `client_id`;
+        // hledat a odebírat se musí podle stejně zkráceného (viz Vejde).
+        $patch = Vejde::identifikatory($patch, self::SERVEROVE);
+
         /*
          * Jméno → člověk jen ze dvojice.
          *
@@ -135,6 +139,16 @@ class DarkyVeStavu
         $maSoukromi = Tabulky::sloupec('gift_ideas', 'private_to_user_id');
 
         /*
+         * Nový řádek z obrazovky (`w1757…`) se pozná podle `client_id`.
+         *
+         * Dřív se ten identifikátor nikam neukládal, takže každé další
+         * odeslání téhož seznamu — druhá úprava během rozjetého zápisu,
+         * opakování po chybě — založilo přání znovu. Uuid ze serveru se
+         * hledá jen v `uuid`, vlastní klíč prohlížeče jen v `client_id`.
+         */
+        $podleKlienta = $idKlienta !== '' && ! Str::isUuid($idKlienta) && Tabulky::sloupec('gift_ideas', 'client_id');
+
+        /*
          * Jen řádek, který ten člověk smí vidět (stejně jako `Darky::polozky()`).
          *
          * Uuid cizího schovaného dárku poslané v seznamu by jinak řádek našlo
@@ -142,7 +156,7 @@ class DarkyVeStavu
          */
         $existujici = $idKlienta === '' ? null : DB::table('gift_ideas')
             ->where('gallery_space_id', $prostor->id)
-            ->where('uuid', $idKlienta)
+            ->where($podleKlienta ? 'client_id' : 'uuid', $idKlienta)
             ->when($maSoukromi, fn ($q) => $q->where(
                 fn ($v) => $v->whereNull('private_to_user_id')->orWhere('private_to_user_id', $uzivatel->id),
             ))
@@ -197,13 +211,37 @@ class DarkyVeStavu
             return (int) $existujici->id;
         }
 
-        return (int) DB::table('gift_ideas')->insertGetId($radek + [
+        return (int) DB::table('gift_ideas')->insertGetId($radek + $this->klicKlienta($podleKlienta ? $idKlienta : null, $prostor) + [
             'uuid' => (string) Str::uuid(),
             'gallery_space_id' => $prostor->id,
             'created_by' => $autor,
             'currency' => 'CZK',
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * `client_id` pro nový řádek — jen když ho v prostoru nemá nic jiného.
+     *
+     * Hledá se jen mezi tím, co ten člověk vidí; schovaný dárek toho druhého
+     * se stejným klíčem (dvě kliknutí v téže milisekundě) by jinak narazil
+     * na unikátní klíč a shodil celý zápis. Takový řádek se založí bez
+     * klíče — opakované odeslání ho pak sice nepozná, ale nic se neztratí.
+     *
+     * @return array<string, string>
+     */
+    private function klicKlienta(?string $idKlienta, GallerySpace $prostor): array
+    {
+        if ($idKlienta === null) {
+            return [];
+        }
+
+        $obsazeny = DB::table('gift_ideas')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('client_id', $idKlienta)
+            ->exists();
+
+        return $obsazeny ? [] : ['client_id' => $idKlienta];
     }
 
     /**
@@ -280,7 +318,14 @@ class DarkyVeStavu
                 ),
             )
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
-            ->when($odebrane !== null, fn ($q) => $q->whereIn('uuid', $odebrane ?: ['']))
+            /*
+             * Odebrané i podle vlastního klíče: přání smazané dřív, než
+             * obrazovka dostala jeho uuid, jinak zůstalo. Klíč ze starší
+             * relace, který v odebraných visí dál, nevadí — řádek, který
+             * v seznamu je, drží `$zustavaji`.
+             */
+            ->when($odebrane !== null, fn ($q) => $q->where(fn ($v) => $v->whereIn('uuid', $odebrane ?: [''])
+                ->when(Tabulky::sloupec('gift_ideas', 'client_id'), fn ($k) => $k->orWhereIn('client_id', $odebrane ?: ['']))))
             ->delete();
     }
 

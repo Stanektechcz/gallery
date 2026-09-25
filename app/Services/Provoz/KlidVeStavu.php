@@ -72,6 +72,8 @@ class KlidVeStavu
         }
 
         if (is_array($patch['klTasks'] ?? null)) {
+            // Klíč nové věci (`k1757…`) se ukládá zkrácený na šířku `client_id`.
+            $patch = Vejde::identifikatory($patch, ['klTasks']);
             $this->cekaNaOkno($patch['klTasks'], $prostor, OdebraneVStavu::pro($patch, 'klTasks'), OdebraneVStavu::zmenene($patch, 'klTasks'));
         }
 
@@ -113,6 +115,7 @@ class KlidVeStavu
             ->whereNull('done_at')
             ->pluck('id');
 
+        $maKlic = Tabulky::sloupec('wellbeing_tasks', 'client_id');
         $zustavaji = [];
 
         foreach (array_values($ukoly) as $poradi => $u) {
@@ -133,7 +136,41 @@ class KlidVeStavu
                 'updated_at' => now(),
             ];
 
-            $id = (int) ($u['id'] ?? 0);
+            /*
+             * Nová věc nese vlastní klíč z obrazovky (`k1757…`).
+             *
+             * Dřív měla `0` a každé `0` se založilo: seznam poslaný znovu
+             * (druhá úprava během rozjetého zápisu, opakování po chybě)
+             * přidal „Zavolat na úřad" podruhé. Číslo je řádek ze serveru;
+             * starší obrazovka posílá u nové věci pořád `0` a zakládá se
+             * jako dřív.
+             */
+            $surove = is_scalar($u['id'] ?? null) ? (string) $u['id'] : '';
+            $klic = $maKlic && $surove !== '' && ! ctype_digit($surove) ? $surove : null;
+            $id = $klic === null ? (int) $surove : 0;
+
+            if ($klic !== null) {
+                $podleKlice = DB::table('wellbeing_tasks')
+                    ->where('gallery_space_id', $prostor->id)
+                    ->where('client_id', $klic)
+                    ->first(['id', 'done_at']);
+
+                // Už je hotová: starší opis ji nevrací do čekání (viz níž u čísla).
+                if ($podleKlice !== null && $podleKlice->done_at !== null) {
+                    continue;
+                }
+
+                if ($podleKlice !== null) {
+                    $id = (int) $podleKlice->id;
+
+                    if (OdebraneVStavu::zmeneno($zmenene, $klic, $id)) {
+                        DB::table('wellbeing_tasks')->where('id', $id)->update($radek);
+                    }
+                    $zustavaji[] = $id;
+
+                    continue;
+                }
+            }
 
             if ($id > 0 && $znamé->contains($id)) {
                 if (OdebraneVStavu::zmeneno($zmenene, $id)) {
@@ -147,13 +184,14 @@ class KlidVeStavu
             /*
              * Číslo vydal server a mezi čekajícími není: věc je hotová (nebo
              * patří jinému páru). Starší opis seznamu ji dřív založil znovu
-             * jako novou — odškrtnuté se vrátilo. Nová věc z obrazovky má `0`.
+             * jako novou — odškrtnuté se vrátilo. Nová věc z obrazovky má
+             * vlastní klíč (nebo `0` ze starší obrazovky).
              */
             if ($id > 0) {
                 continue;
             }
 
-            $zustavaji[] = DB::table('wellbeing_tasks')->insertGetId($radek + [
+            $zustavaji[] = DB::table('wellbeing_tasks')->insertGetId($radek + ($klic !== null ? ['client_id' => $klic] : []) + [
                 'gallery_space_id' => $prostor->id,
                 'created_at' => now(),
             ]);
@@ -175,9 +213,26 @@ class KlidVeStavu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('done_at')
             ->when($zustavaji !== [], fn ($q) => $q->whereNotIn('id', $zustavaji))
-            // Hotové je jen to, co prohlížeč sám odebral (viz OdebraneVStavu).
-            ->when($odebrane !== null, fn ($q) => $q->whereIn('id', array_map('intval', $odebrane) ?: [0]))
+            // Hotové je jen to, co prohlížeč sám odebral (viz OdebraneVStavu) —
+            // i nová věc odškrtnutá dřív, než obrazovka dostala její číslo.
+            // Řádek, který v seznamu je, drží `$zustavaji` i se starým klíčem v odebraných.
+            ->when($odebrane !== null, fn ($q) => $q->where(fn ($v) => $v->whereIn('id', $this->cisla($odebrane) ?: [0])
+                ->when($maKlic, fn ($k) => $k->orWhereIn('client_id', $odebrane ?: ['']))))
             ->update(['done_at' => CarbonImmutable::now(), 'updated_at' => now()]);
+    }
+
+    /**
+     * Čísla řádků z odebraných — bez klíčů obrazovky.
+     *
+     * `intval` by z klíče začínajícího číslicí (`5e3…`) udělal číslo
+     * cizího řádku a ten by se odškrtl.
+     *
+     * @param  list<string>  $odebrane
+     * @return list<int>
+     */
+    private function cisla(array $odebrane): array
+    {
+        return array_values(array_map('intval', array_filter($odebrane, 'ctype_digit')));
     }
 
     /**
