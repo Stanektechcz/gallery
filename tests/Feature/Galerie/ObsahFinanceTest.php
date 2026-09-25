@@ -9,6 +9,7 @@ use App\Models\Partner;
 use App\Models\Transaction;
 use App\Models\User;
 use App\Models\Wallet;
+use App\Support\Cas;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\Sanctum;
@@ -169,7 +170,7 @@ class ObsahFinanceTest extends TestCase
             'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
         ]);
         $potraviny = FinanceCategory::where('gallery_space_id', $this->prostor->id)->where('name', 'Potraviny')->sole();
-        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'category_id' => $potraviny->id, 'occurred_at' => now()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'category_id' => $potraviny->id, 'occurred_at' => Cas::dnes()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
 
         Transaction::create($zaklad + ['wallet_from_id' => $czk->id, 'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Doma v korunách']);
         Transaction::create($zaklad + ['wallet_from_id' => $eur->id, 'amount_from' => 20, 'currency_from' => 'EUR', 'description' => 'Lidl Regensburg']);
@@ -197,7 +198,7 @@ class ObsahFinanceTest extends TestCase
             'gallery_space_id' => $this->prostor->id, 'name' => 'Karta EUR',
             'kind' => 'bank', 'currency' => 'EUR', 'opening_balance' => 0, 'is_active' => true,
         ]);
-        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => now()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
+        $zaklad = ['gallery_space_id' => $this->prostor->id, 'type' => 'expense', 'occurred_at' => Cas::dnes()->toDateString(), 'state' => 'approved', 'created_by' => $this->adri->id];
 
         Transaction::create($zaklad + ['wallet_from_id' => $czk->id, 'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Doma v korunách']);
         Transaction::create($zaklad + ['wallet_from_id' => $eur->id, 'amount_from' => 20, 'currency_from' => 'EUR', 'description' => 'Lidl Regensburg']);
@@ -230,13 +231,13 @@ class ObsahFinanceTest extends TestCase
 
         Transaction::create([
             'gallery_space_id' => $this->prostor->id, 'type' => 'expense',
-            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $czkA->id,
+            'occurred_at' => Cas::dnes()->toDateString(), 'wallet_from_id' => $czkA->id,
             'amount_from' => 1500, 'currency_from' => 'CZK', 'description' => 'Nákup',
             'state' => 'approved', 'created_by' => $this->adri->id,
         ]);
         Transaction::create([
             'gallery_space_id' => $this->prostor->id, 'type' => 'transfer',
-            'occurred_at' => now()->toDateString(), 'wallet_from_id' => $czkA->id, 'wallet_to_id' => $czkB->id,
+            'occurred_at' => Cas::dnes()->toDateString(), 'wallet_from_id' => $czkA->id, 'wallet_to_id' => $czkB->id,
             'amount_from' => 500, 'currency_from' => 'CZK', 'amount_to' => 500, 'currency_to' => 'CZK',
             'description' => 'Na spoření', 'state' => 'approved', 'created_by' => $this->adri->id,
         ]);

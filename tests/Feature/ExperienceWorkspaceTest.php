@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\GallerySpace;
 use App\Models\SavedSearch;
 use App\Models\User;
+use App\Support\Cas;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -124,7 +125,9 @@ class ExperienceWorkspaceTest extends TestCase
 
     public function test_memory_engine_returns_on_this_day_and_accepts_feedback(): void
     {
-        $this->media(['taken_at' => now()->subYear()->setTime(12, 0), 'is_favorite' => true]);
+        // Den dvojice, ne den v UTC: `taken_at` jsou hodiny fotoaparátu a „tento
+        // den" se počítá podle pražského data (mezi půlnocí a druhou se liší).
+        $this->media(['taken_at' => Cas::dnes()->subYear()->setTime(12, 0)->format('Y-m-d H:i:s'), 'is_favorite' => true]);
 
         $response = $this->actingAs($this->owner)->getJson('/api/v1/memories')
             ->assertOk();
