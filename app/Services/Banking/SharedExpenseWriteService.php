@@ -30,7 +30,7 @@ class SharedExpenseWriteService
         $members = $this->settlements->members($space->id);
         $memberIds = $members->pluck('id')->all();
         $payerId = (int) ($attributes['paid_by_user_id'] ?? $actor->id);
-        abort_unless(in_array($payerId, $memberIds, true), 422, 'Plátce musí být členem společného prostoru.');
+        abort_unless(in_array($payerId, $memberIds, true), 422, 'Plátce musí být jeden z partnerů společného prostoru.');
 
         $tripId = ! empty($attributes['trip_id']) ? (int) $attributes['trip_id'] : null;
         if ($tripId) {
@@ -71,5 +71,30 @@ class SharedExpenseWriteService
         AuditLog::record('finance.shared_expense.create', null, ['gallery_space_id' => $space->id, 'expense_uuid' => $expense->uuid, 'trip_id' => $tripId, 'source' => $source]);
 
         return $expense;
+    }
+
+    /**
+     * Rozdělení výdaje po úpravě částky nebo způsobu dělení.
+     *
+     * Dřív úprava částky nechala staré podíly: součet s novou částkou
+     * nesouhlasil a vyrovnání pak potichu přešlo na rovný díl. Rovný díl se
+     * teď přepočítá, vlastní podíly se musí poslat znovu (jinak 422).
+     *
+     * @return array{split_mode: string, split: string}|array{}
+     */
+    public function updatedSplit(object $expense, array $data): array
+    {
+        $amountChanged = array_key_exists('amount', $data) && abs(round((float) $data['amount'], 2) - (float) $expense->amount) > 0.009;
+        if (! $amountChanged && ! array_key_exists('split_mode', $data) && ! array_key_exists('split', $data)) {
+            return [];
+        }
+        $amount = round((float) ($data['amount'] ?? $expense->amount), 2);
+        $splitMode = (string) ($data['split_mode'] ?? $expense->split_mode ?? 'equal');
+        abort_unless(in_array($splitMode, ['equal', 'custom', 'gift'], true), 422, 'Způsob rozdělení výdaje není platný.');
+        abort_if($splitMode === 'custom' && ! array_key_exists('split', $data), 422, 'U vlastního rozdělení pošlete i podíly partnerů, jejichž součet odpovídá částce.');
+        $memberIds = $this->settlements->members((int) $expense->gallery_space_id)->pluck('id')->all();
+
+        return ['split_mode' => $splitMode,
+            'split' => json_encode($this->settlements->shares($amount, $memberIds, $splitMode, (array) ($data['split'] ?? [])))];
     }
 }

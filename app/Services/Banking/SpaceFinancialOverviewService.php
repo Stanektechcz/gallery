@@ -86,18 +86,21 @@ class SpaceFinancialOverviewService
         $perPage = min(100, max(10, (int) ($filters['per_page'] ?? 40)));
         $total = $rows->count();
         $pageRows = $rows->slice(($page - 1) * $perPage, $perPage)->values();
+        // Vrácená nebo zamítnutá platba zůstane v seznamu (se stavem), ale do
+        // součtů nepatří — peníze z účtu neodešly. Dřív se počítala do výdajů.
+        $counted = $rows->reject(fn (BankTransaction $transaction) => $transaction->status === 'cancelled')->values();
 
         return [
             'available' => true,
             'period' => ['from' => $from->toDateString(), 'to' => $to->toDateString(), 'days' => $from->diffInDays($to) + 1],
             'accounts' => $accounts->map(fn (BankAccount $item) => $this->account($item))->values(),
-            'summary' => $this->summary($rows, $links),
-            'categories' => $this->categories($rows),
-            'cashflow' => $this->cashflow($rows),
-            'daily_cashflow' => $this->dailyCashflow($rows),
-            'top_merchants' => $this->merchants($rows),
+            'summary' => array_merge($this->summary($counted, $links), ['transaction_count' => $rows->count(), 'cancelled_count' => $rows->count() - $counted->count()]),
+            'categories' => $this->categories($counted),
+            'cashflow' => $this->cashflow($counted),
+            'daily_cashflow' => $this->dailyCashflow($counted),
+            'top_merchants' => $this->merchants($counted),
             'balance_series' => $this->balanceSeries($accounts, $from, $to, $account?->id),
-            'trips' => $this->tripSummaries($rows, $links),
+            'trips' => $this->tripSummaries($counted, $links),
             'events' => $this->linkedEvents($space, $links, $from, $to),
             'manual_expenses' => $this->manualExpenses($space, $from, $to),
             'members' => $this->sharedSettlements->members($space->id),

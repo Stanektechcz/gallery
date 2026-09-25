@@ -11,6 +11,14 @@ class BankConnection extends Model
         'requisition_id', 'agreement_id', 'oauth_state_hash', 'status', 'sync_enabled', 'consent_expires_at',
         'last_synced_at', 'last_success_at', 'last_error', 'encrypted_metadata', 'revoked_at'];
 
+    /**
+     * Identifikátory poskytovatele a interní stav nejdou do JSON.
+     *
+     * Odpověď synchronizace dřív serializovala celý model — id žádosti a
+     * souhlasu u GoCardless, otisk stavu OAuth i text chyby poskytovatele.
+     */
+    protected $hidden = ['requisition_id', 'agreement_id', 'oauth_state_hash', 'last_error', 'encrypted_metadata'];
+
     protected function casts(): array
     {
         return ['sync_enabled' => 'boolean', 'consent_expires_at' => 'datetime', 'last_synced_at' => 'datetime',

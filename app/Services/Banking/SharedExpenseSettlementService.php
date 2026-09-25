@@ -2,15 +2,33 @@
 
 namespace App\Services\Banking;
 
+use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 class SharedExpenseSettlementService
 {
+    public function __construct(private readonly PristupDoGalerie $pristup) {}
+
+    /**
+     * Partneři, mezi které se společný výdaj dělí — jen samotná dvojice.
+     *
+     * Dřív to byl každý řádek členství: host (`viewer`/`contributor`) nebo
+     * účet s odebraným přístupem dostal třetinu každého výdaje, návrh
+     * vyrovnání po něm chtěl peníze a šlo ho zadat i jako plátce.
+     */
     public function members(int $spaceId): Collection
     {
+        $space = GallerySpace::find($spaceId);
+        if (! $space) {
+            return collect();
+        }
+        $coupleIds = $this->pristup->dvojice($space)->map(fn ($member) => (int) $member->id)->all();
+
         return DB::table('gallery_space_user as membership')->join('users', 'users.id', '=', 'membership.user_id')
-            ->where('membership.gallery_space_id', $spaceId)->orderBy('membership.joined_at')->orderBy('users.id')
+            ->where('membership.gallery_space_id', $spaceId)->whereIn('users.id', $coupleIds)
+            ->orderBy('membership.joined_at')->orderBy('users.id')
             ->get(['users.id', 'users.name'])->map(fn ($member) => ['id' => (int) $member->id, 'name' => $member->name])->values();
     }
 
@@ -22,7 +40,12 @@ class SharedExpenseSettlementService
         if ($mode !== 'custom') {
             return $this->equal($amount, $memberIds);
         }
-        $shares = collect($submitted)->filter(fn ($share) => is_array($share) && in_array((int) ($share['user_id'] ?? 0), $memberIds, true) && is_numeric($share['amount'] ?? null) && (float) $share['amount'] >= 0)
+        // Podíl mimo dvojici se dřív potichu vynechal a zbytek součtu pak
+        // nesouhlasil s nejasnou hláškou — teď se řekne, co je špatně.
+        foreach ($submitted as $share) {
+            abort_unless(is_array($share) && in_array((int) ($share['user_id'] ?? 0), $memberIds, true), 422, 'Podíl lze přidělit jen partnerům ze společného prostoru.');
+        }
+        $shares = collect($submitted)->filter(fn ($share) => is_numeric($share['amount'] ?? null) && (float) $share['amount'] >= 0)
             ->map(fn ($share) => ['user_id' => (int) $share['user_id'], 'amount' => round((float) $share['amount'], 2)])->values()->all();
         abort_if(count(array_unique(array_column($shares, 'user_id'))) !== count($shares), 422, 'Podíl každého partnera může být uveden jen jednou.');
         abort_if(abs(array_sum(array_column($shares, 'amount')) - $amount) > 0.009, 422, 'Součet vlastních podílů musí přesně odpovídat částce výdaje.');
@@ -47,7 +70,10 @@ class SharedExpenseSettlementService
                 }
                 $balances[$payer]['paid'] += (float) $expense->amount;
                 $shares = json_decode($expense->split ?? '[]', true);
-                $shares = is_array($shares) ? $shares : [];
+                // Starší výdaje mohly být rozdělené i na hosta. Jeho díl by v
+                // bilanci chyběl a vyrovnání by nesedělo — podíly mimo dvojici
+                // se zahodí a nesedící součet níž přejde na rovný díl dvojice.
+                $shares = is_array($shares) ? array_values(array_filter($shares, fn ($share) => is_array($share) && isset($balances[(int) ($share['user_id'] ?? 0)]))) : [];
                 if (($expense->split_mode ?? 'equal') !== 'gift' && abs(array_sum(array_map(fn ($share) => (float) ($share['amount'] ?? 0), $shares)) - (float) $expense->amount) > 0.009) {
                     $shares = $this->equal((float) $expense->amount, $memberIds);
                 }

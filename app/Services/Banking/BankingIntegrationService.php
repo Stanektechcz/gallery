@@ -11,9 +11,13 @@ use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class BankingIntegrationService
 {
+    /** Hláška pro člověka, když synchronizace selže mimo vlastní `abort`. */
+    public const SYNC_FAILED = 'Banka teď neodpověděla. Synchronizace se zkusí znovu později.';
+
     public function __construct(private readonly GoCardlessBankDataClient $client, private readonly BankTransactionClassifier $classifier,
         private readonly TripBankReconciliationService $reconciliation) {}
 
@@ -45,9 +49,36 @@ class BankingIntegrationService
 
             return ['connection' => $connection->fresh(), 'authorization_url' => $requisition['link']];
         } catch (\Throwable $exception) {
-            $connection->update(['status' => 'failed', 'last_error' => mb_substr($exception->getMessage(), 0, 1000)]);
+            $connection->update(['status' => 'failed', 'last_error' => $this->safeError($exception, 'Připojení k bance se nepodařilo založit. Zkuste to prosím znovu.')]);
             throw $exception;
         }
+    }
+
+    /** Připojení, které smí ven — bez id žádosti, souhlasu a stavu OAuth. */
+    public function publicConnection(BankConnection $connection): array
+    {
+        return ['uuid' => $connection->uuid, 'provider' => $connection->provider, 'institution_name' => $connection->institution_name,
+            'status' => $connection->status, 'sync_enabled' => (bool) $connection->sync_enabled,
+            'consent_expires_at' => $connection->consent_expires_at?->toIso8601String(),
+            'last_synced_at' => $connection->last_synced_at?->toIso8601String(),
+            'last_success_at' => $connection->last_success_at?->toIso8601String(),
+            'revoked_at' => $connection->revoked_at?->toIso8601String(), 'last_error' => $connection->last_error];
+    }
+
+    /**
+     * Chyba, kterou lze uložit do `last_error` — přehled financí ji ukazuje oběma partnerům.
+     *
+     * Vlastní hlášky (`abort`) jsou česky a bez detailů. Výjimka HTTP klienta
+     * nese v textu celé tělo odpovědi GoCardless (id žádosti, interní popisy);
+     * ta patří do logu, ne na obrazovku.
+     */
+    private function safeError(\Throwable $exception, string $fallback = self::SYNC_FAILED): string
+    {
+        if ($exception instanceof HttpExceptionInterface) {
+            return mb_substr($exception->getMessage(), 0, 1000);
+        }
+
+        return $fallback;
     }
 
     public function complete(BankConnection $connection, string $state): array
@@ -85,7 +116,7 @@ class BankingIntegrationService
                 $this->client->deleteRequisition($connection->requisition_id);
                 $providerRevoked = true;
             } catch (\Throwable $exception) {
-                $providerError = mb_substr($exception->getMessage(), 0, 1000);
+                $providerError = 'Souhlas u banky se nepodařilo zrušit. Zrušte ho prosím i v aplikaci Revolut.';
                 report($exception);
             }
         }
@@ -116,6 +147,11 @@ class BankingIntegrationService
                 $connection->update(['status' => 'expired']);
                 abort(409, 'Souhlas s bankou vypršel. Připojte Revolut znovu.');
             }
+            // Aktivní je jen připojení, jehož souhlas banka potvrdila. Dřív
+            // ruční synchronizace čekajícího připojení (souhlas nedokončený,
+            // stav `CR`) nastavila `active` a plánovač ho pak stahoval dál.
+            abort_unless(in_array($requisition['status'] ?? null, ['LN', 'LINKED'], true), 409,
+                'Revolut zatím připojení nepotvrdil. Dokončete souhlas v bance a zkuste to znovu.');
             $inserted = 0;
             $updated = 0;
             foreach (($requisition['accounts'] ?? []) as $externalAccountId) {
@@ -129,7 +165,7 @@ class BankingIntegrationService
             return ['connection' => $connection->fresh(), 'accounts' => $connection->accounts()->count(), 'transactions_inserted' => $inserted,
                 'transactions_updated' => $updated, 'trip_links_created' => $links];
         } catch (\Throwable $exception) {
-            $connection->update(['last_error' => mb_substr($exception->getMessage(), 0, 1000)]);
+            $connection->update(['last_error' => $this->safeError($exception)]);
             throw $exception;
         }
     }

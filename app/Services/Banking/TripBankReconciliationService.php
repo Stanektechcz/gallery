@@ -5,6 +5,7 @@ namespace App\Services\Banking;
 use App\Models\BankTransaction;
 use App\Models\GallerySpace;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -29,7 +30,8 @@ class TripBankReconciliationService
 
     public function reconcile(GallerySpace $space, BankTransaction $transaction): int
     {
-        if ($transaction->trip_action === 'exclude') {
+        // Vrácená nebo zamítnutá platba peníze neodnesla — výdajem cesty není.
+        if ($transaction->trip_action === 'exclude' || $transaction->status === 'cancelled') {
             return 0;
         }
         $date = $transaction->booked_at->copy()->startOfDay();
@@ -81,10 +83,22 @@ class TripBankReconciliationService
             if ($existing) {
                 DB::table('trip_bank_transactions')->where('id', $existing->id)->update($values);
             } else {
-                $id = DB::table('trip_bank_transactions')->insertGetId($values + ['trip_id' => $candidate['trip']->id,
-                    'bank_transaction_id' => $transaction->id, 'created_at' => now()]);
+                // Souběžné párování (import a synchronizace naráz) narazí na
+                // unikátní (cesta, platba) — vazba už existuje, jen se aktualizuje.
+                try {
+                    $id = DB::table('trip_bank_transactions')->insertGetId($values + ['trip_id' => $candidate['trip']->id,
+                        'bank_transaction_id' => $transaction->id, 'created_at' => now()]);
+                    $created++;
+                } catch (UniqueConstraintViolationException) {
+                    $concurrent = DB::table('trip_bank_transactions')->where('trip_id', $candidate['trip']->id)
+                        ->where('bank_transaction_id', $transaction->id)->first();
+                    if (! $concurrent || $concurrent->linked_by) {
+                        continue;
+                    }
+                    $id = $concurrent->id;
+                    DB::table('trip_bank_transactions')->where('id', $id)->update($values);
+                }
                 $existing = DB::table('trip_bank_transactions')->find($id);
-                $created++;
             }
             if ($status === 'confirmed') {
                 $confirmedUsed = true;

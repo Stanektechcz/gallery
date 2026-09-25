@@ -10,8 +10,10 @@ use App\Models\BankTransaction;
 use App\Models\GallerySpace;
 use App\Models\User;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\UploadedFile;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class RevolutStatementImportService
 {
@@ -74,9 +76,15 @@ class RevolutStatementImportService
             ]);
             $import = $existing->fresh();
         } else {
-            $import = BankImport::create(['gallery_space_id' => $space->id, 'bank_connection_id' => $connection->id,
-                'imported_by' => $user->id, 'original_filename' => $file->getClientOriginalName(), 'file_sha256' => $sha,
-                'format' => $extension, 'status' => 'processing']);
+            // Dvě souběžná nahrání téhož souboru: druhé narazí na unikátní
+            // (prostor, otisk) — místo 500 řekne totéž, co kontrola výš.
+            try {
+                $import = BankImport::create(['gallery_space_id' => $space->id, 'bank_connection_id' => $connection->id,
+                    'imported_by' => $user->id, 'original_filename' => $file->getClientOriginalName(), 'file_sha256' => $sha,
+                    'format' => $extension, 'status' => 'processing']);
+            } catch (UniqueConstraintViolationException) {
+                abort(409, 'Tento výpis se právě zpracovává. Počkejte prosím na dokončení.');
+            }
         }
         try {
             $rows = $extension === 'csv' ? $this->csvRows($file->getRealPath()) : $this->spreadsheetRows($file->getRealPath());
@@ -149,7 +157,7 @@ class RevolutStatementImportService
                     $counts['imported']++;
                 } catch (\Throwable $rowException) {
                     $counts['failed']++;
-                    $firstFailure ??= $rowException->getMessage();
+                    $firstFailure ??= $this->safeError($rowException, 'Řádek se nepodařilo uložit.');
                 }
             }
             abort_if(! $counts['imported'] && ! $counts['duplicate'] && $counts['failed'], 422, 'Žádnou transakci se nepodařilo načíst. '.($firstFailure ?: 'Zkontrolujte datum a částku ve výpisu.'));
@@ -173,9 +181,26 @@ class RevolutStatementImportService
             return ['import' => $this->payload($import->fresh()), 'duplicate_file' => false, 'retried_import' => $retriedImport,
                 'trip_links_created' => $links, 'warnings' => $warnings];
         } catch (\Throwable $exception) {
-            $import->update(['status' => 'failed', 'error_summary' => mb_substr($exception->getMessage(), 0, 1000)]);
+            $import->update(['status' => 'failed', 'error_summary' => mb_substr($this->safeError($exception, 'Výpis se nepodařilo zpracovat.'), 0, 1000)]);
             throw $exception;
         }
+    }
+
+    /**
+     * Chyba pro člověka — přehled importů ji ukazuje oběma partnerům.
+     *
+     * Vlastní hlášky (`abort`) jsou česky a bez detailů. Cokoli jiného
+     * (databáze, knihovna tabulek) by prozradilo SQL nebo cesty na serveru:
+     * zapíše se do logu a ven jde obecná věta.
+     */
+    private function safeError(\Throwable $exception, string $fallback): string
+    {
+        if ($exception instanceof HttpExceptionInterface) {
+            return $exception->getMessage();
+        }
+        report($exception);
+
+        return $fallback;
     }
 
     private function csvRows(string $path): array
@@ -225,7 +250,9 @@ class RevolutStatementImportService
 
             return $bestRows;
         } catch (\Throwable $exception) {
-            abort(422, 'Tabulku XLS/XLSX nelze přečíst. Ověřte, že není chráněná heslem ani poškozená. '.$exception->getMessage());
+            // Text výjimky knihovny (cesty, interní názvy) patří do logu, ne uživateli.
+            report($exception);
+            abort(422, 'Tabulku XLS/XLSX nelze přečíst. Ověřte, že není chráněná heslem ani poškozená.');
         }
     }
 
@@ -324,9 +351,23 @@ class RevolutStatementImportService
         return collect($row)->filter(fn ($value) => trim((string) $value) !== '')->isEmpty();
     }
 
+    /**
+     * Stav řádku výpisu.
+     *
+     * Vrácená, zamítnutá nebo nepovedená platba (`REVERTED`, `DECLINED`,
+     * `FAILED`) peníze neodnesla. Dřív byla `booked` jako každá jiná: počítala
+     * se do výdajů přehledu a automaticky se z ní stal výdaj cesty.
+     */
     private function status(?string $value): string
     {
-        return str_contains($this->classifier->normalize($value), 'pending') || str_contains($this->classifier->normalize($value), 'ceka') ? 'pending' : 'booked';
+        $state = $this->classifier->normalize($value);
+        foreach (['revert', 'declin', 'fail', 'cancel', 'vracen', 'zamitnut', 'selhal', 'zrusen', 'neuspes'] as $needle) {
+            if (str_contains($state, $needle)) {
+                return 'cancelled';
+            }
+        }
+
+        return str_contains($state, 'pending') || str_contains($state, 'ceka') ? 'pending' : 'booked';
     }
 
     private function amount(array $mapped): ?float
@@ -437,7 +478,11 @@ class RevolutStatementImportService
             return Carbon::create(1899, 12, 30)->addDays((int) $value);
         } foreach (['Y-m-d H:i:s', 'Y-m-d H:i', 'd.m.Y H:i:s', 'd.m.Y H:i', 'd.m.Y', 'd/m/Y H:i:s', 'd/m/Y H:i', 'd/m/Y', 'm/d/Y H:i:s', 'm/d/Y'] as $format) {
             try {
-                $date = Carbon::createFromFormat($format, trim((string) $value));
+                // `!` vynuluje části, které formát nemá. Bez něj si `d.m.Y`
+                // (i `H:i` bez sekund) doplnil čas z aktuálních hodin — ten šel
+                // do otisku řádku, jediného klíče proti duplicitě, a překrývající
+                // se výpis nahraný o chvíli později zapsal stejné platby znovu.
+                $date = Carbon::createFromFormat('!'.$format, trim((string) $value));
                 if ($date !== false) {
                     return $date;
                 }

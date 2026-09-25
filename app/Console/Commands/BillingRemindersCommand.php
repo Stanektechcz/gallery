@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\SpaceSubscription;
+use App\Models\User;
 use App\Notifications\GalleryNotification;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Notification;
@@ -54,10 +55,12 @@ class BillingRemindersCommand extends Command
             }
 
             $space = GallerySpace::find($subscription->gallery_space_id);
-            $owner = $space?->members()->where('users.role', 'owner')->first()
-                ?? $space?->members()->first();
+            // Vlastník prostoru, ne `users.role` — tu má `owner` každý
+            // zaregistrovaný účet, takže upozornění mohl dostat host. Záložní
+            // „první člen" bez pořadí mohl vybrat kohokoli.
+            $owner = $space?->owner_id ? User::find($space->owner_id) : null;
 
-            if (! $owner) {
+            if (! $space || ! $owner) {
                 continue;
             }
 

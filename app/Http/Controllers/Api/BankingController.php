@@ -15,9 +15,11 @@ use App\Services\Banking\SpaceFinancialOverviewService;
 use App\Services\Banking\TripBankReconciliationService;
 use App\Services\Banking\TripFinancialInsightService;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class BankingController extends Controller
 {
@@ -70,10 +72,19 @@ class BankingController extends Controller
     {
         $this->write($request);
         $connection = $this->connection($request, $uuid);
-        $result = $this->banking->sync($connection);
+        // Výjimka HTTP klienta nese tělo odpovědi GoCardless — do logu, ne klientovi.
+        try {
+            $result = $this->banking->sync($connection);
+        } catch (HttpExceptionInterface $exception) {
+            throw $exception;
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return response()->json(['message' => BankingIntegrationService::SYNC_FAILED], 502);
+        }
         AuditLog::record('bank.connection.sync', $connection, collect($result)->except('connection')->all());
 
-        return response()->json($result);
+        return response()->json(['connection' => $this->banking->publicConnection($result['connection'])] + $result);
     }
 
     public function disconnect(Request $request, string $uuid): JsonResponse
@@ -115,6 +126,10 @@ class BankingController extends Controller
             'operator' => 'nullable|in:contains,equals,starts_with', 'pattern' => 'required|string|max:255',
             'category' => 'required|in:transport,accommodation,food,activities,insurance,other', 'trip_action' => 'nullable|in:suggest,include,exclude', 'priority' => 'nullable|integer|between:1,1000']);
         $space = $this->space($request, (int) $data['gallery_space_id']);
+        // Výslovné `null` u volitelných voleb by přebilo výchozí hodnotu sloupce
+        // a NOT NULL skončil 500 — prázdná volba znamená výchozí.
+        $data = ['operator' => $data['operator'] ?? 'contains', 'trip_action' => $data['trip_action'] ?? 'suggest',
+            'priority' => $data['priority'] ?? 100] + $data;
         $rule = BankCategoryRule::create($data + ['gallery_space_id' => $space->id, 'created_by' => $request->user()->id]);
 
         return response()->json($rule, 201);
@@ -174,10 +189,16 @@ class BankingController extends Controller
         $timing = $date->lt(Carbon::parse($trip->start_date)) ? 'before' : ($date->gt(Carbon::parse($trip->end_date)) ? 'after' : 'during');
         $existing = DB::table('trip_bank_transactions')->where('trip_id', $trip->id)->where('bank_transaction_id', $transaction->id)->first();
         if (! $existing) {
-            $id = DB::table('trip_bank_transactions')->insertGetId(['trip_id' => $trip->id, 'bank_transaction_id' => $transaction->id,
-                'linked_by' => $request->user()->id, 'status' => 'suggested', 'confidence' => 100,
-                'reason' => 'Ručně přiřazeno ve finančním přehledu.', 'category' => $data['category'] ?? $transaction->category,
-                'timing' => $timing, 'created_at' => now(), 'updated_at' => now()]);
+            // Dvojklik nebo souběžné párování: druhý zápis narazí na unikátní
+            // (cesta, platba) — vazba už je, pokračuje se s ní místo 500.
+            try {
+                $id = DB::table('trip_bank_transactions')->insertGetId(['trip_id' => $trip->id, 'bank_transaction_id' => $transaction->id,
+                    'linked_by' => $request->user()->id, 'status' => 'suggested', 'confidence' => 100,
+                    'reason' => 'Ručně přiřazeno ve finančním přehledu.', 'category' => $data['category'] ?? $transaction->category,
+                    'timing' => $timing, 'created_at' => now(), 'updated_at' => now()]);
+            } catch (UniqueConstraintViolationException) {
+                $id = DB::table('trip_bank_transactions')->where('trip_id', $trip->id)->where('bank_transaction_id', $transaction->id)->value('id');
+            }
             $existing = DB::table('trip_bank_transactions')->find($id);
         }
         $transaction->update(['trip_action' => 'include']);

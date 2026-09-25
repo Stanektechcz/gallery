@@ -5,7 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
+use App\Services\Banking\SharedExpenseSettlementService;
 use App\Services\Banking\SharedExpenseWriteService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -15,7 +18,8 @@ use Illuminate\Support\Str;
 
 class SharedExpenseController extends Controller
 {
-    public function __construct(private readonly SharedExpenseWriteService $expenses) {}
+    public function __construct(private readonly SharedExpenseWriteService $expenses,
+        private readonly SharedExpenseSettlementService $settlements) {}
 
     public function store(Request $request): JsonResponse
     {
@@ -39,14 +43,15 @@ class SharedExpenseController extends Controller
         ]);
 
         $spaceId = (int) $data['gallery_space_id'];
-        abort_unless($request->user()->gallerySpaces()->whereKey($spaceId)->exists(), 403);
+        // Jen prostor, kde účet patří do dvojice — host cizí galerie do jejích výdajů nezapisuje.
+        abort_unless(in_array($spaceId, app(PristupDoGalerie::class)->idProstoruDvojice($request->user()), true), 403);
         if (! empty($data['trip_id'])) {
             abort_unless(DB::table('trips')->where('id', $data['trip_id'])->where('gallery_space_id', $spaceId)->exists(), 422, 'Vybraná cesta nepatří do tohoto společného prostoru.');
         }
 
         $data['currency'] = strtoupper($data['currency']);
         $data['title'] = trim($data['title']);
-        $data['occurred_at'] = Carbon::parse($data['occurred_at'], 'Europe/Prague');
+        $data['occurred_at'] = $this->occurredAt($data['occurred_at']);
         $duplicates = $this->duplicates($spaceId, $data);
         if ($duplicates->isNotEmpty() && empty($data['force'])) {
             return response()->json([
@@ -72,17 +77,35 @@ class SharedExpenseController extends Controller
             'amount' => 'sometimes|numeric|min:0.01|max:99999999.99',
             'currency' => 'sometimes|string|size:3',
             'occurred_at' => 'sometimes|date',
+            'paid_by_user_id' => 'sometimes|integer',
+            'split_mode' => 'sometimes|in:equal,custom,gift',
+            'split' => 'sometimes|array|max:20',
+            'split.*.user_id' => 'required_with:split|integer',
+            'split.*.amount' => 'required_with:split|numeric|min:0',
         ]);
 
-        if (array_key_exists('currency', $data)) {
-            $data['currency'] = strtoupper($data['currency']);
+        $values = collect($data)->only(['title', 'category', 'amount', 'currency'])->all();
+        if (array_key_exists('currency', $values)) {
+            $values['currency'] = strtoupper($values['currency']);
         }
-        if (array_key_exists('title', $data)) {
-            $data['title'] = trim($data['title']);
+        if (array_key_exists('title', $values)) {
+            $values['title'] = trim($values['title']);
         }
-        DB::table('shared_expenses')->where('id', $expense->id)->update($data + ['updated_at' => now()]);
+        // Stejně jako při založení: čas podle hodin dvojice, uložený jako
+        // `Y-m-d H:i:s`. Surový vstup („25 September 2026", ISO s posunem)
+        // MySQL ve striktním režimu do sloupce datetime nepustí.
+        if (array_key_exists('occurred_at', $data)) {
+            $values['occurred_at'] = $this->occurredAt($data['occurred_at'])->format('Y-m-d H:i:s');
+        }
+        if (array_key_exists('paid_by_user_id', $data)) {
+            $couple = $this->settlements->members((int) $expense->gallery_space_id)->pluck('id')->all();
+            abort_unless(in_array((int) $data['paid_by_user_id'], $couple, true), 422, 'Plátce musí být jeden z partnerů společného prostoru.');
+            $values['paid_by_user_id'] = (int) $data['paid_by_user_id'];
+        }
+        $values += $this->expenses->updatedSplit($expense, $data);
+        DB::table('shared_expenses')->where('id', $expense->id)->update($values + ['updated_at' => now()]);
         $updated = DB::table('shared_expenses')->where('id', $expense->id)->firstOrFail();
-        AuditLog::record('finance.shared_expense.update', null, ['gallery_space_id' => $expense->gallery_space_id, 'expense_uuid' => $uuid, 'changed' => array_keys($data)]);
+        AuditLog::record('finance.shared_expense.update', null, ['gallery_space_id' => $expense->gallery_space_id, 'expense_uuid' => $uuid, 'changed' => array_keys($values)]);
 
         return response()->json($updated);
     }
@@ -95,6 +118,17 @@ class SharedExpenseController extends Controller
         AuditLog::record('finance.shared_expense.delete', null, ['gallery_space_id' => $expense->gallery_space_id, 'expense_uuid' => $uuid, 'title' => $expense->title]);
 
         return response()->json(['deleted' => true]);
+    }
+
+    /**
+     * Čas výdaje podle hodin dvojice.
+     *
+     * Vstup bez pásma se čte jako pražský čas, vstup s posunem (ISO z
+     * prohlížeče) se převede na pražské hodiny — ne na hodiny serveru (UTC).
+     */
+    private function occurredAt(string $value): Carbon
+    {
+        return Carbon::parse($value, Cas::pasmo())->setTimezone(Cas::pasmo());
     }
 
     private function duplicates(int $spaceId, array $data)
@@ -121,7 +155,7 @@ class SharedExpenseController extends Controller
         abort_unless(Schema::hasTable('shared_expenses'), 404);
 
         return DB::table('shared_expenses')->where('uuid', $uuid)
-            ->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))
+            ->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))
             ->firstOrFail();
     }
 
