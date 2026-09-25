@@ -1289,6 +1289,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3)">{{ tcTitle }}</div>
                       <div style="font-size:30px; margin-top:2px; font-variant-numeric:tabular-nums">{{ tcTotal }}</div>
                       <div style="font-size:14px; color:var(--g-ink2); font-variant-numeric:tabular-nums">{{ tcPerDay }} · {{ tcPerPerson }}</div>
+                      <sc-if value="{{ tcHasRate }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:2px">{{ tcRate }}</div></sc-if>
                     </div>
                     <div style="margin-left:auto; display:flex; gap:7px; flex-wrap:wrap">
                       <button class="btn btn-secondary" onClick="{{ tcTx }}" style="font-size:12.5px; padding:7px 12px">Transakce cesty</button>
@@ -2759,6 +2760,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                 </sc-for>
               </div>
+              <sc-if value="{{ finHasRate }}">
+                <div style="font-size:12px; color:var(--g-ink3); margin-top:-6px">{{ finRate }}</div>
+              </sc-if>
               <div style="display:flex; flex-wrap:wrap; gap:44px; margin-top:24px; align-items:flex-start">
                 <div style="flex:2 1 440px; min-width:0">
                   <div style="padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Odkud peníze odcházejí</div>
@@ -3224,6 +3228,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="flex:1 1 380px; min-width:260px">
                   <div style="font-size:16px; text-wrap:pretty">{{ p60Head }}</div>
                   <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; text-wrap:pretty">{{ p60Note }}</div>
+                  <sc-if value="{{ p60HasRate }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:3px; text-wrap:pretty">{{ p60Rate }}</div></sc-if>
                 </div>
                 <button class="btn btn-ghost" onClick="{{ p60ToTx }}" style="gap:6px"><i class="ph-duotone ph-receipt" style="font-size:16px"></i>Z čeho se to počítá</button>
               </div>
@@ -3417,7 +3422,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <tbody>
                       <sc-for list="{{ kalRows }}" as="r" hint-placeholder-count="8">
                         <tr>
-                          <td>{{ r.name }}</td>
+                          <td>{{ r.name }}<sc-if value="{{ r.hasRate }}"><div style="font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ r.rate }}</div></sc-if></td>
                           <td><span class="tag {{ r.whoTag }}">{{ r.who }}</span></td>
                           <td style="color:var(--g-ink2); font-variant-numeric:tabular-nums">{{ r.est }}</td>
                           <td style="font-variant-numeric:tabular-nums">{{ r.real }}</td>
@@ -3525,10 +3530,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div>
               <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Příjmy</div>
               <div style="font-size:25px; line-height:1.15; margin-top:6px; font-variant-numeric:tabular-nums; color:var(--g-fin-prijem)">{{ txIncome }}</div>
+              <sc-if value="{{ txHasIncomeNote }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:2px">{{ txIncomeNote }}</div></sc-if>
             </div>
             <div>
               <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Výdaje</div>
               <div style="font-size:25px; line-height:1.15; margin-top:6px; font-variant-numeric:tabular-nums">{{ txSpend }}</div>
+              <sc-if value="{{ txHasSpendNote }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:2px">{{ txSpendNote }}</div></sc-if>
             </div>
             <div>
               <div style="font-size:12px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Zůstatek</div>
@@ -3695,6 +3702,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="position:absolute; top:-5px; bottom:-5px; left:{{ budPaceMark }}; width:2px; background:var(--g-ink)"></div>
                 </div>
                 <p style="margin:11px 0 0; font-size:14.5px; line-height:1.6; color:var(--g-ink2); text-wrap:pretty">{{ budInsight }}</p>
+                <sc-if value="{{ budHasMenaNote }}">
+                  <p style="margin:4px 0 0; font-size:12.5px; color:var(--g-ink3); text-wrap:pretty">{{ budMenaNote }}</p>
+                </sc-if>
                 <sc-if value="{{ budCanCreate }}">
                   <button class="btn btn-primary" onClick="{{ budCreate }}" style="gap:7px; margin-top:12px"><i class="ph-duotone ph-plus-circle" style="font-size:16px"></i>Založit rozpočet</button>
                 </sc-if>
@@ -3752,6 +3762,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <span style="font-size:22px; font-variant-numeric:tabular-nums">{{ budSelValue }}</span>
                     <span style="font-size:13px; color:var(--g-ink2)">{{ budSelDiff }}</span>
                   </div>
+                  <sc-if value="{{ budHasMonthsNote }}">
+                    <div style="font-size:12px; color:var(--g-ink3); margin-top:6px">{{ budMonthsNote }}</div>
+                  </sc-if>
 
                   <sc-if value="{{ budHasOver }}">
                     <div style="margin-top:34px">
@@ -3820,6 +3833,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="display:flex; align-items:baseline; gap:14px; margin-top:8px; flex-wrap:wrap">
                     <span style="font-size:12.5px; color:var(--g-ink2)">{{ c.pctLabel }} · {{ c.left }}</span>
                     <span style="font-size:12.5px; color:var(--g-ink3)">{{ c.note }}</span>
+                    <sc-if value="{{ c.hasMenaNote }}"><span style="font-size:12px; color:var(--g-ink3)">{{ c.menaNote }}</span></sc-if>
                     <span style="margin-left:auto; display:flex; gap:12px">
                       <button onClick="{{ c.tx }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-acc)">Transakce →</button>
                       <button onClick="{{ c.balance }}" style="border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-acc)">Vyrovnat</button>
@@ -3963,6 +3977,11 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <i class="ph-duotone ph-handshake" style="font-size:22px; color:{{ setlColor }}"></i>
                   <div style="flex:1 1 240px; min-width:0">
                     <div style="font-size:17px; color:{{ setlColor }}">{{ setlText }}</div>
+                    <sc-if value="{{ setlHasOther }}">
+                      <sc-for list="{{ setlOther }}" as="o" hint-placeholder-count="1">
+                        <div style="font-size:14.5px; color:{{ o.color }}; margin-top:4px">{{ o.text }}</div>
+                      </sc-for>
+                    </sc-if>
                     <div style="font-size:12px; color:var(--g-ink3); margin-top:3px">{{ setlSplitNote }}</div>
                   </div>
                   <sc-if value="{{ setlCan }}">
@@ -3985,6 +4004,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                 </sc-for>
               </div>
+              <sc-if value="{{ budHasYearNote }}">
+                <div style="font-size:12px; color:var(--g-ink3); margin-top:-6px">{{ budYearNote }}</div>
+              </sc-if>
               <div style="display:flex; flex-wrap:wrap; gap:44px; margin-top:22px; align-items:flex-start">
                 <div style="flex:2 1 460px; min-width:0">
                   <div style="padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Výdaje po měsících</div>
@@ -4004,6 +4026,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                     <span style="font-size:22px; font-variant-numeric:tabular-nums">{{ budSelValue }}</span>
                     <span style="font-size:13px; color:var(--g-ink2)">{{ budSelDiff }}</span>
                   </div>
+                  <sc-if value="{{ budHasMonthsNote }}">
+                    <div style="font-size:12px; color:var(--g-ink3); margin-top:6px">{{ budMonthsNote }}</div>
+                  </sc-if>
                 </div>
                 <div style="flex:1 1 300px; max-width:380px; min-width:0">
                   <div style="padding-bottom:9px; border-bottom:1px solid var(--g-ink); font-size:12px; letter-spacing:.14em; text-transform:uppercase">Kategorie za rok</div>
@@ -4185,6 +4210,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="flex:1 1 340px; min-width:250px">
                   <div style="font-size:17px">{{ envHead }}</div>
                   <div style="font-size:13px; color:var(--g-ink2); margin-top:3px; text-wrap:pretty">{{ envNote }}</div>
+                  <sc-if value="{{ envHasRate }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:3px">{{ envRate }}</div></sc-if>
                 </div>
                 <button class="btn btn-ghost" onClick="{{ envRaise }}" style="gap:6px"><i class="ph-duotone ph-plus-circle" style="font-size:16px"></i>Zvednout obálku</button>
               </div>
@@ -4798,6 +4824,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                           <div style="height:7px; border-radius:2px; background:var(--g-line2); overflow:hidden; margin-top:7px"><div style="height:100%; width:{{ r.width }}; background:{{ r.color }}"></div></div>
                           <div style="font-size:12.5px; color:var(--g-ink2); margin-top:6px">{{ r.share }}</div>
                           <div style="font-size:13px; line-height:1.55; color:var(--g-ink3); margin-top:3px; text-wrap:pretty">{{ r.note }}</div>
+                          <sc-if value="{{ r.hasRate }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:2px; text-wrap:pretty">{{ r.rate }}</div></sc-if>
                         </div>
                         <button class="btn btn-ghost" onClick="{{ r.why }}" style="flex:none; font-size:12.5px; gap:5px"><i class="ph-duotone ph-question" style="font-size:15px"></i>Proč tohle číslo</button>
                       </div>
@@ -6645,6 +6672,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <div style="height:5px; border-radius:2px; background:var(--g-line2); overflow:hidden"><div style="height:100%; width:{{ nowFundPct }}; background:var(--g-acc)"></div></div>
                   <div style="display:flex; gap:10px; margin-top:6px; flex-wrap:wrap">
                     <span style="font-size:12px; color:var(--g-ink3)">{{ nowFundLabel }}</span>
+                    <sc-if value="{{ nowHasOther }}"><span style="font-size:12px; color:var(--g-ink3)">· {{ nowOther }}</span></sc-if>
                     <button onClick="{{ nowGoTrip }}" style="margin-left:auto; border:0; background:transparent; padding:0; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-acc)">Otevřít celou cestu →</button>
                   </div>
                 </div>
@@ -12928,7 +12956,16 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
         </sc-if>
         <sc-if value="{{ xaHasD }}">
           <div class="field"><label>{{ xaLabelD }}</label>
-            <input class="input" value="{{ xaD }}" onInput="{{ xaSetD }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelD }}" />
+            <sc-if value="{{ xaDSelect }}">
+              <select class="input" value="{{ xaDSel }}" onChange="{{ xaSetD }}" aria-label="{{ xaLabelD }}">
+                <sc-for list="{{ xaDOpts }}" as="o" hint-placeholder-count="3">
+                  <option value="{{ o.value }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
+            </sc-if>
+            <sc-if value="{{ xaDInput }}">
+              <input class="input" value="{{ xaD }}" onInput="{{ xaSetD }}" onKeyDown="{{ xaKey }}" aria-label="{{ xaLabelD }}" />
+            </sc-if>
           </div>
         </sc-if>
         <sc-if value="{{ xaHint }}">
@@ -13784,8 +13821,15 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div class="field"><label>Do</label>
               <input class="input" type="date" value="{{ trDo }}" onInput="{{ trSetDo }}" min="{{ trOd }}" aria-label="Konec cesty" />
             </div>
-            <div class="field"><label>Rozpočet (Kč)</label>
+            <div class="field"><label>Rozpočet</label>
               <input class="input" inputMode="numeric" value="{{ trBudget }}" onInput="{{ trSetBudget }}" placeholder="38 000" aria-label="Rozpočet" />
+            </div>
+            <div class="field"><label>Měna</label>
+              <select class="input" value="{{ trMena }}" onChange="{{ trSetMena }}" aria-label="Měna cesty">
+                <sc-for list="{{ trMeny }}" as="o" hint-placeholder-count="3">
+                  <option value="{{ o.value }}">{{ o.label }}</option>
+                </sc-for>
+              </select>
             </div>
           </div>
         </sc-if>
@@ -15789,8 +15833,48 @@ class Component extends DCLogic {
   kc(n) { return Math.round(n).toLocaleString('cs-CZ').replace(/\u00a0/g, ' ') + ' ' + ((window.GalerieData || {}).MENA || 'Kč'); }
   // Číslo s mezerou po tisících — bez měny, na počty.
   cislo(n) { return Number(n || 0).toLocaleString('cs-CZ').replace(/\u00a0/g, ' '); }
+  /*
+   * Měny: hlavní je koruna, vedle ní eura a dolary.
+   *
+   * `kc()` píše globální znak (`MENA`) — eurový účet s ním ukazoval „100 Kč".
+   * Částka v jiné měně se proto píše svým znakem a součty v korunách nesou
+   * přepočet ECB ze serveru; různé měny se nikdy nesčítají do jednoho čísla.
+   */
+  znakMeny(kod) {
+    const k = String(kod || '').trim().toUpperCase();
+    if (!k) return (window.GalerieData || {}).MENA || 'Kč';
+    return { CZK: 'Kč', EUR: '€', USD: '$', GBP: '£' }[k] || k;
+  }
+  // Částka ve své měně: `mena` je kód („EUR") nebo už znak („€"); bez měny jako `kc()`.
+  vMene(n, mena) {
+    if (!mena) return this.kc(n);
+    const znak = /^[A-Za-z]{3}$/.test(String(mena)) ? this.znakMeny(mena) : String(mena);
+    const x = Number(n) || 0;
+    const cele = Math.abs(x - Math.round(x)) < 0.005;
+    return (cele ? Math.round(x).toLocaleString('cs-CZ') : x.toLocaleString('cs-CZ', { minimumFractionDigits: 2, maximumFractionDigits: 2 })).replace(/\s/g, ' ') + ' ' + znak;
+  }
+  // Mapa `{ CZK: 500, EUR: 12 }` jako „500 Kč · 12 €" — každá měna zvlášť, bez sčítání.
+  poMenachText(mapa) {
+    return Object.keys(mapa || {}).filter(k => Math.abs(Number(mapa[k]) || 0) >= 0.005)
+      .map(k => this.vMene(mapa[k], k)).join(' · ');
+  }
+  // Kód hlavní měny dvojice (nese ho souhrn financí); ukázka je v korunách.
+  hlavniMena() { return ((FIN || {}).souhrn || {}).mena || (P60 || {}).mena || 'CZK'; }
+  /*
+   * Měny na výběr (účet, nová cesta): `MENY` ze serveru, CZK vždy první.
+   * Bez financí (a v ukázce) je `MENY` prázdné — pak CZK, EUR a USD.
+   */
+  menyVolby() {
+    const zeServeru = (window.GalerieData || {}).MENY;
+    const kody = Array.isArray(zeServeru) && zeServeru.length ? zeServeru : ['CZK', 'EUR', 'USD'];
+    const platne = kody.map(k => String(k || '').trim().toUpperCase()).filter(k => /^[A-Z]{3}$/.test(k));
+    return ['CZK'].concat(platne.filter((k, i) => k !== 'CZK' && platne.indexOf(k) === i))
+      .map(k => ({ value: k, label: k + ' · ' + this.znakMeny(k) }));
+  }
   budgetVals() {
     const s = this.state, C = 427.26, R = 68;
+    // Vlastní čísla rozpočtu jsou v jeho měně (`BUD.mena`, třeba „€"); ukázka ji nenese.
+    const bk = n => this.vMene(n, BUD.mena);
     const lim = i => { const v = s.budLimits[i]; return v === undefined ? BUD.cats[i][1] : v; };
     // Výdaje zapsané u cest se sčítají do stejnojmenné kategorie rozpočtu.
     const fromTrips = {};
@@ -15799,8 +15883,10 @@ class Component extends DCLogic {
     }));
     const cats = BUD.cats.map((c, i) => ({
       i, name: c[0], limit: lim(i), spent: c[2] + (fromTrips[c[0]] || 0), icon: c[3],
-      note: fromTrips[c[0]] ? c[4] + ' · z toho ' + this.kc(fromTrips[c[0]]) + ' z cest' : c[4],
-      flag: c[5]
+      note: fromTrips[c[0]] ? c[4] + ' · z toho ' + bk(fromTrips[c[0]]) + ' z cest' : c[4],
+      flag: c[5],
+      // Co se do utraceného přepočítalo z jiné měny, nebo bez kurzu zůstalo stranou.
+      menaNote: (c[7] && c[7].text) || ''
     }));
     const plan = cats.reduce((a, c) => a + c.limit, 0);
     const spent = cats.reduce((a, c) => a + c.spent, 0);
@@ -15829,7 +15915,7 @@ class Component extends DCLogic {
       const seg = {
         name: c.rest ? c.name + ' (' + c.rest + ')' : c.name, color: GRAF(k),
         dash: len.toFixed(1) + ' ' + (C - len).toFixed(1), off: (-acc * C).toFixed(1),
-        pct: Math.round(share * 100) + ' %', value: this.kc(c.spent),
+        pct: Math.round(share * 100) + ' %', value: bk(c.spent),
         go: () => this.setState({ route: 'x-transakce', appTab: 0 })
       };
       acc += share;
@@ -15869,12 +15955,33 @@ class Component extends DCLogic {
           ['Adrian', 'Trajekty a vstupy', 2600]
         ] : (BUD.paid || []);
         const [jA, jM] = this.ukazka() ? ['Adrian', 'Makinka'] : this.dva();
-        const byWho = {};
-        PAID.forEach(p => { byWho[p[0]] = (byWho[p[0]] || 0) + p[2]; });
-        const totalPaid = PAID.reduce((a, p) => a + p[2], 0);
+        // Kdo kolik zaplatil a o kolik je nad polovinou — vždy v jedné měně.
+        const dluhVMene = radky => {
+          const kdo = {};
+          radky.forEach(p => { kdo[p[0]] = (kdo[p[0]] || 0) + p[2]; });
+          const celkem = radky.reduce((a, p) => a + p[2], 0);
+          const rozdil = (kdo[jA] || 0) - celkem / 2;
+          return { kdo, celkem, rozdil, dluzi: Math.abs(Math.round(rozdil)) };
+        };
+        const { kdo: byWho, celkem: totalPaid, rozdil: aDiff, dluzi: owe } = dluhVMene(PAID);
         const half = totalPaid / 2;
-        const aDiff = (byWho[jA] || 0) - half;
-        const owe = Math.abs(Math.round(aDiff));
+        /*
+         * Dluhy po měnách (`BUD.paidPoMenach`).
+         *
+         * Kurz je rozhodnutí vás dvou, ne aplikace — 120 Kč a 15 € se proti
+         * sobě nezapočítávají. `BUD.paid` nese jen hlavní měnu a z ní se
+         * zapisuje vyrovnání; ostatní měny mají každá svůj řádek. Ukázka
+         * a starší data mají jen `paid`.
+         */
+        const hlavniKod = this.hlavniMena();
+        const poMenach = !this.ukazka() && BUD.paidPoMenach && typeof BUD.paidPoMenach === 'object' ? BUD.paidPoMenach : {};
+        const jine = Object.keys(poMenach).filter(k => k !== hlavniKod && Array.isArray(poMenach[k]) && poMenach[k].length)
+          .map(k => ({ mena: k, radky: poMenach[k], ...dluhVMene(poMenach[k]) }));
+        const jineDluhy = jine.filter(j => j.dluzi >= 1);
+        const sJinymi = (hlavniCastka, kolik) => {
+          const dalsi = jine.map(j => kolik(j) > 0 ? this.vMene(kolik(j), j.mena) : '').filter(Boolean);
+          return (hlavniCastka > 0 || !dalsi.length ? [this.kc(hlavniCastka)] : []).concat(dalsi).join(' · ');
+        };
         // U dvojice platí „vyrovnáno" jen pro měsíc, ve kterém ho někdo označil —
         // dřív jednou kliknuté vyrovnání tvrdilo „jste na nule" navždy.
         const mesicVyrovnani = (() => { const d = this.dnes(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0'); })();
@@ -15890,7 +15997,7 @@ class Component extends DCLogic {
             dir: c.diff > 0 ? 'víc' : 'míň',
             diff: (c.diff > 0 ? '+' : '') + c.diff + ' %',
             color: c.diff > 0 ? 'var(--g-mag)' : 'var(--g-ok)',
-            text: 'Tento měsíc ' + this.kc(c.spent) + ', obvykle ' + this.kc(c.avg)
+            text: 'Tento měsíc ' + bk(c.spent) + ', obvykle ' + bk(c.avg)
               + ' — o ' + Math.abs(c.diff) + ' % ' + (c.diff > 0 ? 'víc' : 'míň') + '.',
             width: Math.min(100, Math.round((c.spent / Math.max(1, c.limit)) * 100)) + '%',
             avgLeft: Math.min(100, Math.round((c.avg / Math.max(1, c.limit)) * 100)) + '%',
@@ -15912,12 +16019,26 @@ class Component extends DCLogic {
             who: p[0], what: p[1], amount: this.kc(p[2]),
             width: podil(p[2], totalPaid) + '%',
             color: this.barvaKdo(p[0])
-          })),
-          setlA: this.kc(byWho[jA] || 0), setlM: this.kc(byWho[jM] || 0),
+          })).concat(...jine.map(j => j.radky.map(p => ({
+            who: p[0], what: p[1], amount: this.vMene(p[2], j.mena),
+            width: podil(p[2], j.celkem) + '%',
+            color: this.barvaKdo(p[0])
+          })))),
+          setlA: sJinymi(byWho[jA] || 0, j => j.kdo[jA] || 0), setlM: sJinymi(byWho[jM] || 0, j => j.kdo[jM] || 0),
           setlNameA: jA.split(' ')[0], setlNameM: jM.split(' ')[0],
-          setlTotal: this.kc(totalPaid), setlHalf: this.kc(half),
+          setlTotal: sJinymi(totalPaid, j => j.celkem), setlHalf: sJinymi(half, j => j.celkem / 2),
           setlBarA: podil(byWho[jA] || 0, totalPaid) + '%',
-          setlText: !totalPaid
+          // Jeden řádek na každou další měnu: „Makinka dorovná Adrianovi 15 €".
+          setlOther: jine.map(j => ({
+            text: settled || j.dluzi < 1
+              ? 'Platby v ' + j.mena + ': jste na nule.'
+              : 'Platby v ' + j.mena + ': ' + (j.rozdil > 0 ? jM.split(' ')[0] + ' dorovná ' + this.whoDat(jA) : jA.split(' ')[0] + ' dorovná ' + this.whoDat(jM)) + ' ' + this.vMene(j.dluzi, j.mena) + '.',
+            color: settled || j.dluzi < 1 ? 'var(--g-ok)' : 'var(--g-warn)'
+          })),
+          setlHasOther: jine.length > 0,
+          setlText: !totalPaid && jine.length
+            ? 'V hlavní měně (' + this.znakMeny(hlavniKod) + ') tento měsíc nikdo nic společného nezaplatil.'
+            : !totalPaid
             ? 'Tento měsíc zatím nikdo nezaplatil nic společného.'
             : settled
               ? 'Vyrovnáno — od poslední platby jste na nule.'
@@ -15941,7 +16062,8 @@ class Component extends DCLogic {
               const od = aDiff > 0 ? jM : jA, komu = aDiff > 0 ? jA : jM;
               this.setState({ confirm: {
                 title: 'Zapsat vyrovnání',
-                body: od.split(' ')[0] + ' pošle ' + this.whoDat(komu) + ' ' + this.kc(owe) + '. Zapíše se, že k dnešku jste vyrovnaní — převod udělejte z banky, aplikace peníze neposílá.',
+                body: od.split(' ')[0] + ' pošle ' + this.whoDat(komu) + ' ' + this.kc(owe) + '. Zapíše se, že k dnešku jste vyrovnaní — převod udělejte z banky, aplikace peníze neposílá.'
+                  + (jineDluhy.length ? ' K dnešku se uzavřou i platby v ' + jineDluhy.map(j => j.mena).join(', ') + ' (' + jineDluhy.map(j => this.vMene(j.dluzi, j.mena)).join(' · ') + ') — ty pošlete zvlášť ve své měně.' : ''),
                 cta: 'Zapsat vyrovnání', btnBg: 'var(--g-acc)',
                 go: () => {
                   this.setState({ confirm: null });
@@ -15972,11 +16094,14 @@ class Component extends DCLogic {
       ...(tab === 10 ? this.surpVals() : {}),
       budMonthLabel: mesicBud,
       budHeadline: [
-        { label: 'Příjmy', value: this.kc(BUD.income), note: this.ukazka() ? 'dva účty, po srážkách' : 'podle rozpočtu' },
-        { label: 'Plán výdajů', value: this.kc(plan), note: cats.length + ' kategorií' },
-        { label: 'Utraceno', value: this.kc(spent), note: pctSpent + ' % plánu' },
-        { label: 'Zbývá do konce', value: this.kc(rest), note: (BUD.days - BUD.today) + ' dní' }
+        { label: 'Příjmy', value: bk(BUD.income), note: this.ukazka() ? 'dva účty, po srážkách' : 'podle rozpočtu' },
+        { label: 'Plán výdajů', value: bk(plan), note: cats.length + ' kategorií' },
+        { label: 'Utraceno', value: bk(spent), note: pctSpent + ' % plánu' },
+        { label: 'Zbývá do konce', value: bk(rest), note: (BUD.days - BUD.today) + ' dní' }
       ],
+      // Útrata v jiné měně než rozpočet: kolik se přepočítalo a co bez kurzu nešlo.
+      budMenaNote: (BUD.mimoMenu && BUD.mimoMenu.text) || '',
+      budHasMenaNote: !!(BUD.mimoMenu && BUD.mimoMenu.text),
       budPaceWidth: Math.min(pctSpent, 100) + '%', budPaceMark: pctMonth + '%',
       budPaceColor: pctSpent > pctMonth + 12 ? 'var(--g-mag)' : 'var(--g-acc)',
       // Věta z čísel, ne „Nájem a energie odešly hned prvního" u každého rozpočtu.
@@ -16007,12 +16132,12 @@ class Component extends DCLogic {
           }
         });
       },
-      budSurplus: this.kc(BUD.income - plan), budSurplusNote: this.ukazka() ? 'Přebytek jde poslední den měsíce automaticky do spoření.' : 'Rozdíl mezi příjmem a plánem výdajů.',
+      budSurplus: bk(BUD.income - plan), budSurplusNote: this.ukazka() ? 'Přebytek jde poslední den měsíce automaticky do spoření.' : 'Rozdíl mezi příjmem a plánem výdajů.',
       budDonut: segs, budDonutR: String(R), budDonutC: C.toFixed(1),
-      budDonutTotal: this.kc(spent), budDonutSub: 'utraceno · ' + mesicBud,
+      budDonutTotal: bk(spent), budDonutSub: 'utraceno · ' + mesicBud,
       budOverCount: over.length, budHasOver: over.length > 0,
       budOver: over.map(c => ({
-        name: c.name, diff: '+ ' + this.kc(c.spent - c.limit),
+        name: c.name, diff: '+ ' + bk(c.spent - c.limit),
         go: () => this.setState({ budTab: 1 }),
         balance: () => this.presunMeziKategoriemi(c, cats, c.spent - c.limit)
       })),
@@ -16020,8 +16145,9 @@ class Component extends DCLogic {
         const st = status(c);
         return {
           name: c.name, icon: c.icon, note: c.note, flag: c.flag, hasFlag: !!c.flag,
-          spent: this.kc(c.spent), limit: this.kc(c.limit),
-          left: c.spent > c.limit ? 'přes limit o ' + this.kc(c.spent - c.limit) : !c.limit ? 'limit nastavíte tlačítkem +' : 'zbývá ' + this.kc(c.limit - c.spent),
+          menaNote: c.menaNote, hasMenaNote: !!c.menaNote,
+          spent: bk(c.spent), limit: bk(c.limit),
+          left: c.spent > c.limit ? 'přes limit o ' + bk(c.spent - c.limit) : !c.limit ? 'limit nastavíte tlačítkem +' : 'zbývá ' + bk(c.limit - c.spent),
           pct: (c.limit ? Math.min(Math.round(c.spent / c.limit * 100), 100) : c.spent > 0 ? 100 : 0) + '%',
           pctLabel: c.limit ? Math.round(c.spent / c.limit * 100) + ' %' : '—',
           color: st[1], state: st[0], stateClass: st[2],
@@ -16033,7 +16159,7 @@ class Component extends DCLogic {
           balance: () => this.presunMeziKategoriemi(c, cats, c.spent > c.limit ? c.spent - c.limit : 0)
         };
       }),
-      budPlanSum: this.kc(plan), budPlanDiff: plan === ulozenyPlan ? 'shodné s uloženým plánem' : 'změněno o ' + this.kc(plan - ulozenyPlan),
+      budPlanSum: bk(plan), budPlanDiff: plan === ulozenyPlan ? 'shodné s uloženým plánem' : 'změněno o ' + bk(plan - ulozenyPlan),
       budPlanChanged: plan !== ulozenyPlan,
       /*
        * Uložit plán: změněné limity (tlačítka − / +) jdou do rozpočtu.
@@ -16055,19 +16181,21 @@ class Component extends DCLogic {
         fg: i === sel ? 'var(--g-ink)' : 'var(--g-ink3)',
         pick: () => this.setState({ budMonth: i })
       })),
-      budSelMonth: vybrany[0], budSelValue: this.kc(vybrany[1]),
+      budSelMonth: vybrany[0], budSelValue: bk(vybrany[1]),
+      // Měsíce s útratou v jiné měně: „přepočteno kurzem ECB k …" nebo „+40 € nezapočteno".
+      budMonthsNote: BUD.monthsPoznamka || '', budHasMonthsNote: !!BUD.monthsPoznamka,
       budSelDiff: !BUD.months.length ? 'zatím bez měsíců v knize'
         : !ulozenyPlan ? 'plán zatím není — nastavíte ho limity kategorií'
-        : vybrany[1] > ulozenyPlan ? 'nad plánem o ' + this.kc(vybrany[1] - ulozenyPlan) : 'pod plánem o ' + this.kc(ulozenyPlan - vybrany[1]),
+        : vybrany[1] > ulozenyPlan ? 'nad plánem o ' + bk(vybrany[1] - ulozenyPlan) : 'pod plánem o ' + bk(ulozenyPlan - vybrany[1]),
       budPlanLine: Math.min(100, Math.round(ulozenyPlan / maxM * 100)) + '%',
       // Popisek čáry plánu stál v šabloně napsaný („plán 50 000 Kč").
-      budPlanLabel: 'plán ' + this.kc(ulozenyPlan),
+      budPlanLabel: 'plán ' + bk(ulozenyPlan),
       budHasPlan: ulozenyPlan > 0,
       budGoals: BUD.goals.map(g => {
         const pct = Math.min(g[2] / g[1], 1);
         return {
-          name: g[0], target: this.kc(g[1]), saved: this.kc(g[2]),
-          monthly: g[3] > 0 ? this.kc(g[3]) + ' měsíčně' : 'bez dalších vkladů',
+          name: g[0], target: bk(g[1]), saved: bk(g[2]),
+          monthly: g[3] > 0 ? bk(g[3]) + ' měsíčně' : 'bez dalších vkladů',
           due: g[4], note: g[5], done: g[2] >= g[1],
           pctLabel: Math.round(pct * 100) + ' %',
           dash: (pct * 163.4).toFixed(1) + ' 163.4',
@@ -16094,8 +16222,8 @@ class Component extends DCLogic {
           hasLink: !!g[6], linkLabel: g[6] ? 'Otevřít související' : 'Opakované platby'
         };
       }),
-      budGoalsTotal: this.kc(BUD.goals.reduce((a, g) => a + g[2], 0)),
-      budGoalsMonthly: this.kc(BUD.goals.reduce((a, g) => a + g[3], 0)),
+      budGoalsTotal: bk(BUD.goals.reduce((a, g) => a + g[2], 0)),
+      budGoalsMonthly: bk(BUD.goals.reduce((a, g) => a + g[3], 0)),
       budAddGoal: () => this.setState({ xaOpen: true, xaMode: 'cil', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' }),
       budRules: (AL.balancing || []).map(r => ({
         title: r[0], meta: r[1], tag: r[2],
@@ -16107,16 +16235,17 @@ class Component extends DCLogic {
       // Vyrovnání mezi vámi se zapisuje v záložce Anomálie a vyrovnání — tam je spočítané, kdo komu kolik.
       budAddRule: () => { this.setState({ budTab: 5 }); this.toast('Kdo komu kolik dluží a zápis vyrovnání najdete tady', { icon: 'ph-arrows-left-right' }); },
       budYear: [
-        { label: 'Příjmy za 12 měsíců', value: this.kc(BUD.year.income) },
-        { label: 'Výdaje', value: this.kc(BUD.year.spent) },
-        { label: 'Uspořeno', value: this.kc(BUD.year.saved) },
+        { label: 'Příjmy za 12 měsíců', value: bk(BUD.year.income) },
+        { label: 'Výdaje', value: bk(BUD.year.spent) },
+        { label: 'Uspořeno', value: bk(BUD.year.saved) },
         // Bez měsíců v knize byly obě dlaždice prázdné.
         { label: 'Nejdražší měsíc', value: BUD.year.worst || '—' },
         { label: 'Nejlevnější měsíc', value: BUD.year.best || '—' }
       ],
+      budYearNote: (BUD.year && BUD.year.poznamka) || '', budHasYearNote: !!(BUD.year && BUD.year.poznamka),
       budYearCatsEmpty: !BUD.yearCats.length,
       budYearCats: BUD.yearCats.map((c, k) => ({
-        name: c[0], value: this.kc(c[1]),
+        name: c[0], value: bk(c[1]),
         pct: Math.round(c[1] / BUD.yearCats[0][1] * 100) + '%',
         color: GRAF(k),
         go: () => this.setState({ route: 'x-transakce', appTab: 0 })
@@ -16176,14 +16305,31 @@ class Component extends DCLogic {
       }
       return true;
     });
-    const income = rows.filter(r => r.amount > 0).reduce((a, r) => a + r.amount, 0);
-    const spend = rows.filter(r => r.amount < 0).reduce((a, r) => a + r.amount, 0);
+    /*
+     * Součty v hlavní měně (`meta.hl`, přepočet ECB ze serveru).
+     *
+     * `amount` je v měně platby — sčítat ho přes měny dávalo 12,40 € + 310 Kč
+     * = „322 Kč". Platba bez kurzu (`hl: null`) se do součtu nepočítá a stojí
+     * vedle něj zvlášť („+ 12,40 € bez kurzu"). Ukázka měnu nenese: koruny.
+     */
+    const vHlavni = r => r.f && r.f.mena ? (typeof r.f.hl === 'number' ? r.f.hl : null) : r.amount;
+    const bezKurzu = list => {
+      const mapa = {};
+      list.filter(r => vHlavni(r) === null).forEach(r => { mapa[r.f.mena] = (mapa[r.f.mena] || 0) + r.amount; });
+      return Object.keys(mapa).map(k => (mapa[k] < 0 ? '− ' : '+ ') + this.vMene(Math.abs(mapa[k]), k)).join(' · ');
+    };
+    const sectiHl = list => list.reduce((a, r) => a + (vHlavni(r) || 0), 0);
+    const income = sectiHl(rows.filter(r => r.amount > 0));
+    const spend = sectiHl(rows.filter(r => r.amount < 0));
+    const incomeBez = bezKurzu(rows.filter(r => r.amount > 0));
+    const spendBez = bezKurzu(rows.filter(r => r.amount < 0));
+    const castkaRadku = r => (r.amount > 0 ? '+ ' : '− ') + this.vMene(Math.abs(r.amount), r.f.znak || r.f.mena);
     const selIds = s.txSel || [];
     const groups = [];
     rows.forEach(r => {
       let g = groups.find(x => x.month === r.month);
       if (!g) { g = { month: r.month, items: [], sum: 0 }; groups.push(g); }
-      g.items.push(r); g.sum += r.amount;
+      g.items.push(r); g.sum += vHlavni(r) || 0;
     });
     const open = s.txOpen ? all.find(r => r.id === s.txOpen) : null;
     const unCount = all.filter(r => r.un).length;
@@ -16216,11 +16362,14 @@ class Component extends DCLogic {
       txIncome: income === 0 ? this.kc(0) : '+ ' + this.kc(Math.abs(income)),
       txSpend: spend === 0 ? this.kc(0) : '− ' + this.kc(Math.abs(spend)),
       txNet: income + spend === 0 ? this.kc(0) : (income + spend > 0 ? '+ ' : '− ') + this.kc(Math.abs(income + spend)),
+      txIncomeNote: incomeBez ? incomeBez + ' bez kurzu' : '', txHasIncomeNote: !!incomeBez,
+      txSpendNote: spendBez ? spendBez + ' bez kurzu' : '', txHasSpendNote: !!spendBez,
       txGroups: groups.map(g => ({
-        month: g.month, sum: (g.sum >= 0 ? '+ ' : '− ') + this.kc(Math.abs(g.sum)), count: this.pl(g.items.length, 'položka', 'položky', 'položek'),
+        month: g.month, count: this.pl(g.items.length, 'položka', 'položky', 'položek'),
+        sum: (g.sum >= 0 ? '+ ' : '− ') + this.kc(Math.abs(g.sum)) + (bezKurzu(g.items) ? ' · ' + bezKurzu(g.items) + ' bez kurzu' : ''),
         items: g.items.map(r => ({
           date: r.date, name: r.name, cat: r.cat, icon: r.icon, account: r.account,
-          amount: (r.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(r.amount)),
+          amount: castkaRadku(r),
           amountColor: r.amount > 0 ? 'var(--g-fin-prijem)' : 'var(--g-fin-vydaj)',
           catColor: r.un ? 'var(--g-mag)' : 'var(--g-ink2)',
           hasRec: !!r.f.rec, rec: r.f.rec, hasTrip: !!r.f.trip, hasReceipt: !!r.f.receipt,
@@ -16289,7 +16438,7 @@ class Component extends DCLogic {
       txDetail: open ? {
         name: open.name, date: open.date, account: open.account, cat: open.cat, note: open.note,
         hasNote: !!open.note, icon: open.icon,
-        amount: (open.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(open.amount)),
+        amount: castkaRadku(open),
         amountColor: open.amount > 0 ? 'var(--g-fin-prijem)' : 'var(--g-fin-vydaj)',
         recLabel: (open.f.rec ? 'opakuje se ' + open.f.rec : 'jednorázová platba') + (open.f.mimo ? ' · nepočítá se do rozpočtu' + (open.f.mimoProc ? ' (' + open.f.mimoProc + ')' : '') : ''),
         pctOfCat: 'Podíl v kategorii ' + open.cat + ' za měsíc'
@@ -16344,7 +16493,7 @@ class Component extends DCLogic {
         if (open.f.rec) { this.toast(open.name + ' už se opakuje ' + open.f.rec, { icon: 'ph-repeat' }); return; }
         this.setState({ confirm: {
           title: 'Opakovat každý měsíc',
-          body: open.name + ' (' + this.kc(Math.abs(open.amount)) + ') se bude zapisovat každý měsíc ve stejný den. Další platby uvidíte ve Financích v Nadcházejících — jednotlivý termín jde přeskočit.',
+          body: open.name + ' (' + this.vMene(Math.abs(open.amount), open.f.znak || open.f.mena) + ') se bude zapisovat každý měsíc ve stejný den. Další platby uvidíte ve Financích v Nadcházejících — jednotlivý termín jde přeskočit.',
           cta: 'Opakovat', btnBg: 'var(--g-acc)',
           go: () => { this.setState({ confirm: null }); this.financeAkce('finance/transakce/' + open.id + '/opakovat', {}); }
         } });
@@ -16382,6 +16531,18 @@ class Component extends DCLogic {
     const spend = FIN.accounts.filter(x => x[6] !== 'nedotknutelné' && x[3] !== 'ph-airplane-tilt').reduce((a, x) => a + x[2], 0);
     const saved = total - spend;
     const due = FIN.upcoming.filter(u => u[5]).reduce((a, u) => a + u[2], 0);
+    /*
+     * Souhrn ze serveru (`FIN.souhrn`) místo součtu v prohlížeči.
+     *
+     * Součet `x[2]` sčítal zůstatky v různých měnách do jednoho čísla
+     * („1 100 Kč" z 1 000 Kč a 100 €). Server posílá hotové texty v korunách
+     * s přepočtem ECB, a když kurz chybí, měny vedle sebe — nikdy smíšené
+     * číslo. Ukázka souhrn nemá, ta sčítá dál (je celá v korunách).
+     */
+    const souhrn = FIN.souhrn && FIN.souhrn.texty ? FIN.souhrn : null;
+    const T = souhrn ? souhrn.texty : null;
+    const finRate = souhrn ? [souhrn.popisek, souhrn.uplne === false && (souhrn.chybi || []).length ? (souhrn.chybi || []).join(', ') + ' bez kurzu ECB — zůstává ve své měně' : ''].filter(Boolean).join(' · ') : '';
+    const castkaUctu = a => a[11] || this.vMene(a[2] || 0, a[9]);
     const tabs = ['Přehled', 'Účty a napojení', 'Nadcházející platby', 'Automatické zařazování', 'Investice', 'Peníze na 60 dní', 'Co kdyby', 'Kalibrace odhadů', 'Naše vlastní inflace', 'Rok versus deset let', 'Arbitr', 'Každý sám'];
     return {
       isFin: (s.route === 'x-finance' || s.route === 'x-ucty') && !this.gateBlocked(),
@@ -16401,14 +16562,16 @@ class Component extends DCLogic {
       finIsMine: tab === 11,
       ...(tab === 11 ? this.mineVals() : {}),
       ...(tab === 4 ? this.investVals() : { finIsInv: false }),
-      finTotal: this.kc(total), finSpend: this.kc(spend), finSaved: this.kc(saved), finDue: this.kc(due),
+      finTotal: T ? T.celkem : this.kc(total), finSpend: T ? T.bezne : this.kc(spend), finSaved: T ? T.odlozeno : this.kc(saved), finDue: T ? T.ceka : this.kc(due),
       // Počty ze seznamů, ne napsané („5 napojených", „3 platby") — u dvojice s jedním účtem to lhalo.
       finHead: [
-        { label: 'Dohromady', value: this.kc(total), note: this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ', ' + FIN.accounts.filter(a => a[4] === 'napojeno').length + ' bankovních' },
-        { label: 'Na běžných účtech', value: this.kc(spend), note: 'k dispozici tento měsíc' },
-        { label: 'Odloženo', value: this.kc(saved), note: 'rezerva a cesty' },
-        { label: 'Čeká do konce měsíce', value: this.kc(due), note: (() => { const n = FIN.upcoming.filter(u => u[5]).length; return n ? this.pl(n, 'platba', 'platby', 'plateb') + ' tento měsíc' : 'nic naplánovaného'; })() }
+        { label: 'Dohromady', value: T ? T.celkem : this.kc(total), note: this.pl(FIN.accounts.length, 'účet', 'účty', 'účtů') + ', ' + FIN.accounts.filter(a => a[4] === 'napojeno').length + ' bankovních' },
+        { label: 'Na běžných účtech', value: T ? T.bezne : this.kc(spend), note: 'k dispozici tento měsíc' },
+        { label: 'Odloženo', value: T ? T.odlozeno : this.kc(saved), note: souhrn ? 'spořicí účty' : 'rezerva a cesty' },
+        { label: 'Čeká do konce měsíce', value: T ? T.ceka : this.kc(due), note: (() => { const n = FIN.upcoming.filter(u => u[5]).length; return n ? this.pl(n, 'platba', 'platby', 'plateb') + ' tento měsíc' : 'nic naplánovaného'; })() }
       ],
+      // „přepočteno kurzem ECB k 24. 9. 2026" pod součty; bez souhrnu (ukázka) nic.
+      finRate, finHasRate: !!finRate,
       finBars: FIN.accounts.filter(a => a[7] > 0).map((a, k) => ({
         name: a[0], pct: a[7] + ' %', width: a[7] + '%',
         color: GRAF(k),
@@ -16428,7 +16591,8 @@ class Component extends DCLogic {
         const off = !!(s.acOff || {})[a[0]];
         const health = off ? 0 : a[4] === 'napojeno' ? 100 : 55;
         return {
-          name: a[0], meta: a[1], value: this.kc(a[2]), icon: a[3],
+          // Zůstatek v měně účtu (`a[11]` hotový text, `a[9]` kód) — ne globálním `kc()`.
+          name: a[0], meta: a[1], value: castkaUctu(a), icon: a[3],
           tag: off ? 'odpojeno' : a[4], tagClass: off ? 'tag-neutral' : a[4] === 'napojeno' ? 'tag-accent' : 'tag-accent-2',
           sync: off ? 'napojení pozastaveno' : a[5], flag: a[6], hasFlag: !!a[6],
           healthPct: health + '%', healthColor: off ? 'var(--g-ink3)' : health === 100 ? 'var(--g-ok)' : 'var(--g-warn)',
@@ -16484,7 +16648,7 @@ class Component extends DCLogic {
           : 'Není co synchronizovat — žádný účet není napojený', { icon: 'ph-arrows-clockwise' });
       },
       finUpcoming: FIN.upcoming.map(u => ({
-        date: u[0], title: u[1], value: this.kc(u[2]), kind: u[3], cat: u[4],
+        date: u[0], title: u[1], value: this.vMene(u[2], u[8]), kind: u[3], cat: u[4],
         thisMonth: u[5], dot: u[5] ? 'var(--g-acc)' : 'var(--g-ink3)',
         go: () => this.setState({ route: 'x-rozpocty', budTab: u[4] === 'Rezerva' || u[4] === 'Cesty' ? 2 : 1 }),
         // Přeskočit jeden termín předpisu — v knize zůstane jako přeskočený a nezapíše se.
@@ -16492,7 +16656,7 @@ class Component extends DCLogic {
           if (!this.financeNaServeru() || !u[6]) { this.zatimNeumime('přeskočení plánované platby bez připojeného serveru'); return; }
           this.setState({ confirm: {
             title: 'Přeskočit platbu', cta: 'Přeskočit', btnBg: 'var(--g-acc)',
-            body: u[1] + ' ' + u[0] + ' (' + this.kc(u[2]) + ') se tentokrát nezapíše. Další termíny zůstávají.',
+            body: u[1] + ' ' + u[0] + ' (' + this.vMene(u[2], u[8]) + ') se tentokrát nezapíše. Další termíny zůstávají.',
             go: () => { this.setState({ confirm: null }); this.financeAkce('finance/platby/' + u[6] + '/preskocit', { datum: u[7] }); }
           } });
         }
@@ -17094,39 +17258,44 @@ class Component extends DCLogic {
     const food = c.items.find(x => x.name.indexOf('Jídlo venku') === 0);
     const top = c.items.slice().sort((a, b) => b.amount - a.amount)[0];
     const diff = perDay - c.prevPerDay;
+    // Částky cesty jsou v `c.mena` (třeba €); ukázka ji nemá a zůstává v Kč.
+    const m = v => this.vMene(v, c.mena);
+    const vynechano = Array.isArray(c.vynechano) && c.vynechano.length ? 'bez ' + c.vynechano.join(', ') + ' — chybí kurz' : '';
+    const tcRate = [c.popisek || '', vynechano].filter(Boolean).join(' · ');
     return {
       tcHas: true,
       tcTitle: 'Co cesta stála',
-      tcTotal: this.kc(c.total),
-      tcPerDay: this.kc(perDay) + ' na den',
-      tcPerPerson: this.kc(perPersonDay) + ' na osobu a den',
-      tcTopLine: 'Nejdražší položka: ' + top.name.toLowerCase() + ' · ' + this.kc(top.amount) + ' (' + Math.round((top.amount / c.total) * 100) + ' % ceny)',
-      tcFoodLine: food ? 'Jídlo venku ' + food.note + '. Kdybyste jedli venku o tři jídla méně, ušetříte ' + this.kc(Math.round((food.amount / 11) * 3)) + '.' : 'Jídlo venku se u téhle cesty nezapisovalo.',
+      tcRate: tcRate, tcHasRate: !!tcRate,
+      tcTotal: m(c.total),
+      tcPerDay: m(perDay) + ' na den',
+      tcPerPerson: m(perPersonDay) + ' na osobu a den',
+      tcTopLine: 'Nejdražší položka: ' + top.name.toLowerCase() + ' · ' + m(top.amount) + ' (' + Math.round((top.amount / c.total) * 100) + ' % ceny)',
+      tcFoodLine: food ? 'Jídlo venku ' + food.note + '. Kdybyste jedli venku o tři jídla méně, ušetříte ' + m(Math.round((food.amount / 11) * 3)) + '.' : 'Jídlo venku se u téhle cesty nezapisovalo.',
       tcCompare: diff === 0 ? 'Stejně drahý den jako ' + c.prev + '.'
-        : diff > 0 ? 'Den byl o ' + this.kc(diff) + ' dražší než ' + c.prev + '.'
-          : 'Den byl o ' + this.kc(Math.abs(diff)) + ' levnější než ' + c.prev + '.',
+        : diff > 0 ? 'Den byl o ' + m(diff) + ' dražší než ' + c.prev + '.'
+          : 'Den byl o ' + m(Math.abs(diff)) + ' levnější než ' + c.prev + '.',
       tcRows: c.items.map(x => ({
-        name: x.name, note: x.note, amount: this.kc(x.amount),
+        name: x.name, note: x.note, amount: m(x.amount),
         pct: Math.round((x.amount / c.total) * 100) + ' %',
         width: Math.round((x.amount / c.total) * 100) + '%'
       })),
-      tcUnderTitle: 'Pod čarou · ' + this.kc(under) + ' navíc',
+      tcUnderTitle: 'Pod čarou · ' + m(under) + ' navíc',
       tcUnderNote: 'Věci, které do ceny cesty nikdo nepočítá, ale zaplatili jste je taky. Osm dní dovolené se v penězích vyjádřit nedá — proto tam stojí nula a věta.',
-      tcUnder: c.under.map(x => ({ name: x.name, note: x.note, amount: x.amount ? this.kc(x.amount) : '—' })),
-      tcRealLine: 'Se vším pod čarou to je ' + this.kc(c.total + under) + ', tedy ' + this.kc(Math.round((c.total + under) / c.days)) + ' na den.',
+      tcUnder: c.under.map(x => ({ name: x.name, note: x.note, amount: x.amount ? m(x.amount) : '—' })),
+      tcRealLine: 'Se vším pod čarou to je ' + m(c.total + under) + ', tedy ' + m(Math.round((c.total + under) / c.days)) + ' na den.',
       /*
        * Rozpočet nejbližší plánované cesty = denní útrata téhle × její dny.
        * Dřív jen otevřel Rozpočty s hláškou „Rozpočet příští cesty založen".
        */
       tcPlan: () => {
-        if (this.ukazka() || !this.apiNaServeru()) { this.setState({ route: 'x-rozpocty', appTab: 0 }); this.toast('Rozpočet příští cesty založen z reálných čísel téhle · ' + this.kc(perDay) + ' na den', { icon: 'ph-wallet' }); return; }
+        if (this.ukazka() || !this.apiNaServeru()) { this.setState({ route: 'x-rozpocty', appTab: 0 }); this.toast('Rozpočet příští cesty založen z reálných čísel téhle · ' + m(perDay) + ' na den', { icon: 'ph-wallet' }); return; }
         const dalsi = Object.values(TRIPS).filter(t => !t.past && t.tag === 'plánujeme' && t.n && t.od && t.do).sort((a, b) => a.od.localeCompare(b.od))[0];
         if (!dalsi) { this.setState({ route: 'x-cesty', appTab: 0 }); this.toast('Nejdřív naplánujte další cestu — rozpočet se jí spočítá podle téhle', { icon: 'ph-airplane-tilt', silent: true }); return; }
         const dni = Math.round((new Date(dalsi.do) - new Date(dalsi.od)) / 86400000) + 1;
         const castka = Math.round(perDay * dni / 100) * 100;
         window.GalerieApi.patch('v1/trips/' + dalsi.n, { budget: castka }).then(() => {
           if (window.GalerieObnovit) window.GalerieObnovit('cesty');
-          this.toast(dalsi.title + ' má rozpočet ' + this.kc(castka) + ' — ' + this.kc(perDay) + ' na den jako tahle cesta, ' + this.pl(dni, 'den', 'dny', 'dní'), { icon: 'ph-wallet' });
+          this.toast(dalsi.title + ' má rozpočet ' + m(castka) + ' — ' + m(perDay) + ' na den jako tahle cesta, ' + this.pl(dni, 'den', 'dny', 'dní'), { icon: 'ph-wallet' });
         }).catch(e => { const b = (e && e.body) || {}; this.toast(b.message || 'Rozpočet se nepodařilo uložit — zkuste to znovu', { icon: 'ph-warning', color: 'var(--g-mag)' }); });
       },
       tcTx: () => { this.setState({ route: 'x-transakce', appTab: 0 }); this.toast('Transakce cesty ' + tripTitle, { icon: 'ph-receipt' }); }
@@ -18474,7 +18643,18 @@ class Component extends DCLogic {
       const lost = fv + h.oneOff * Math.pow(1 + rate / 100, 10) - y10;
       return { ...h, y1: y1, y10: y10, alt: y10 + lost };
     });
-    const worst = rows.slice().sort((a, b) => (b.alt - b.y1) - (a.alt - a.y1))[0];
+    /*
+     * Řádky mohou být v různých měnách (`h.mena`). 800 € a 800 Kč nejsou
+     * totéž, takže „největší rozdíl" se hledá jen mezi řádky jedné měny —
+     * hlavní (nebo přepočtené); když žádný takový není, v měně prvního.
+     * Ukázková data `mena` nemají a počítají se jako hlavní měna.
+     */
+    const hlavni = this.hlavniMena();
+    const vHlavni = h => !h.mena || h.mena === hlavni || !!h.prepocteno;
+    const skupina = rows.some(vHlavni) ? rows.filter(vHlavni) : rows.filter(h => rows[0] && h.mena === rows[0].mena);
+    const worst = skupina.slice().sort((a, b) => (b.alt - b.y1) - (a.alt - a.y1))[0];
+    const hz = (v, h) => this.vMene(v, h && h.mena);
+    const hzPrepocteno = rows.some(h => h.prepocteno);
     return {
       hzEmpty: !rows.length,
       hzRateLabel: rate + ' % ročně',
@@ -18485,20 +18665,22 @@ class Component extends DCLogic {
         pick: () => this.setState({ hzRate: r })
       })),
       hzHead: 'Většina hádek o peníze není hádka o čísla — je to hádka dvou lidí s různým horizontem. Tady je každá věc spočítaná na rok i na deset let, včetně toho, co by ty peníze mezitím vydělaly.',
-      hzNote: 'Desetiletý sloupec není strašení. Je to jen ta samá částka, na kterou se nikdo nikdy nedívá, protože se platí po měsících.',
+      hzNote: 'Desetiletý sloupec není strašení. Je to jen ta samá částka, na kterou se nikdo nikdy nedívá, protože se platí po měsících.'
+        + (hzPrepocteno ? ' Platby v cizí měně jsou přepočtené kurzem ECB.' : ''),
       hzRows: rows.map(h => ({
         what: h.what, note: h.note,
-        m: this.kc(h.monthly) + ' / měs.',
-        y1: this.kc(h.y1),
-        y10: this.kc(h.y10),
-        alt: this.kc(h.alt),
+        m: hz(h.monthly, h) + ' / měs.',
+        y1: hz(h.y1, h),
+        y10: hz(h.y10, h),
+        alt: hz(h.alt, h),
         w1: Math.round((h.y1 / Math.max(1, h.alt)) * 100) + '%',
         w10: Math.round((h.y10 / Math.max(1, h.alt)) * 100) + '%',
-        color: h.alt >= 800000 ? 'var(--g-mag)' : 'var(--g-ink)'
+        // Práh 800 000 je v korunách; řádek v cizí měně se jím neměří.
+        color: vHlavni(h) && h.alt >= 800000 ? 'var(--g-mag)' : 'var(--g-ink)'
       })),
       hzVerdict: !worst
         ? 'Zatím tu nejsou žádné pravidelné platby ani velké nákupy, které by šlo spočítat na deset let. Přibudou z rozpočtu a transakcí.'
-        : 'Největší rozdíl mezi horizonty má „' + worst.what.toLowerCase() + '“: ' + this.kc(worst.y1) + ' za rok vypadá jinak než ' + this.kc(worst.alt) + ' za deset let s ušlým výnosem. Ani jedno číslo není lež — jen se každý díváte na jiné.',
+        : 'Největší rozdíl mezi horizonty má „' + worst.what.toLowerCase() + '“: ' + hz(worst.y1, worst) + ' za rok vypadá jinak než ' + hz(worst.alt, worst) + ' za deset let s ušlým výnosem. Ani jedno číslo není lež — jen se každý díváte na jiné.',
       hzToDec: () => { this.setState({ route: 'x-rozhodnuti', dcTab: 'mem' }); this.toast('Zapište, na kterém horizontu jste se dohodli — to je to skutečné rozhodnutí', { icon: 'ph-scales' }); }
     };
   }
@@ -19214,7 +19396,9 @@ class Component extends DCLogic {
         po: () => this.setState({ chores: null, hsTab: 'chores' })
       },
       ucet: {
-        t: 'Nový účet', a: 'Název — třeba Společný účet nebo Hotovost', b: 'Počáteční zůstatek (nepovinné)', c: 'Druh: banka, karta, hotovost nebo jiné', d: 'Měna (nepovinné, výchozí CZK)',
+        t: 'Nový účet', a: 'Název — třeba Společný účet nebo Hotovost', b: 'Počáteční zůstatek (nepovinné)', c: 'Druh: banka, karta, hotovost nebo jiné', d: 'Měna',
+        // Čtvrté pole je výběr, ne psaní: CZK, EUR, USD (podle `MENY`).
+        dVolby: true,
         h: 'Platby na účet zapisujete v Transakcích, přicházejí z pravidelných plateb, nebo je nahrajete z výpisu banky (tlačítko Nahrát výpis u účtu).',
         cesta: () => 'finance/ucty',
         telo: (a, b, c, d) => {
@@ -19852,18 +20036,23 @@ class Component extends DCLogic {
     // Bez nastavené obálky je limit nula — podíl by vyšel „NaN %".
     const podil = (cast, cele) => cele > 0 ? Math.round((cast / cele) * 100) : 0;
     const kA = this.krestni(this.dva()[0]), kM = this.krestni(this.dva()[1]);
+    // Obálka je v měně rozpočtu (`ENV.mena`); ukázka ji nemá a zůstává v Kč.
+    const ek = n => this.vMene(n, ENV.mena);
+    const vynechano = Array.isArray(ENV.vynechano) && ENV.vynechano.length ? 'bez ' + ENV.vynechano.join(', ') + ' — chybí kurz' : '';
+    const envRate = [ENV.popisek || '', vynechano].filter(Boolean).join(' · ');
     return {
-      envLimit: this.kc(limit),
-      envHead: limit > 0 ? 'Obálka jen pro sebe · ' + this.kc(limit) + ' měsíčně a nikdo se nesmí ptát, na co' : 'Obálka jen pro sebe · zatím bez nastaveného limitu',
+      envRate: envRate, envHasRate: !!envRate,
+      envLimit: ek(limit),
+      envHead: limit > 0 ? 'Obálka jen pro sebe · ' + ek(limit) + ' měsíčně a nikdo se nesmí ptát, na co' : 'Obálka jen pro sebe · zatím bez nastaveného limitu',
       envNote: 'Jediná položka rozpočtu bez odůvodnění. Aplikace u ní neukazuje kategorie ani účelnost — jen to, jestli si to ten člověk vůbec dovolil vzít.',
       envRows: [
-        { name: kA, used: this.kc(sumA), pct: podil(sumA, max) + '%', label: podil(sumA, max) + ' % obálky', color: 'var(--g-acc)' },
-        { name: kM, used: this.kc(sumK), pct: podil(sumK, max) + '%', label: podil(sumK, max) + ' % obálky', color: 'var(--g-mag)' }
+        { name: kA, used: ek(sumA), pct: podil(sumA, max) + '%', label: podil(sumA, max) + ' % obálky', color: 'var(--g-acc)' },
+        { name: kM, used: ek(sumK), pct: podil(sumK, max) + '%', label: podil(sumK, max) + ' % obálky', color: 'var(--g-mag)' }
       ],
       envMonths: ENV.months.map(m => ({
         m: m.m,
         aH: podil(m.a, limit) + '%', kH: podil(m.k, limit) + '%',
-        aLabel: this.kc(m.a), kLabel: this.kc(m.k),
+        aLabel: ek(m.a), kLabel: ek(m.k),
         zero: m.k === 0 ? 'bez čerpání' : ''
       })),
       envVerdict: !ENV.months.length
@@ -20369,7 +20558,9 @@ class Component extends DCLogic {
     const rows = P60.events.slice(0, 9).map(e => {
       run = run - P60.daily * 1 + e.amt;
       return {
-        label: e.label, when: this.p60Day(e.d), amt: (e.amt > 0 ? '+' : '') + this.kc(e.amt),
+        label: e.label, when: this.p60Day(e.d),
+        // Platba v cizí měně je přepočtená; původní částku ukážeme v závorce.
+        amt: (e.amt > 0 ? '+' : '') + this.kc(e.amt) + (e.mena && P60.mena && e.mena !== P60.mena && typeof e.puvodne === 'number' ? ' (' + this.vMene(e.puvodne, e.mena) + ')' : ''),
         color: e.amt > 0 ? 'var(--g-acc)' : 'var(--g-ink)',
         move: e.move ? 'posunutelné' : 'pevné',
         moveColor: e.move ? 'var(--g-ink3)' : 'var(--g-ink2)'
@@ -20382,8 +20573,11 @@ class Component extends DCLogic {
      * „žádný den v minusu" a „61 napjatých dní" — rozbor něčeho, co není.
      */
     const maData = this.ukazka() || !!(P60.start || P60.daily || (P60.events || []).length);
+    // Poznámka o kurzu ze serveru; ukázková data ji nemají a řádek se schová.
+    const p60Rate = P60.poznamka || P60.popisek || '';
     if (!maData) {
       return {
+        p60Rate: p60Rate, p60HasRate: !!p60Rate,
         p60Min: '—', p60MinDay: '—', p60MinColor: 'var(--g-ink3)',
         p60Head: 'Předpověď zatím není z čeho spočítat.',
         p60Note: 'Počítá se z účtů, pravidelných plateb a průměrné denní útraty v transakcích. Jakmile je ve Financích založíte, objeví se tu, jak bude vypadat nejbližších šedesát dní.',
@@ -20394,6 +20588,7 @@ class Component extends DCLogic {
       };
     }
     return {
+      p60Rate: p60Rate, p60HasRate: !!p60Rate,
       p60Min: this.kc(base.min), p60MinDay: this.p60Day(base.minD),
       p60MinColor: base.min < 0 ? 'var(--g-mag)' : base.min < 10000 ? 'var(--g-ink)' : 'var(--g-acc)',
       p60Head: base.min < 0
@@ -20472,8 +20667,10 @@ class Component extends DCLogic {
         const err = e.real / e.est - 1;
         return {
           name: e.name, who: e.who, whoTag: this.tagKdo(e.who),
-          est: e.unit === 'kc' ? this.kc(e.est) : e.est + ' h',
-          real: e.unit === 'kc' ? this.kc(e.real) : e.real + ' h',
+          // Částky jsou v měně rozpočtu (`e.mena`); ukázka ji nemá a zůstává v Kč.
+          est: e.unit === 'kc' ? this.vMene(e.est, e.mena) : e.est + ' h',
+          real: e.unit === 'kc' ? this.vMene(e.real, e.mena) : e.real + ' h',
+          rate: e.popisek || '', hasRate: !!e.popisek,
           err: (err >= 0 ? '+' : '\u2212') + Math.round(Math.abs(err) * 100) + ' %',
           color: err > 0.25 ? 'var(--g-mag)' : err < -0.05 ? 'var(--g-acc)' : 'var(--g-ink2)',
           w: Math.round(Math.min(1, Math.abs(err)) * 100) + '%',
@@ -22086,7 +22283,7 @@ class Component extends DCLogic {
       'ČSOB · Makinka': { bal: '22 980 Kč', icon: 'ph-bank', tx: '96 transakcí letos · napojeno od leden 2025', sync: 'Poslední synchronizace dnes v 8:14' }
     } : {};
     ((FIN || {}).accounts || []).forEach(u => {
-      if (!this.ukazka()) BANK[u[0]] = { bal: this.kc(u[2] || 0), icon: u[3] || 'ph-bank', tx: u[1] || '', sync: u[4] === 'napojeno' ? 'Napojeno na banku · ' + (u[5] || '') : 'Vedeno ručně · ' + (u[5] || '') };
+      if (!this.ukazka()) BANK[u[0]] = { bal: u[11] || this.vMene(u[2] || 0, u[9]), icon: u[3] || 'ph-bank', tx: u[1] || '', sync: u[4] === 'napojeno' ? 'Napojeno na banku · ' + (u[5] || '') : 'Vedeno ručně · ' + (u[5] || '') };
     });
     return {
       appIsAcct: true,
@@ -24058,10 +24255,27 @@ class Component extends DCLogic {
         nowOffPlan: () => this.setState({ route: 'x-cesty', appTab: 0 })
       };
     }
-    const rows = (T.spendRows || []).map((r, i) => ({ label: r[0], amount: r[1], cat: r[2], time: r[3], id: 'ns' + i }))
+    /*
+     * Útrata v měně cesty (`T.mena`, znak `T.znak`).
+     *
+     * `spendRows[i][4]` nese měnu řádku — večeře za 500 Kč na eurové cestě
+     * se dřív přičetla jako 500 €. Do dnešní útraty a fondu jdou jen řádky
+     * v měně cesty; ostatní měny stojí zvlášť a souhrn v korunách nese
+     * `spentMain`. Ukázka ani místní řádky měnu nenesou — ty jsou v měně cesty.
+     */
+    const kcCesty = n => this.vMene(n, T.znak || T.mena);
+    const rows = (T.spendRows || []).map((r, i) => ({ label: r[0], amount: r[1], cat: r[2], time: r[3], mena: r[4] || null, id: 'ns' + i }))
       .concat(extra);
-    const todayTotal = rows.reduce((a, r) => a + r.amount, 0);
-    const spentAll = (T.spent || 0) + extra.reduce((a, r) => a + r.amount, 0);
+    const vMeneCesty = r => !r.mena || !T.mena || r.mena === T.mena;
+    const todayTotal = rows.filter(vMeneCesty).reduce((a, r) => a + r.amount, 0);
+    const spentAll = (T.spent || 0) + extra.filter(vMeneCesty).reduce((a, r) => a + r.amount, 0);
+    const jinaMena = this.poMenachText(T.spentOther);
+    const hlavniSouhrn = T.spentMain && T.spentMain.mena && (jinaMena || T.spentMain.mena !== T.mena)
+      ? (T.spentMain.celkem === null || T.spentMain.celkem === undefined
+        ? 'v ' + T.spentMain.znak + ' bez kurzu' + ((T.spentMain.chybi || []).length ? ' (' + T.spentMain.chybi.join(', ') + ')' : '')
+        : 'celkem ' + this.vMene(T.spentMain.celkem, T.spentMain.mena) + (T.spentMain.popisek ? ' · ' + T.spentMain.popisek : ''))
+      : '';
+    const nowOther = [jinaMena ? 'Mimo měnu cesty ' + jinaMena : '', hlavniSouhrn].filter(Boolean).join(' · ');
     const left = (T.fund || 0) - spentAll;
     const daysLeft = T.days - T.day;
     const perDay = Math.round(left / Math.max(1, daysLeft));
@@ -24074,10 +24288,12 @@ class Component extends DCLogic {
       nowProgress: Math.round((T.day / T.days) * 100) + '%',
       // Počasí a západ slunce aplikace nezjišťuje; ukázkových 27 °C tu nesmí zůstat.
       nowWhen: [T.when, T.weather, T.sun].filter(Boolean).join(' · '),
-      nowLeft: this.kc(left), nowPerDay: this.kc(perDay) + ' na den',
-      nowTodayTotal: this.kc(todayTotal),
+      nowLeft: kcCesty(left), nowPerDay: kcCesty(perDay) + ' na den',
+      nowTodayTotal: kcCesty(todayTotal),
       nowFundPct: (T.fund > 0 ? Math.min(100, Math.round((spentAll / T.fund) * 100)) : 0) + '%',
-      nowFundLabel: this.kc(spentAll) + ' z ' + this.kc(T.fund) + ' · zbývá ' + this.kc(left),
+      nowFundLabel: kcCesty(spentAll) + ' z ' + kcCesty(T.fund || 0) + ' · zbývá ' + kcCesty(left),
+      // Útrata v jiných měnách a souhrn v korunách (kurz ECB) — malým písmem pod fondem.
+      nowOther, nowHasOther: !!nowOther,
       nowGoTrip: () => this.setState({ route: 'trip', tripId: T.id })
     };
     if (key === 'nowDay') {
@@ -24164,13 +24380,13 @@ class Component extends DCLogic {
     }
     if (key === 'nowSpend') {
       const byCat = {};
-      rows.forEach(r => { byCat[r.cat] = (byCat[r.cat] || 0) + r.amount; });
+      rows.filter(vMeneCesty).forEach(r => { byCat[r.cat] = (byCat[r.cat] || 0) + r.amount; });
       return {
         ...base,
-        nowSpendHead: 'Dnes ' + this.kc(todayTotal) + ' · průměr na den ' + this.kc(Math.round(spentAll / T.day))
+        nowSpendHead: 'Dnes ' + kcCesty(todayTotal) + ' · průměr na den ' + kcCesty(Math.round(spentAll / T.day))
           + ' · při této útratě vydrží fond ' + this.pl(Math.floor(left / Math.max(1, Math.round(spentAll / T.day))), 'den', 'dny', 'dní'),
         nowSpendRows: rows.map(r => ({
-          label: r.label, amount: this.kc(r.amount), cat: r.cat, time: r.time,
+          label: r.label, amount: r.mena ? this.vMene(r.amount, r.mena) : kcCesty(r.amount), cat: r.cat, time: r.time,
           del: () => {
             const prev = extra;
             if (extra.indexOf(r) < 0) { this.toast('Položku z plánu smazat nelze — jde jen upravit', { icon: 'ph-info' }); return; }
@@ -24179,7 +24395,7 @@ class Component extends DCLogic {
           }
         })),
         nowSpendCats: Object.keys(byCat).map((c, i) => ({
-          label: c, value: this.kc(byCat[c]),
+          label: c, value: kcCesty(byCat[c]),
           width: Math.round((byCat[c] / todayTotal) * 100) + '%',
           color: ['var(--g-acc)', 'var(--g-acc-deep)', 'var(--g-mag)', 'var(--g-warn)'][i % 4]
         })),
@@ -24187,7 +24403,7 @@ class Component extends DCLogic {
         // Útrata cesty se počítá ve fondu cesty; do měsíčního rozpočtu se nic samo nepropisuje.
         nowSpendPush: () => {
           this.setState({ route: 'trip', tripId: T.id });
-          this.toast('Útrata ' + this.kc(spentAll) + ' z fondu ' + this.kc(T.fund || 0) + ' — rozpis je u cesty', { icon: 'ph-chart-donut' });
+          this.toast('Útrata ' + kcCesty(spentAll) + ' z fondu ' + kcCesty(T.fund || 0) + ' — rozpis je u cesty', { icon: 'ph-chart-donut' });
         }
       };
     }
@@ -24282,7 +24498,7 @@ class Component extends DCLogic {
           api.post('cesty/' + NOWTRIP.n + '/vydaj', { nazev: d.label.trim(), castka: amount, kategorie: d.cat }).then(res => {
             if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
             this.setState({ nowSpDlg: null, appTab: 2 });
-            this.toast(this.kc(amount) + ' · ' + d.label.trim() + ' zapsáno k cestě', { icon: 'ph-receipt' });
+            this.toast(this.vMene(amount, NOWTRIP.znak || NOWTRIP.mena) + ' · ' + d.label.trim() + ' zapsáno k cestě', { icon: 'ph-receipt' });
           }).catch(e => this.toast(((e && e.body) || {}).message || 'Výdaj se nepodařilo zapsat', { icon: 'ph-warning', color: 'var(--g-mag)' }));
           return;
         }
@@ -24290,7 +24506,7 @@ class Component extends DCLogic {
         const now = new Date();
         const row = { label: d.label.trim(), amount, cat: d.cat, time: now.getHours() + ':' + String(now.getMinutes()).padStart(2, '0'), id: 'nx' + prev.length };
         this.setState({ nowSpend: prev.concat([row]), nowSpDlg: null, appTab: 2 });
-        this.toast(this.kc(amount) + ' · ' + d.label.trim() + ' zapsáno do útraty dne i do fondu cesty', {
+        this.toast(this.vMene(amount, NOWTRIP.znak || NOWTRIP.mena) + ' · ' + d.label.trim() + ' zapsáno do útraty dne i do fondu cesty', {
           icon: 'ph-receipt', undo: () => this.setState({ nowSpend: prev })
         });
       }
@@ -25557,7 +25773,7 @@ class Component extends DCLogic {
         csPicks: rows.map((r, i) => {
           const onx = i === Math.min(pickI, rows.length - 1);
           return {
-            label: r[0], amount: this.kc(r[1]),
+            label: r[0], amount: this.vMene(r[1], r[5]),
             bg: onx ? 'var(--g-ink)' : 'transparent',
             fg: onx ? 'var(--g-bg)' : 'var(--g-ink)',
             bd: onx ? 'var(--g-ink)' : 'var(--g-line)',
@@ -25565,7 +25781,7 @@ class Component extends DCLogic {
           };
         }),
         csPickName: pick[0],
-        csPickAmount: this.kc(pick[1]),
+        csPickAmount: this.vMene(pick[1], pick[5]),
         csPickShare: pick[2],
         csPickNote: pick[3],
         csRefs: REF.map(r => {
@@ -25596,9 +25812,11 @@ class Component extends DCLogic {
       }),
       csRows: rows.map(r => ({
         label: r[0], icon: r[4],
-        amount: this.kc(Math.round(r[1] / div)),
+        amount: this.vMene(Math.round(r[1] / div), r[5]),
         share: r[2],
         note: r[3],
+        // Poznámka ze serveru (přepočet kurzem, chybějící kurz); ukázka ji nemá.
+        rate: r[6] || '', hasRate: !!r[6],
         width: Math.round((r[1] / max) * 100) + '%',
         color: r[1] > year * 0.1 ? 'var(--g-mag)' : 'var(--g-acc)',
         why: () => this.whyShow({
@@ -29567,7 +29785,7 @@ class Component extends DCLogic {
         docs: () => { this.setState({ route: 'trip', tripId: next.k }); this.toast('Doklady a rezervace — ' + next.t.title, { icon: 'ph-files' }); },
         inbox: () => this.setState({ route: 'x-inbox-cesty', appTab: 0 })
       } : {},
-      trNew: () => this.setState({ trDlg: { mode: 'new', id: null, title: '', where: '', when: '', budget: '', past: past } })
+      trNew: () => this.setState({ trDlg: { mode: 'new', id: null, title: '', where: '', when: '', budget: '', mena: 'CZK', past: past } })
     };
   }
   tripDlgVals() {
@@ -29581,6 +29799,9 @@ class Component extends DCLogic {
       trWhere: d.where, trSetWhere: e => set({ where: e.target.value }),
       trWhen: d.when, trSetWhen: e => set({ when: e.target.value }),
       trBudget: d.budget, trSetBudget: e => set({ budget: e.target.value }),
+      // Měna cesty: rozpočet i útraty na cestě se v ní vedou. Výchozí CZK.
+      trMena: d.mena || 'CZK', trSetMena: e => set({ mena: e.target.value }),
+      trMeny: this.menyVolby(),
       // Návrhy termínu od dneška: příští měsíc, nejbližší prosinec, jaro a léto.
       trWhenSug: (() => {
         const d = this.dnes(), r = d.getFullYear(), m = d.getMonth();
@@ -29622,7 +29843,7 @@ class Component extends DCLogic {
             description: (d.where || '').trim() || null,
             start_date: d.od, end_date: d.do,
             budget: rozpocet > 0 ? rozpocet : null,
-            currency: 'CZK', status: 'planned'
+            currency: /^[A-Z]{3}$/.test(String(d.mena || '')) ? d.mena : 'CZK', status: 'planned'
           }).then(() => {
             // Rozpracovaná cesta jen ze stavu (dřívější dialog) se tím přestěhuje na server.
             const zbyle = (this.state.myTrips || []).filter(t => t.id !== d.id);
@@ -31753,7 +31974,7 @@ class Component extends DCLogic {
       confirm: {
         title: 'Přesunout do ' + cil.name,
         body: 'Z vybrané kategorie se limit sníží, u ' + cil.name + ' zvýší. Plán celkem zůstane stejný.',
-        options: volne.map(x => ({ value: x.name, label: x.name + ' · zbývá ' + this.kc(x.limit - x.spent) })),
+        options: volne.map(x => ({ value: x.name, label: x.name + ' · zbývá ' + this.vMene(x.limit - x.spent, BUD.mena) })),
         input: 'Kolik přesunout za měsíc',
         cta: 'Přesunout', btnBg: 'var(--g-acc)',
         go: () => {
@@ -35239,7 +35460,7 @@ class Component extends DCLogic {
           this.toast('Milník založen v Dárcích a nápadech — doplňte datum', { icon: 'ph-cake', undo: () => this.setRows('gifts', prev) });
           return;
         }
-        if (appKey === 'tripsPlanned' || appKey === 'tripsPast') { this.setState({ trDlg: { mode: 'new', id: null, title: '', where: '', when: '', budget: '', past: appKey === 'tripsPast' } }); return; }
+        if (appKey === 'tripsPlanned' || appKey === 'tripsPast') { this.setState({ trDlg: { mode: 'new', id: null, title: '', where: '', when: '', budget: '', mena: 'CZK', past: appKey === 'tripsPast' } }); return; }
         if (appKey === 'placesWish' || appKey === 'placesVisited') {
           if (!this.ukazka() && window.GalerieApi && window.GalerieApi.mode === 'http') { this.setState({ xaOpen: true, xaMode: 'mistoNove', xaCtx: null, xaA: '', xaB: '', xaC: '', xaD: '' }); return; }
           this.setState({ route: 'map' });
@@ -35330,6 +35551,10 @@ class Component extends DCLogic {
       xaC: s.xaC || '', xaD: s.xaD || '',
       xaSetC: e => this.setState({ xaC: e.target.value }),
       xaSetD: e => this.setState({ xaD: e.target.value }),
+      // Formulář s `dVolby` (měna účtu) má místo psaní výběr; prázdné = CZK.
+      xaDSelect: !!(zapF && zapF.dVolby), xaDInput: !(zapF && zapF.dVolby),
+      xaDOpts: zapF && zapF.dVolby ? this.menyVolby() : [],
+      xaDSel: s.xaD || 'CZK',
       xaHint: zapF ? zapF.h : '',
       xaClose: () => this.setState({ xaOpen: false, xaMode: null, xaCtx: null }),
       xaCommit: xCommit,
@@ -35695,7 +35920,7 @@ class Component extends DCLogic {
             pct: Math.round((T.day / T.days) * 100) + '%',
             // Den bez programu (nebo s hotovým) nemá „další bod" — `plan[-1]` spadl.
             next: T.plan.length ? T.plan[Math.min(doneN, T.plan.length - 1)][0] + ' · ' + T.plan[Math.min(doneN, T.plan.length - 1)][2] : 'na dnešek není nic naplánované',
-            left: this.kc(T.fund - spentAll) + ' z fondu zbývá',
+            left: this.vMene(T.fund - spentAll, T.znak || T.mena) + ' z fondu zbývá',
             doneLabel: doneN + ' z ' + T.plan.length + ' bodů dneška hotových',
             go: () => this.setState({ route: 'x-teď', appTab: 0 }),
             openTrip: () => this.setState({ route: 'trip', tripId: T.id }),
