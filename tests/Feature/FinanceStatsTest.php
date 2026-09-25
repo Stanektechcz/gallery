@@ -116,8 +116,8 @@ class FinanceStatsTest extends TestCase
         $czk = Wallet::create(['gallery_space_id' => $this->space->id, 'name' => 'CZK', 'kind' => 'bank',
             'currency' => 'CZK', 'opening_balance' => 50000, 'is_active' => true]);
 
-        $this->vydaj(100, now()->toDateString(), 'Potraviny');
-        $this->vydaj(2000, now()->toDateString(), 'Potraviny', $czk);
+        $this->vydaj(100, $this->dnes()->toDateString(), 'Potraviny');
+        $this->vydaj(2000, $this->dnes()->toDateString(), 'Potraviny', $czk);
 
         $s = $this->getJson('/api/v1/rozpocet/statistiky')->assertOk();
 
@@ -168,7 +168,7 @@ class FinanceStatsTest extends TestCase
 
     public function test_bez_minuleho_obdobi_zadne_postrehy(): void
     {
-        $this->vydaj(200, now()->toDateString(), 'Potraviny');
+        $this->vydaj(200, $this->dnes()->toDateString(), 'Potraviny');
 
         $this->assertSame([], $this->getJson('/api/v1/rozpocet/statistiky')->json('insights'),
             'Bez čeho srovnávat se nesrovnává.');
@@ -177,9 +177,9 @@ class FinanceStatsTest extends TestCase
     /** Největší výdaje jsou seřazené a nesou odkaz na svůj záznam. */
     public function test_nejvetsi_vydaje(): void
     {
-        $this->vydaj(30, now()->toDateString(), 'Potraviny');
-        $this->vydaj(310, now()->toDateString(), 'Ubytování');
-        $this->vydaj(90, now()->toDateString(), 'Doprava');
+        $this->vydaj(30, $this->dnes()->toDateString(), 'Potraviny');
+        $this->vydaj(310, $this->dnes()->toDateString(), 'Ubytování');
+        $this->vydaj(90, $this->dnes()->toDateString(), 'Doprava');
 
         $nejvetsi = collect($this->getJson('/api/v1/rozpocet/statistiky')->json('largest'));
 
@@ -197,7 +197,7 @@ class FinanceStatsTest extends TestCase
         $ucetAdri = Wallet::create(['gallery_space_id' => $this->space->id, 'name' => 'Adri EUR', 'kind' => 'card',
             'currency' => 'EUR', 'opening_balance' => 1000, 'partner_id' => $adri->id, 'is_active' => true]);
 
-        $t = $this->vydaj(100, now()->toDateString(), 'Potraviny', $ucetAdri);
+        $t = $this->vydaj(100, $this->dnes()->toDateString(), 'Potraviny', $ucetAdri);
 
         foreach ([$adri, $maki] as $p) {
             TransactionShare::create(['transaction_id' => $t->id, 'partner_id' => $p->id,

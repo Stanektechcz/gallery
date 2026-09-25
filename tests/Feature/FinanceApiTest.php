@@ -67,7 +67,7 @@ class FinanceApiTest extends TestCase
 
         $this->postJson('/api/v1/rozpocet/transakce', [
             'type' => 'expense',
-            'occurred_at' => now()->toDateString(),
+            'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $ucet->uuid,
             'amount_from' => 12.5,
             'category' => $potraviny->uuid,
@@ -87,7 +87,7 @@ class FinanceApiTest extends TestCase
         $eur = $this->penezenka('EUR', 'EUR');
 
         $odpoved = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'transfer', 'occurred_at' => now()->toDateString(),
+            'type' => 'transfer', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $czk->uuid, 'wallet_to' => $eur->uuid, 'amount_from' => 1000,
         ])->assertStatus(422);
 
@@ -102,7 +102,7 @@ class FinanceApiTest extends TestCase
         $b = $this->penezenka('EUR B', 'EUR');
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'exchange', 'occurred_at' => now()->toDateString(),
+            'type' => 'exchange', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $a->uuid, 'wallet_to' => $b->uuid,
             'amount_from' => 100, 'amount_to' => 100,
         ])->assertStatus(422)->assertJsonPath('errors.wallet_to.0', 'Směna je mezi různými měnami. Přesun ve stejné měně je Převod.');
@@ -116,7 +116,7 @@ class FinanceApiTest extends TestCase
         $ucet = $this->penezenka('EUR', 'EUR', 500);
 
         $odpoved = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $ucet->uuid, 'amount_from' => 60,
             'split' => [
                 ['partner_id' => $adri->id, 'amount' => 30],
@@ -133,7 +133,7 @@ class FinanceApiTest extends TestCase
         $ucet = $this->penezenka('EUR', 'EUR', 500);
 
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $ucet->uuid, 'amount_from' => 50,
             'excluded_from_budget' => true,
         ])->assertStatus(422)->assertJsonValidationErrors('exclusion_reason');
@@ -146,7 +146,7 @@ class FinanceApiTest extends TestCase
         $eur = $this->penezenka('EUR', 'EUR');
 
         $telo = [
-            'type' => 'exchange', 'occurred_at' => now()->toDateString(),
+            'type' => 'exchange', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $czk->uuid, 'wallet_to' => $eur->uuid,
             'amount_from' => 240000, 'amount_to' => 1000,   // 240 Kč za euro
         ];
@@ -166,7 +166,7 @@ class FinanceApiTest extends TestCase
     public function test_duplicita_varuje_a_da_se_potvrdit(): void
     {
         $ucet = $this->penezenka('EUR', 'EUR', 500);
-        $telo = ['type' => 'expense', 'occurred_at' => now()->toDateString(), 'wallet_from' => $ucet->uuid, 'amount_from' => 9.9];
+        $telo = ['type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(), 'wallet_from' => $ucet->uuid, 'amount_from' => 9.9];
 
         $this->postJson('/api/v1/rozpocet/transakce', $telo)->assertCreated();
 
@@ -184,7 +184,7 @@ class FinanceApiTest extends TestCase
         $eur = $this->penezenka('EUR', 'EUR');
 
         $uuid = $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'exchange', 'occurred_at' => now()->toDateString(),
+            'type' => 'exchange', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $czk->uuid, 'wallet_to' => $eur->uuid,
             'amount_from' => 24000, 'amount_to' => 1000,
         ])->json('uuid');
@@ -298,9 +298,9 @@ class FinanceApiTest extends TestCase
     public function test_aktivni_cesta_je_jen_jedna(): void
     {
         $a = FinanceProject::create(['gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'První',
-            'starts_on' => now()->toDateString(), 'base_currency' => 'EUR', 'state' => 'active']);
+            'starts_on' => $this->dnes()->toDateString(), 'base_currency' => 'EUR', 'state' => 'active']);
         $b = FinanceProject::create(['gallery_space_id' => $this->space->id, 'kind' => 'trip', 'name' => 'Druhá',
-            'starts_on' => now()->toDateString(), 'base_currency' => 'EUR', 'state' => 'active']);
+            'starts_on' => $this->dnes()->toDateString(), 'base_currency' => 'EUR', 'state' => 'active']);
 
         $a->aktivuj();
         $b->aktivuj();

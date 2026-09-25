@@ -103,7 +103,7 @@ class FinanceStrategieTest extends TestCase
         $cesta = FinanceProject::where('name', 'Zkušební cesta')->value('id');
 
         foreach (range(1, 8) as $i) {
-            $this->vydaj('Potraviny', 100, Carbon::today()->startOfMonth()->addDays($i - 1), $cesta);
+            $this->vydaj('Potraviny', 100, Carbon::parse($this->dnes()->toDateString())->startOfMonth()->addDays($i - 1), $cesta);
         }
 
         $rady = collect($this->rady());
@@ -126,7 +126,7 @@ class FinanceStrategieTest extends TestCase
 
         $this->limit($uuid, 'Bydlení', 600, priorita: 10);
         $this->limit($uuid, 'Potraviny', 400, priorita: 20);
-        $this->vydaj('Bydlení', 600, Carbon::today()->startOfMonth());
+        $this->vydaj('Bydlení', 600, Carbon::parse($this->dnes()->toDateString())->startOfMonth());
 
         $rada = collect($this->rady())->firstWhere('key', 'pevne-naklady');
 
@@ -142,7 +142,7 @@ class FinanceStrategieTest extends TestCase
         $this->limit($uuid, 'Bydlení', 800, priorita: 10);
 
         foreach (range(1, 10) as $i) {
-            $this->vydaj('Potraviny', 60, Carbon::today()->startOfMonth()->addDays($i - 1));
+            $this->vydaj('Potraviny', 60, Carbon::parse($this->dnes()->toDateString())->startOfMonth()->addDays($i - 1));
         }
 
         $this->assertLessThanOrEqual(6, count($this->rady()));
@@ -160,7 +160,7 @@ class FinanceStrategieTest extends TestCase
         // by tam neměl co ověřit (v noci na prvního je v UTC právě poslední den).
         $this->travelTo(Carbon::parse('2026-09-15 12:00'));
         $this->rozpocet(1000, rezerva: 0);
-        $this->vydaj('Potraviny', 100, Carbon::today()->startOfMonth());
+        $this->vydaj('Potraviny', 100, Carbon::parse($this->dnes()->toDateString())->startOfMonth());
 
         $prubeh = $this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets.0.burndown');
         $body = collect($prubeh['points']);
@@ -184,8 +184,8 @@ class FinanceStrategieTest extends TestCase
     {
         $cesta = $this->postJson('/api/v1/rozpocet/cesty', [
             'name' => 'Zkušební cesta',
-            'starts_on' => Carbon::today()->startOfMonth()->toDateString(),
-            'ends_on' => Carbon::today()->addMonths(2)->toDateString(),
+            'starts_on' => Carbon::parse($this->dnes()->toDateString())->startOfMonth()->toDateString(),
+            'ends_on' => Carbon::parse($this->dnes()->toDateString())->addMonths(2)->toDateString(),
             'base_currency' => 'EUR',
         ])->assertCreated()->json('trip.uuid');
 

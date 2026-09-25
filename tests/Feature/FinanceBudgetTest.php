@@ -71,8 +71,8 @@ class FinanceBudgetTest extends TestCase
     /** Měsíční rozpočet měří aktuální měsíc, ne všechno od založení. */
     public function test_mesicni_rozpocet_meri_jen_tento_mesic(): void
     {
-        $this->vydaj(300, Carbon::today()->subMonths(3)->toDateString());
-        $this->vydaj(120, Carbon::today()->toDateString());
+        $this->vydaj(300, Carbon::parse($this->dnes()->toDateString())->subMonths(3)->toDateString());
+        $this->vydaj(120, Carbon::parse($this->dnes()->toDateString())->toDateString());
 
         $this->mesicni(500);
 
@@ -81,7 +81,7 @@ class FinanceBudgetTest extends TestCase
         $this->assertEqualsWithDelta(120, $r['spent'], 0.001, 'Útraty z minulých měsíců se nepočítají.');
         $this->assertEqualsWithDelta(380, $r['remaining'], 0.001);
         $this->assertSame(24, $r['percent']);
-        $this->assertSame(Carbon::today()->startOfMonth()->toDateString(), $r['starts_on']);
+        $this->assertSame(Carbon::parse($this->dnes()->toDateString())->startOfMonth()->toDateString(), $r['starts_on']);
     }
 
     /** Směna ani převod čerpání nezvýší — jen poplatek. */
@@ -92,7 +92,7 @@ class FinanceBudgetTest extends TestCase
 
         Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'exchange',
-            'occurred_at' => Carbon::today()->toDateString(),
+            'occurred_at' => Carbon::parse($this->dnes()->toDateString())->toDateString(),
             'wallet_from_id' => $czk->id, 'wallet_to_id' => $this->ucet->id,
             'amount_from' => 24000, 'currency_from' => 'CZK',
             'amount_to' => 1000, 'currency_to' => 'EUR',
@@ -110,11 +110,11 @@ class FinanceBudgetTest extends TestCase
     /** Vrácené peníze čerpání sníží. */
     public function test_refundace_snizi_cerpani(): void
     {
-        $nakup = $this->vydaj(200, Carbon::today()->toDateString(), 'Oblečení a nákupy');
+        $nakup = $this->vydaj(200, Carbon::parse($this->dnes()->toDateString())->toDateString(), 'Oblečení a nákupy');
 
         Transaction::create([
             'gallery_space_id' => $this->space->id, 'type' => 'income',
-            'occurred_at' => Carbon::today()->toDateString(),
+            'occurred_at' => Carbon::parse($this->dnes()->toDateString())->toDateString(),
             'wallet_to_id' => $this->ucet->id,
             'amount_to' => 80, 'currency_to' => 'EUR', 'currency_from' => 'EUR',
             'refund_of_id' => $nakup->id, 'state' => 'approved', 'created_by' => $this->uzivatel->id,
@@ -133,7 +133,7 @@ class FinanceBudgetTest extends TestCase
         $potraviny = FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Potraviny')->first();
         $doprava = FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Doprava')->first();
 
-        $this->vydaj(90, Carbon::today()->toDateString(), 'Potraviny');
+        $this->vydaj(90, Carbon::parse($this->dnes()->toDateString())->toDateString(), 'Potraviny');
 
         $this->postJson('/api/v1/rozpocet/rozpocty', [
             'name' => 'Měsíční', 'budget_kind' => 'monthly', 'currency' => 'EUR', 'amount' => 500,
@@ -159,7 +159,7 @@ class FinanceBudgetTest extends TestCase
     /** Hranice upozornění hlásí tu nejvyšší překročenou. */
     public function test_hranice_upozorneni(): void
     {
-        $this->vydaj(460, Carbon::today()->toDateString());
+        $this->vydaj(460, Carbon::parse($this->dnes()->toDateString())->toDateString());
         $this->mesicni(500);
 
         $r = collect($this->getJson('/api/v1/rozpocet/rozpocty')->json('budgets'))->first();
@@ -218,7 +218,7 @@ class FinanceBudgetTest extends TestCase
     /** Smazání rozpočtu nechá transakce být — je to jen strop. */
     public function test_smazani_rozpoctu_nechá_transakce(): void
     {
-        $this->vydaj(50, Carbon::today()->toDateString());
+        $this->vydaj(50, Carbon::parse($this->dnes()->toDateString())->toDateString());
         $uuid = $this->mesicni(500);
 
         $this->deleteJson("/api/v1/rozpocet/rozpocty/{$uuid}")->assertOk();

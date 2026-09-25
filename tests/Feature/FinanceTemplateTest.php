@@ -118,7 +118,7 @@ class FinanceTemplateTest extends TestCase
     public function test_vlastni_pomer(): void
     {
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $this->ucet->uuid, 'amount_from' => 100,
             'category' => $this->kategorie('Potraviny')->uuid,
             'split' => [
@@ -148,7 +148,7 @@ class FinanceTemplateTest extends TestCase
 
         foreach (range(1, 2) as $i) {
             $this->postJson('/api/v1/rozpocet/transakce', [
-                'type' => 'expense', 'occurred_at' => now()->toDateString(),
+                'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
                 'wallet_from' => $this->ucet->uuid, 'amount_from' => $castka,
                 'category' => $this->kategorie('Potraviny')->uuid,
                 'potvrzeno' => true,   // druhý zápis je „duplicita", což je tady legitimní
@@ -175,7 +175,7 @@ class FinanceTemplateTest extends TestCase
     public function test_vlastni_pomer_musi_dat_celek(): void
     {
         $this->postJson('/api/v1/rozpocet/transakce', [
-            'type' => 'expense', 'occurred_at' => now()->toDateString(),
+            'type' => 'expense', 'occurred_at' => $this->dnes()->toDateString(),
             'wallet_from' => $this->ucet->uuid, 'amount_from' => 100,
             'category' => $this->kategorie('Potraviny')->uuid,
             'split' => [
@@ -195,7 +195,7 @@ class FinanceTemplateTest extends TestCase
         foreach ([[15, 'Drážďany'], [120, 'Berlín'], [300, 'Drážďany']] as [$c, $misto]) {
             Transaction::create([
                 'gallery_space_id' => $this->space->id, 'type' => 'expense',
-                'occurred_at' => now()->toDateString(), 'wallet_from_id' => $this->ucet->id,
+                'occurred_at' => $this->dnes()->toDateString(), 'wallet_from_id' => $this->ucet->id,
                 'amount_from' => $c, 'currency_from' => 'EUR', 'place' => $misto,
                 'state' => 'approved', 'created_by' => $this->uzivatel->id,
             ]);

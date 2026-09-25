@@ -449,7 +449,7 @@ class FinanceRozdeleniTest extends TestCase
         Transaction::create([
             'gallery_space_id' => $this->space->id,
             'type' => 'expense',
-            'occurred_at' => Carbon::today(),
+            'occurred_at' => Carbon::parse($this->dnes()->toDateString()),
             'wallet_from_id' => $this->ucet->id,
             'amount_from' => $castka, 'currency_from' => 'EUR',
             'amount_to' => $castka, 'currency_to' => 'EUR',
@@ -490,7 +490,7 @@ class FinanceRozdeleniTest extends TestCase
         Transaction::create([
             'gallery_space_id' => $this->space->id,
             'type' => 'income',
-            'occurred_at' => Carbon::today(),
+            'occurred_at' => Carbon::parse($this->dnes()->toDateString()),
             'wallet_to_id' => $this->ucet->id,
             'amount_to' => $castka, 'currency_to' => 'EUR',
             'amount_from' => $castka, 'currency_from' => 'EUR',
