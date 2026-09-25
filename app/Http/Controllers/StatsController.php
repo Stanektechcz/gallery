@@ -75,7 +75,10 @@ class StatsController extends Controller
 
         // Favorites + archived
         $favorites = (clone $base)->where('is_favorite', true)->count();
-        $archived = MediaItem::where('gallery_space_id', $space->id)->where('is_archived', true)->count();
+        // Jako archiv sám (`ArchiveController`): přesun do trezoru archivní příznak
+        // nesmaže, a počet by jinak prozradil, kolik archivu leží v trezoru.
+        $archived = MediaItem::where('gallery_space_id', $space->id)->where('is_archived', true)
+            ->where('is_hidden', false)->count();
 
         return Inertia::render('Stats/Index', [
             'stats' => [

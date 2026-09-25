@@ -76,6 +76,18 @@ class ArchivVsTrezorTest extends TestCase
         $this->assertNotContains($trezorova->uuid, $uuids, 'Položka z trezoru unikla do archivu.');
     }
 
+    /** Statistiky počítají archiv stejně jako archiv sám — bez trezoru. */
+    public function test_statistiky_nepocitaji_archivovany_trezor(): void
+    {
+        $this->polozka(['original_filename' => 'vylet.jpg']);
+        $this->polozka(['original_filename' => 'tajne.jpg', 'is_hidden' => true]);
+
+        $stats = $this->actingAs($this->uzivatel)->get('/stats')->assertOk()
+            ->viewData('page')['props']['stats'];
+
+        $this->assertSame(1, $stats['archived']);
+    }
+
     public function test_hromadne_odarchivovani_se_nedotkne_trezoru(): void
     {
         $trezorova = $this->polozka(['is_hidden' => true]);
