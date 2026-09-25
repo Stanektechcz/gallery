@@ -247,6 +247,7 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
         $denik = $this->denik($id);
 
         $dnes = Cas::dnes();
+        $hlavniMena = Meny::hlavni($prostor);
         $vysledek = [];
 
         foreach ($cesty as $c) {
@@ -276,6 +277,10 @@ class Cesty implements MaPrazdneKolekce, PoskytovatelObsahu
                 // pod cestou vzniká hledáním.
                 'photoMatch' => $mistaCesty->first() ?: $c->name,
                 'desc' => (string) ($c->description ?? ''),
+                // Obrazovka podle ní odvozuje rozpočet další cesty z útraty
+                // této — jen když jsou obě ve stejné měně, jinak by 90 € zapsala
+                // jako 90 Kč.
+                'mena' => Meny::kod($c->currency ?? null) ?? $hlavniMena,
                 'stats' => $this->cisla($prostor, $c, $od, $do, $delka, $dnes, $utraty[$c->id] ?? collect(), $limity[$c->id] ?? collect(), $dny[$c->id] ?? collect(), $program),
                 'days' => $this->dnyCesty($dny[$c->id] ?? collect(), $program, $od),
                 'budget' => $this->rozpocet($limity[$c->id] ?? collect(), $utraty[$c->id] ?? collect()),

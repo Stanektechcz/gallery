@@ -251,6 +251,18 @@ class ObsahVHlavniMeneTest extends TestCase
         $this->assertSame('70 € + 500 Kč', $stats['Utraceno'][1]);
     }
 
+    /** Rozpočet další cesty se odvozuje jen ze stejné měny — obrazovka ji musí znát. */
+    public function test_cesta_nese_svou_menu(): void
+    {
+        $this->cesta(['name' => 'Portugalsko', 'currency' => 'EUR']);
+        $this->cesta(['name' => 'Šumava', 'currency' => 'czk']);
+
+        $cesty = $this->getJson('/api/data/cesty')->assertOk()->json('data.TRIPS');
+
+        $this->assertSame('EUR', $cesty['portugalsko']['mena']);
+        $this->assertSame('CZK', $cesty['sumava']['mena']);
+    }
+
     // ——— dnes v archivu ———
 
     /** Největší výdaj dne se vybírá podle hodnoty v korunách, ne podle holého čísla. */

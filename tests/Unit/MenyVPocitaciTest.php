@@ -254,6 +254,30 @@ class MenyVPocitaciTest extends TestCase
         $this->assertStringContainsString('{{ tcRate }}', $pocitac);
     }
 
+    public function test_investice_scitaji_jen_prepoctene_zustatky(): void
+    {
+        $inv = self::metoda(self::dokument(), 'investVals(');
+
+        // Koruny kurzem ECB (`u[10]`); bez kurzu (`null`) mimo součet a zvlášť ve své měně.
+        $this->assertStringContainsString("const bezKurzu = !!u[9] && u[10] === null", $inv);
+        $this->assertStringContainsString("typeof u[10] === 'number' ? u[10] : (u[2] || 0)", $inv);
+        $this->assertStringContainsString('const list = vse.filter(p => !p.bezKurzu)', $inv);
+        $this->assertStringContainsString("'Bez kurzu, nezapočteno: '", $inv);
+        $this->assertStringContainsString('invRateNote', $inv);
+        $this->assertStringNotContainsString('val: u[2] || 0', $inv);
+        $this->assertStringContainsString('{{ invRateNote }}', self::dokument());
+    }
+
+    public function test_rozpocet_dalsi_cesty_jen_ve_stejne_mene(): void
+    {
+        $tc = self::metoda(self::dokument(), 'tripCostVals(');
+
+        $this->assertStringContainsString('const menaTeto = c.mena || null, menaDalsi = dalsi.mena || null;', $tc);
+        $this->assertStringContainsString('if (!(menaTeto && menaDalsi && menaTeto === menaDalsi))', $tc);
+        // Kontrola měny je před zápisem rozpočtu, ne až po něm.
+        $this->assertLessThan(strpos($tc, "patch('v1/trips/'"), strpos($tc, 'menaTeto === menaDalsi'));
+    }
+
     public function test_ucet_i_cesta_nabizi_vyber_meny(): void
     {
         $pocitac = self::dokument();

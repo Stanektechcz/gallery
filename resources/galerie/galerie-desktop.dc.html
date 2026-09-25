@@ -2863,6 +2863,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div>
                   <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Hodnota portfolia</div>
                   <div style="font-size:38px; font-variant-numeric:tabular-nums; line-height:1.1">{{ invTotal }}</div>
+                  <sc-if value="{{ invHasRateNote }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:3px; max-width:340px; text-wrap:pretty">{{ invRateNote }}</div></sc-if>
                 </div>
                 <div>
                   <div style="font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--g-ink3)">Zhodnocení</div>
@@ -17291,6 +17292,21 @@ class Component extends DCLogic {
         if (this.ukazka() || !this.apiNaServeru()) { this.setState({ route: 'x-rozpocty', appTab: 0 }); this.toast('Rozpočet příští cesty založen z reálných čísel téhle · ' + m(perDay) + ' na den', { icon: 'ph-wallet' }); return; }
         const dalsi = Object.values(TRIPS).filter(t => !t.past && t.tag === 'plánujeme' && t.n && t.od && t.do).sort((a, b) => a.od.localeCompare(b.od))[0];
         if (!dalsi) { this.setState({ route: 'x-cesty', appTab: 0 }); this.toast('Nejdřív naplánujte další cestu — rozpočet se jí spočítá podle téhle', { icon: 'ph-airplane-tilt', silent: true }); return; }
+        /*
+         * Denní útrata téhle cesty je v `c.mena`. Do rozpočtu další cesty jde
+         * jen tehdy, když je další cesta ve stejné měně — 90 € na den by se
+         * jinak zapsalo jako 90 Kč. Neznámá měna u kterékoli z nich = shoda
+         * se nedá ověřit, tak se nepředvyplňuje nic.
+         */
+        const menaTeto = c.mena || null, menaDalsi = dalsi.mena || null;
+        if (!(menaTeto && menaDalsi && menaTeto === menaDalsi)) {
+          const klic = Object.keys(TRIPS).find(k => TRIPS[k] === dalsi);
+          this.setState(klic ? { route: 'trip', tripId: klic } : { route: 'x-cesty', appTab: 0 });
+          this.toast(menaTeto && menaDalsi
+            ? dalsi.title + ' je v ' + menaDalsi + ', tahle cesta v ' + menaTeto + ' — rozpočet nastavte ručně'
+            : 'Rozpočet ' + dalsi.title + ' nastavte ručně — tahle cesta stála ' + m(perDay) + ' na den', { icon: 'ph-wallet', silent: true });
+          return;
+        }
         const dni = Math.round((new Date(dalsi.do) - new Date(dalsi.od)) / 86400000) + 1;
         const castka = Math.round(perDay * dni / 100) * 100;
         window.GalerieApi.patch('v1/trips/' + dalsi.n, { budget: castka }).then(() => {
@@ -29289,9 +29305,20 @@ class Component extends DCLogic {
      * Nákupní cenu ani měsíční vklad aplikace nevede, tak se nepočítá výnos.
      * Ukázka měla šest napsaných pozic (Vanguard, ČSOB penzijní, Bitcoin).
      */
-    const POS = !this.ukazka() ? ((FIN || {}).accounts || []).filter(u => u[3] === 'ph-piggy-bank').map(u => ({
-      name: u[0], kind: u[1] || 'spoření', who: 'společné', val: u[2] || 0, cost: u[2] || 0, mo: 0, note: u[5] || ''
-    })) : [
+    /*
+     * Účet v cizí měně se sčítá jen přepočtený (`u[10]`, koruny kurzem ECB).
+     * Bez kurzu (`u[10] === null`) do součtu nevstoupí a ukáže se zvlášť ve
+     * své měně — 100 € není 100 Kč. Starší data bez `u[9]` berou `u[2]`.
+     */
+    const POS = !this.ukazka() ? ((FIN || {}).accounts || []).filter(u => u[3] === 'ph-piggy-bank').map(u => {
+      const bezKurzu = !!u[9] && u[10] === null;
+      const val = bezKurzu ? 0 : (u[9] && typeof u[10] === 'number' ? u[10] : (u[2] || 0));
+      const cizi = !!u[9] && u[9] !== this.hlavniMena();
+      return {
+        name: u[0], kind: u[1] || 'spoření', who: 'společné', val: val, cost: val, mo: 0, note: u[5] || '',
+        bezKurzu: bezKurzu, cizi: cizi, vlastni: u[11] || this.vMene(u[2] || 0, u[9])
+      };
+    }) : [
       { name: 'Vanguard FTSE All-World', kind: 'ETF · akciový svět', who: 'společné', val: 486200, cost: 402000, mo: 8000, note: 'Páteř portfolia, měsíční trvalý příkaz.' },
       { name: 'iShares Core MSCI EM', kind: 'ETF · rozvíjející se trhy', who: 'společné', val: 92400, cost: 88000, mo: 1500, note: 'Doplněk k All-World, max 12 %.' },
       { name: 'ČSOB penzijní · Adrian', kind: 'Penzijní spoření', who: 'Adrian', val: 214800, cost: 186000, mo: 1700, note: 'Se státním příspěvkem 340 Kč měsíčně.' },
@@ -29300,7 +29327,13 @@ class Component extends DCLogic {
       { name: 'Spořicí účet · rezerva', kind: 'Hotovost', who: 'společné', val: 180000, cost: 180000, mo: 3000, note: 'Šest měsíců výdajů, nedotýkat se.' }
     ];
     const hide = s.invHide || {};
-    const list = POS.filter(p => !hide[p.name]);
+    const vse = POS.filter(p => !hide[p.name]);
+    // Součty, podíly i simulace jen z účtů s kurzem; ty bez kurzu stojí zvlášť.
+    const list = vse.filter(p => !p.bezKurzu);
+    const bezKurzuPos = vse.filter(p => p.bezKurzu);
+    const popisekKurzu = list.some(p => p.cizi) ? ((FIN || {}).souhrn || {}).popisek || '' : '';
+    const invRateNote = [popisekKurzu, bezKurzuPos.length ? 'Bez kurzu, nezapočteno: ' + bezKurzuPos.map(p => p.vlastni).join(' · ') : '']
+      .filter(Boolean).join(' · ');
     const total = list.reduce((a, p) => a + p.val, 0);
     const cost = list.reduce((a, p) => a + p.cost, 0);
     const monthly = list.reduce((a, p) => a + p.mo, 0);
@@ -29310,17 +29343,18 @@ class Component extends DCLogic {
     list.forEach(p => { const k = p.kind.split(' · ')[0]; byKind[k] = (byKind[k] || 0) + p.val; });
     const target = { 'ETF': 62, 'Penzijní spoření': 22, 'Hotovost': 12, 'Krypto': 4 };
     const who = s.invWho || 'vše';
-    const shown = who === 'vše' ? list : list.filter(p => p.who === who);
+    const shown = who === 'vše' ? vse : vse.filter(p => p.who === who);
     return {
       finIsInv: true,
+      invRateNote: invRateNote, invHasRateNote: !!invRateNote,
       invTotal: this.kc(total), invGain: (gain >= 0 ? '+' : '') + this.kc(gain),
       invGainPct: (gain >= 0 ? '+' : '') + String(gainPct).replace('.', ',') + ' %',
       invGainColor: gain >= 0 ? 'var(--g-ok)' : 'var(--g-mag)',
       invMonthly: this.kc(monthly) + ' měsíčně',
       invHead: this.ukazka()
         ? 'Portfolio Adriana a Makinky · ' + this.pl(list.length, 'pozice', 'pozice', 'pozic') + ' · poslední ocenění dnes v 8:14'
-        : !list.length ? 'Zatím žádný spořicí účet — založíte ho ve Financích jako účet typu spoření.'
-          : 'Spoření · ' + this.pl(list.length, 'účet', 'účty', 'účtů') + ' · zůstatek z knihy',
+        : !vse.length ? 'Zatím žádný spořicí účet — založíte ho ve Financích jako účet typu spoření.'
+          : 'Spoření · ' + this.pl(vse.length, 'účet', 'účty', 'účtů') + ' · zůstatek z knihy',
       invWhoChips: ['vše', 'společné'].concat(this.ukazka() ? ['Adrian', 'Makinka'] : this.dva()).map(w => ({
         label: w === 'vše' ? 'Vše' : w, on: who === w,
         bg: who === w ? 'var(--g-ink)' : 'transparent',
@@ -29343,14 +29377,17 @@ class Component extends DCLogic {
         };
       }),
       invRows: shown.map(p => {
-        const g = p.val - p.cost, gp = Math.round((g / p.cost) * 1000) / 10;
+        const g = p.val - p.cost, gp = p.cost ? Math.round((g / p.cost) * 1000) / 10 : 0;
+        const podilPos = p.bezKurzu || !total ? 0 : Math.round((p.val / total) * 100);
         return {
           name: p.name, kind: p.kind, who: p.who, note: p.note,
-          value: this.kc(p.val), share: Math.round((p.val / total) * 100) + ' %',
-          gain: (g >= 0 ? '+' : '') + this.kc(g) + ' · ' + (g >= 0 ? '+' : '') + String(gp).replace('.', ',') + ' %',
+          // Cizí měna: koruny a v závorce vlastní zůstatek; bez kurzu jen vlastní.
+          value: p.bezKurzu ? p.vlastni : this.kc(p.val) + (p.cizi ? ' (' + p.vlastni + ')' : ''),
+          share: p.bezKurzu ? 'bez kurzu' : podilPos + ' %',
+          gain: p.bezKurzu ? '—' : (g >= 0 ? '+' : '') + this.kc(g) + ' · ' + (g >= 0 ? '+' : '') + String(gp).replace('.', ',') + ' %',
           gainColor: g >= 0 ? 'var(--g-ok)' : 'var(--g-mag)',
           mo: p.mo ? this.kc(p.mo) + ' měsíčně' : 'bez dokupování',
-          bar: Math.round((p.val / total) * 100) + '%',
+          bar: podilPos + '%',
           whoClass: p.who === 'společné' ? 'tag-neutral' : 'tag-accent',
           // U dvojice je „pozice" spořicí účet — dokoupit znamená převést na něj peníze z hlavního účtu.
           buy: () => {
