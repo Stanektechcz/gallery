@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\StorageConnection;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
@@ -22,13 +23,23 @@ use Illuminate\Support\Facades\Log;
  * Selhání se **zapisuje, ne opakuje**. Nedostupný Disk není důvod, proč by
  * galerie neměla nakreslit postranní panel z toho, co ví.
  */
-class ObnovKvotuDisku implements ShouldQueue
+class ObnovKvotuDisku implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 1;
 
     public int $timeout = 60;
+
+    /**
+     * Zámek jedinečnosti drží nejdéle půl hodiny (jako čerstvost kvóty).
+     *
+     * `uniqueId()` tu bylo i dřív, jenže bez `ShouldBeUnique` se nikdy
+     * nepoužilo — každé vykreslení panelu se starou kvótou zařadilo další
+     * dotaz na Google. Zámek se uvolní, jakmile úloha doběhne; opakování po
+     * nepovedeném pokusu brzdí volající (`UlozisteGalerie::disk()`).
+     */
+    public int $uniqueFor = 1800;
 
     public function __construct(private readonly int $pripojeniId) {}
 

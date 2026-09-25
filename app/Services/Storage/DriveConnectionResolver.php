@@ -4,6 +4,7 @@ namespace App\Services\Storage;
 
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -18,16 +19,15 @@ class DriveConnectionResolver
         return $this->forSpace($media->gallery_space_id, $media->owner_user_id);
     }
 
+    /**
+     * `$preferredUserId` jen řadí — do okruhu dvojice nikoho nepřidává.
+     *
+     * Dřív se autor připojil k členům bez podmínky, takže nahrávka hosta
+     * (přispěvatele) poslala originál na jeho vlastní Disk.
+     */
     public function forSpace(int $spaceId, ?int $preferredUserId = null): ?StorageConnection
     {
-        $memberIds = DB::table('gallery_space_user')
-            ->where('gallery_space_id', $spaceId)
-            ->pluck('user_id')
-            ->all();
-
-        if ($preferredUserId && ! in_array($preferredUserId, $memberIds, true)) {
-            $memberIds[] = $preferredUserId;
-        }
+        $memberIds = $this->dvojice($spaceId);
 
         if (! $memberIds) {
             return null;
@@ -41,5 +41,35 @@ class DriveConnectionResolver
             ->orderByRaw('CASE WHEN owner_user_id = ? THEN 0 ELSE 1 END', [$preferredUserId ?? 0])
             ->orderByDesc('last_successful_request_at')
             ->first();
+    }
+
+    /**
+     * Účty, jejichž Disk smí nést originály prostoru: vlastník a členové
+     * s rolí dvojice.
+     *
+     * Za člena se dřív bral každý řádek `gallery_space_user`, tedy i host
+     * (`viewer`/`contributor`). Host s vlastním připojeným Diskem tak mohl
+     * dostávat originály dvojice a panel úložiště ukazoval e-mail jeho účtu.
+     * Vlastník se přidává zvlášť — je vlastníkem, i když mu řádek členství chybí
+     * nebo v něm zůstala výchozí role (viz `PristupDoGalerie`).
+     *
+     * @return list<int>
+     */
+    private function dvojice(int $spaceId): array
+    {
+        $ids = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $spaceId)
+            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        $vlastnik = DB::table('gallery_spaces')->where('id', $spaceId)->value('owner_id');
+
+        if ($vlastnik !== null) {
+            $ids[] = (int) $vlastnik;
+        }
+
+        return array_values(array_unique($ids));
     }
 }

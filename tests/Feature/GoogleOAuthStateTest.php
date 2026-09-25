@@ -73,6 +73,36 @@ class GoogleOAuthStateTest extends TestCase
         $this->get('/oauth/google/callback?code=kod&state=spravny')->assertRedirect(route('settings.storage.google'));
     }
 
+    /**
+     * `?error=` se čte až po ověření stavu a text od Googlu se nezobrazuje.
+     *
+     * `error_description` jde z adresy, kterou může poslat kdokoli — jako
+     * hláška na naší doméně by to byl hotový podvodný text („zavolejte na…").
+     */
+    public function test_chyba_od_googlu_neukaze_text_z_adresy(): void
+    {
+        $this->sluzba()->shouldNotReceive('handleCallback');
+
+        $this->actingAs($this->adri)
+            ->withSession([self::KLIC => 'spravny'])
+            ->get('/oauth/google/callback?error=access_denied&state=spravny&error_description='.rawurlencode('Účet zablokován, volejte 777 123 456'))
+            ->assertRedirect(route('settings.storage.google'))
+            ->assertSessionHas('error', fn (string $zprava) => ! str_contains($zprava, '777') && str_contains($zprava, 'zrušena'));
+    }
+
+    public function test_chyba_bez_platneho_stavu_se_hlasi_jako_cizi_navrat(): void
+    {
+        $this->sluzba()->shouldNotReceive('handleCallback');
+
+        $this->actingAs($this->adri)
+            ->withSession([self::KLIC => 'moje-cekajici-prihlaseni'])
+            ->get('/oauth/google/callback?error=access_denied&error_description=cokoli')
+            ->assertRedirect(route('settings.storage.google'))
+            ->assertSessionHas('error', fn (string $zprava) => str_contains($zprava, 'nepatří k tomuhle přihlášení'));
+
+        $this->assertNull(session(self::KLIC), 'Stav se spotřebuje i u chybového návratu.');
+    }
+
     public function test_presmerovani_posle_googlu_stav_ze_sezeni(): void
     {
         $predany = null;

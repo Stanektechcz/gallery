@@ -58,7 +58,22 @@ class BankingIntegrationService
         abort_unless(in_array($requisition['status'] ?? null, ['LN', 'LINKED'], true), 422, 'Revolut zatím připojení nepotvrdil.');
         $connection->update(['status' => 'active', 'oauth_state_hash' => null, 'last_error' => null]);
 
-        return $this->sync($connection->fresh());
+        /*
+         * Selhání prvního stažení neruší dokončené připojení.
+         *
+         * Souhlas je v tu chvíli potvrzený a stav smazaný. Dřív výjimka ze
+         * `sync()` vyletěla ven: volající hlásil nepovedené připojení, audit se
+         * nezapsal a nový pokus o návrat padl na kontrole stavu (403). Chyba
+         * zůstane v `last_error` (zapíše ji `syncUnlocked`) a stažení zopakuje
+         * plánovaná synchronizace nebo ruční tlačítko.
+         */
+        try {
+            return $this->sync($connection->fresh()) + ['first_sync_failed' => false];
+        } catch (\Throwable $exception) {
+            report($exception);
+
+            return ['connection' => $connection->fresh(), 'first_sync_failed' => true];
+        }
     }
 
     public function disconnect(BankConnection $connection): array

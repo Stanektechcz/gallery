@@ -10,6 +10,7 @@ use App\Services\Billing\EntitlementService;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Čísla pro postranní panel: kolik místa je zabráno a co ještě není v cloudu.
@@ -26,6 +27,9 @@ class UlozisteGalerie
 {
     /** Jak dlouho se kvóta z Disku považuje za čerstvou. */
     private const CERSTVOST_MINUT = 30;
+
+    /** Kdy se naposledy zkusila obnovit kvóta připojení — viz `disk()`. */
+    private const POKUS_KLIC = 'kvota-disku-pokus:';
 
     public function __construct(
         private readonly EntitlementService $tarify,
@@ -151,7 +155,15 @@ class UlozisteGalerie
         $stara = $disk->quota_refreshed_at === null
             || $disk->quota_refreshed_at->lt(now()->subMinutes(self::CERSTVOST_MINUT));
 
-        if ($stara) {
+        /*
+         * Pokus se pamatuje zvlášť, ne v `quota_refreshed_at`.
+         *
+         * Když Google neodpoví, čas obnovy zůstane starý — a panel by po
+         * doběhnutí úlohy zařadil další při každém otevření galerie, pořád
+         * dokola. `Cache::add` zapíše jen první pokus v okně čerstvosti;
+         * čerstvou kvótu přitom nikdo nepředstírá.
+         */
+        if ($stara && Cache::add(self::POKUS_KLIC.$disk->id, now()->getTimestamp(), now()->addMinutes(self::CERSTVOST_MINUT))) {
             ObnovKvotuDisku::dispatch($disk->id);
         }
 

@@ -366,6 +366,59 @@ CSV;
         Http::assertNotSent(fn (ClientRequest $request) => str_contains($request->url(), 'payment'));
     }
 
+    /**
+     * Připojení se dokončí i tehdy, když první stažení pohybů selže.
+     *
+     * Souhlas byl potvrzený a stav smazaný ještě před synchronizací. Když ta
+     * spadla, hlásilo se „připojení se nepodařilo", audit se nezapsal a nový
+     * pokus o návrat skončil na kontrole stavu (403) — přitom banka připojená byla.
+     */
+    public function test_failed_first_sync_still_completes_connection_and_says_so(): void
+    {
+        $setting = new IntegrationSetting(['provider' => 'gocardless_bank_data', 'is_enabled' => true, 'updated_by' => $this->owner->id]);
+        $setting->replaceConfig(['secret_id' => 'test-id', 'secret_key' => 'test-secret']);
+        $setting->save();
+        $callback = null;
+        Http::fake(function (ClientRequest $request) use (&$callback) {
+            $url = $request->url();
+            if (str_contains($url, '/token/new/')) {
+                return Http::response(['access' => 'read-only-token', 'access_expires' => 3600]);
+            }
+            if (str_contains($url, '/institutions/')) {
+                return Http::response([['id' => 'REVOLUT_REVOGB21', 'name' => 'Revolut', 'transaction_total_days' => 730, 'max_access_valid_for_days' => 90]]);
+            }
+            if (str_contains($url, '/agreements/enduser/')) {
+                return Http::response(['id' => 'agreement-1'], 201);
+            }
+            if (str_contains($url, '/requisitions/') && $request->method() === 'POST') {
+                $callback = $request->data()['redirect'] ?? null;
+
+                return Http::response(['id' => 'requisition-1', 'link' => 'https://ob.gocardless.com/authorize/read-only'], 201);
+            }
+            if (str_contains($url, '/requisitions/requisition-1/')) {
+                return Http::response(['id' => 'requisition-1', 'status' => 'LN', 'accounts' => ['account-1']]);
+            }
+
+            // Banka po potvrzení souhlasu dočasně neodpovídá.
+            return Http::response(['summary' => 'Service unavailable'], 503);
+        });
+
+        $this->postJson('/api/v1/banking/connections', ['gallery_space_id' => $this->space->id,
+            'institution_id' => 'REVOLUT_REVOGB21', 'country' => 'CZ'])->assertCreated();
+        $parts = parse_url((string) $callback);
+
+        $this->get($parts['path'].'?'.$parts['query'])
+            ->assertRedirect('/finances#connection')
+            ->assertSessionMissing('success')
+            ->assertSessionHas('error', fn (string $zprava) => str_contains($zprava, 'je připojený') && str_contains($zprava, 'Zkusí se znovu'));
+
+        $connection = BankConnection::firstOrFail();
+        $this->assertSame('active', $connection->status);
+        $this->assertNull($connection->oauth_state_hash);
+        $this->assertNotNull($connection->last_error);
+        $this->assertDatabaseHas('audit_logs', ['action' => 'bank.connection.complete', 'subject_id' => $connection->id]);
+    }
+
     private function apiTransaction(string $id, string $date, float $amount, string $indicator, string $description, float $balance): array
     {
         return ['transactionId' => $id, 'bookingDateTime' => $date, 'valueDate' => substr($date, 0, 10),

@@ -52,10 +52,15 @@ return Application::configure(basePath: dirname(__DIR__))
          * ještě žádný nemá. Prototyp ani nativní klient z README na něj token
          * proti CSRF neposílají a v prohlížeči to procházelo jen díky hlavičce
          * `Sec-Fetch-Site`; mimo prohlížeč se přihlásit nešlo vůbec.
+         *
+         * `webhooks/google-drive` posílá Google ze serveru, bez sezení i tokenu
+         * proti CSRF — skutečná upozornění dostávala 419. Pravost hlídá token
+         * kanálu v `GoogleDriveWebhookController`.
          */
         $middleware->validateCsrfTokens(except: [
             'platby/comgate/notifikace',
             'sanctum/token',
+            'webhooks/google-drive',
         ]);
 
         // Zápisy s platným tokenem CSRF nepotřebují — viz třída.

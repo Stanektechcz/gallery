@@ -40,7 +40,16 @@ class GoogleDriveWebhookController extends Controller
             return response('', 404);
         }
 
-        if ($channelToken && $channel->channel_token && ! hash_equals($channel->channel_token, $channelToken)) {
+        /*
+         * Token musí být na obou stranách a shodný.
+         *
+         * Dřív se kontrola přeskočila, když chyběla hlavička nebo uložený token —
+         * kdo znal ID kanálu, mohl bez tokenu spouštět zpracování změn Disku.
+         * Kanál bez uloženého tokenu nemá s čím porovnat, takže nepustí nikoho.
+         */
+        $ulozeny = (string) $channel->channel_token;
+
+        if ($ulozeny === '' || ! is_string($channelToken) || $channelToken === '' || ! hash_equals($ulozeny, $channelToken)) {
             Log::warning("Drive webhook token mismatch for channel {$channelId}");
 
             return response('', 403);

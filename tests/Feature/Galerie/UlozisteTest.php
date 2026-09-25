@@ -9,6 +9,8 @@ use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
 use Carbon\CarbonInterface;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Queue;
 use Laravel\Sanctum\Sanctum;
@@ -159,6 +161,54 @@ class UlozisteTest extends TestCase
         $this->getJson('/api/storage')->assertOk();
 
         Queue::assertPushed(ObnovKvotuDisku::class);
+    }
+
+    /**
+     * Každé vykreslení panelu se starou kvótou zařadilo další dotaz na Google.
+     *
+     * Úloha měla `uniqueId()`, ale ne `ShouldBeUnique`, takže se jedinečnost
+     * nikdy nepoužila.
+     */
+    public function test_stara_kvota_se_zaradi_jen_jednou(): void
+    {
+        $this->disk(zabrano: 1_000_000_000, celkem: 200_000_000_000, obnoveno: now()->subHours(3));
+
+        $this->getJson('/api/storage')->assertOk();
+        $this->getJson('/api/storage')->assertOk();
+
+        Queue::assertPushed(ObnovKvotuDisku::class, 1);
+    }
+
+    public function test_uloha_kvoty_je_jedinecna(): void
+    {
+        $this->assertInstanceOf(ShouldBeUnique::class, new ObnovKvotuDisku(7));
+
+        ObnovKvotuDisku::dispatch(7);
+        ObnovKvotuDisku::dispatch(7);
+
+        Queue::assertPushed(ObnovKvotuDisku::class, 1);
+    }
+
+    /**
+     * Nepovedená obnova se nezařazuje znovu při každém otevření galerie.
+     *
+     * Když Google neodpoví, `quota_refreshed_at` zůstane staré — a panel by
+     * po doběhnutí úlohy (uvolnění zámku) hned zařadil další. Pokus se proto
+     * pamatuje zvlášť; čerstvou kvótu přitom nikdo nepředstírá.
+     */
+    public function test_po_nepovedene_obnove_se_hned_nezkousi_znovu(): void
+    {
+        $disk = $this->disk(zabrano: 1_000_000_000, celkem: 200_000_000_000, obnoveno: now()->subHours(3));
+
+        $this->getJson('/api/storage')->assertOk();
+
+        // Úloha doběhla bez úspěchu: zámek je pryč, kvóta pořád stará.
+        (new UniqueLock(app('cache.store')))->release(new ObnovKvotuDisku($disk->id));
+
+        $this->getJson('/api/storage')->assertOk();
+
+        Queue::assertPushed(ObnovKvotuDisku::class, 1);
+        $this->assertTrue($disk->fresh()->quota_refreshed_at->lt(now()->subHours(2)));
     }
 
     public function test_cerstva_kvota_se_neobnovuje(): void

@@ -5,11 +5,15 @@ namespace App\Http\Controllers;
 use App\Jobs\Media\EnqueueDriveMediaSyncJob;
 use App\Models\AuditLog;
 use App\Models\StorageConnection;
+use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Storage\DriveStructureService;
 use App\Services\Storage\GoogleOAuthService;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Inertia\Inertia;
@@ -20,6 +24,9 @@ class GoogleOAuthController extends Controller
     /** Klíč sezení s náhodným stavem OAuth — viz `redirect()` a `callback()`. */
     private const STATE_KEY = 'oauth.google.state';
 
+    /** Poskytovatel, pod kterým `GoogleOAuthService::handleCallback()` ukládá připojení. */
+    private const PROVIDER = 'google_drive';
+
     public function __construct(private readonly GoogleOAuthService $oauthService) {}
 
     /**
@@ -29,9 +36,7 @@ class GoogleOAuthController extends Controller
     public function showConnect(Request $request): Response
     {
         $user = $request->user();
-        $connection = StorageConnection::where('owner_user_id', $user->id)
-            ->where('provider', 'google_drive')
-            ->first();
+        $connection = $this->pripojeni($user)->first();
 
         return Inertia::render('Settings/Storage/Google', [
             'connection' => $connection ? [
@@ -55,7 +60,7 @@ class GoogleOAuthController extends Controller
     public function redirect(Request $request): RedirectResponse
     {
         $user = $request->user();
-        $connection = StorageConnection::where('owner_user_id', $user->id)->first();
+        $connection = $this->pripojeni($user)->first();
 
         // Force consent only if no refresh token or explicitly requested
         $forceConsent = $request->boolean('force') || ! $connection?->getRefreshToken();
@@ -76,13 +81,6 @@ class GoogleOAuthController extends Controller
      */
     public function callback(Request $request): RedirectResponse
     {
-        if ($request->has('error')) {
-            Log::warning('Google OAuth error', ['error' => $request->input('error')]);
-
-            return redirect()->route('settings.storage.google')
-                ->with('error', 'Autorizace Google byla zrušena: '.$request->input('error_description', 'neznámá chyba'));
-        }
-
         /*
          * Návrat patří k přesměrování, které začalo tady.
          *
@@ -91,6 +89,9 @@ class GoogleOAuthController extends Controller
          * a hned zařadil synchronizaci všech jejích galerií — celá knihovna
          * by odtekla na cizí Disk. Stav se z sezení vytahuje (`pull`), takže
          * platí jednou, a porovnává se v konstantním čase.
+         *
+         * Ověřuje se **před** `?error=`: chybový návrat bez platného stavu je
+         * cizí odkaz jako každý jiný a nemá dostat vlastní hlášku.
          */
         $ocekavany = $request->session()->pull(self::STATE_KEY);
         $prisly = $request->query('state');
@@ -100,6 +101,20 @@ class GoogleOAuthController extends Controller
 
             return redirect()->route('settings.storage.google')
                 ->with('error', 'Připojení Google Disku nepatří k tomuhle přihlášení. Spusťte ho prosím znovu z nastavení.');
+        }
+
+        /*
+         * Pevná hláška, ne `error_description`.
+         *
+         * Ten text jde z adresy a poslat ji může kdokoli — na naší doméně by
+         * se z něj stala důvěryhodně vypadající zpráva („účet zablokován,
+         * volejte…"). Do logu jde jen krátký kód chyby.
+         */
+        if ($request->has('error')) {
+            Log::warning('Google OAuth error', ['error' => Str::limit((string) $request->input('error'), 64, '')]);
+
+            return redirect()->route('settings.storage.google')
+                ->with('error', 'Autorizace Google byla zrušena nebo odmítnuta. Připojení můžete spustit znovu.');
         }
 
         $code = $request->input('code');
@@ -112,13 +127,13 @@ class GoogleOAuthController extends Controller
             $connection = $this->oauthService->handleCallback($code, $request->user());
 
             // Initialize Drive root structure
-            $driveService = new DriveStructureService($connection);
+            $driveService = $this->struktura($connection);
             $structure = $driveService->initializeRootStructure();
 
             // A connection may be added after years of local uploads. Queue
             // those originals immediately instead of synchronising only files
             // uploaded after the OAuth callback.
-            foreach ($request->user()->gallerySpaces()->pluck('gallery_spaces.id') as $spaceId) {
+            foreach ($this->prostoryDvojice($request->user()) as $spaceId) {
                 EnqueueDriveMediaSyncJob::dispatch((int) $spaceId)->onQueue('drive');
             }
 
@@ -139,6 +154,10 @@ class GoogleOAuthController extends Controller
 
     /**
      * POST /settings/storage/google/disconnect
+     *
+     * Když Google odvolání nepotvrdí, připojení se u nás stejně přestane
+     * používat — ale hláška to řekne. Dřív tvrdila „odpojeno" i tehdy, když
+     * aplikace k Disku přístup dál měla a zrušit ho šlo jen v účtu Google.
      */
     public function disconnect(Request $request): RedirectResponse
     {
@@ -146,10 +165,21 @@ class GoogleOAuthController extends Controller
             abort(403);
         }
 
-        $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
-        $this->oauthService->revokeToken($connection);
+        $connection = $this->pripojeni($request->user())->firstOrFail();
+        $odvolano = $this->oauthService->revokeToken($connection);
 
-        AuditLog::record('storage.google.disconnect', $connection);
+        if (! $odvolano) {
+            $connection->markStatus('revoked');
+            $connection->update(['revoked_at' => now()]);
+        }
+
+        AuditLog::record('storage.google.disconnect', $connection, ['google_confirmed' => $odvolano]);
+
+        // Klíč `error`, ne `warning`: rozvržení ukazuje jen `success` a `error`.
+        if (! $odvolano) {
+            return back()->with('error', 'Galerie Google Disk přestala používat, ale Google odvolání přístupu nepotvrdil. '
+                .'Přístup aplikace můžete odebrat sami v nastavení svého účtu Google, v části Zabezpečení.');
+        }
 
         return back()->with('success', 'Google Drive byl odpojen.');
     }
@@ -163,7 +193,7 @@ class GoogleOAuthController extends Controller
             abort(403);
         }
 
-        $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
+        $connection = $this->pripojeni($request->user())->firstOrFail();
         $refreshed = $this->oauthService->refreshToken($connection);
 
         if ($refreshed) {
@@ -186,8 +216,8 @@ class GoogleOAuthController extends Controller
             abort(403);
         }
 
-        $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
-        $service = new DriveStructureService($connection);
+        $connection = $this->pripojeni($request->user())->firstOrFail();
+        $service = $this->struktura($connection);
         $results = $service->runDiagnosticTest();
 
         return response()->json(['tests' => $results]);
@@ -200,12 +230,11 @@ class GoogleOAuthController extends Controller
             abort(403);
         }
 
-        $connection = StorageConnection::where('owner_user_id', $request->user()->id)
-            ->where('provider', 'google_drive')
+        $connection = $this->pripojeni($request->user())
             ->where('connection_status', 'healthy')
             ->firstOrFail();
 
-        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
+        $spaceIds = $this->prostoryDvojice($request->user());
         foreach ($spaceIds as $spaceId) {
             EnqueueDriveMediaSyncJob::dispatch((int) $spaceId)->onQueue('drive');
         }
@@ -225,10 +254,10 @@ class GoogleOAuthController extends Controller
             abort(403);
         }
 
-        $connection = StorageConnection::where('owner_user_id', $request->user()->id)->firstOrFail();
+        $connection = $this->pripojeni($request->user())->firstOrFail();
 
         try {
-            $driveService = new DriveStructureService($connection);
+            $driveService = $this->struktura($connection);
             $structure = $driveService->initializeRootStructure();
 
             AuditLog::record('storage.google.init_structure', $connection, [
@@ -241,5 +270,45 @@ class GoogleOAuthController extends Controller
 
             return back()->with('error', 'Inicializace selhala: '.$e->getMessage());
         }
+    }
+
+    /**
+     * Připojení Google Disku tohoto účtu — jen Google, ne jiný poskytovatel.
+     *
+     * Dropbox a OneDrive ukládají řádky pro téhož vlastníka. Dotaz jen podle
+     * vlastníka tak vzal první z nich: „Odpojit Google Disk" odvolal Dropbox,
+     * test i obnova tokenu šly na cizí připojení a přesměrování ke Googlu
+     * podle refresh tokenu Dropboxu vynechalo souhlas.
+     *
+     * @return Builder<StorageConnection>
+     */
+    private function pripojeni(User $user): Builder
+    {
+        return StorageConnection::where('owner_user_id', $user->id)
+            ->where('provider', self::PROVIDER);
+    }
+
+    /**
+     * Prostory, jejichž originály smí jít na Disk tohoto účtu.
+     *
+     * Jen ty, kde je účet vlastníkem nebo členem dvojice — ne hostem.
+     * Host, který si připojil vlastní Disk, by jinak zařadil synchronizaci
+     * originálů galerie, do které jen nahlíží. Stejné pravidlo drží
+     * `DriveConnectionResolver`.
+     *
+     * @return Collection<int, int>
+     */
+    private function prostoryDvojice(User $user): Collection
+    {
+        return $user->gallerySpaces()
+            ->where(fn ($q) => $q->whereIn('gallery_space_user.role', PristupDoGalerie::ROLE_DVOJICE)
+                ->orWhere('gallery_spaces.owner_id', $user->id))
+            ->pluck('gallery_spaces.id');
+    }
+
+    /** Přes kontejner, aby šla služba v testech nahradit bez volání Googlu. */
+    private function struktura(StorageConnection $connection): DriveStructureService
+    {
+        return app()->makeWith(DriveStructureService::class, ['connection' => $connection]);
     }
 }
