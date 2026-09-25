@@ -78,8 +78,9 @@ class KapsleVeStavuTest extends TestCase
             'body' => 'Vzpomeň si na ten radiátor.',
         ]]])->assertOk();
 
+        // Rok od dneška dvojice — v UTC by byl mezi pražskou půlnocí a druhou o den dřív.
         $this->assertSame(
-            now()->addYear()->toDateString(),
+            $this->dnes()->addYear()->toDateString(),
             substr((string) DB::table('time_capsules')->value('deliver_at'), 0, 10),
         );
         $this->assertSame($this->maki->id, (int) DB::table('time_capsules')->value('created_by'));

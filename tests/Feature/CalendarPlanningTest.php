@@ -594,7 +594,9 @@ class CalendarPlanningTest extends TestCase
 
     public function test_weekly_overview_surfaces_shared_gallery_media_from_the_same_day_in_previous_years(): void
     {
-        $mediaId = DB::table('media_items')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'vyroci.jpg', 'safe_filename' => 'vyroci.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1, 'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => now()->subYears(2), 'created_at' => now(), 'updated_at' => now()]);
+        $mediaId = DB::table('media_items')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'owner_user_id' => $this->owner->id, 'uploaded_by' => $this->owner->id, 'original_filename' => 'vyroci.jpg', 'safe_filename' => 'vyroci.jpg', 'extension' => 'jpg', 'mime_type' => 'image/jpeg', 'media_type' => 'photo', 'size_bytes' => 1, 'status' => 'ready', 'storage_status' => 'ready', 'taken_at' => $this->ted()->subYears(2)->format('Y-m-d H:i:s'), 'created_at' => now(), 'updated_at' => now()]);
+        // `taken_at` je čas podle hodin a „tento den" je pražský — fixtura v UTC by
+        // mezi půlnocí a druhou ráno ležela na jiném dni.
         $this->getJson('/api/v1/calendar/weekly-overview')->assertOk()->assertJsonPath('on_this_day.0.id', $mediaId);
     }
 
