@@ -31,9 +31,10 @@ class NastaveniAplikace
     /**
      * @param  array<string, mixed>  $disk  výstup `System::diskAStav`
      * @param  array<string, mixed>  $zamek  výstup `System::stavZamku`
+     * @param  array<string, mixed>  $mazani  výstup `System::mazani` (`MAZANI`)
      * @return array{SETROWS: array<string, mixed>, SETSEC: list<array{0: string, 1: string, 2: string}>}
      */
-    public function pro(GallerySpace $prostor, ?User $ja, array $disk, array $zamek): array
+    public function pro(GallerySpace $prostor, ?User $ja, array $disk, array $zamek, array $mazani = []): array
     {
         return [
             'SETROWS' => [
@@ -52,7 +53,7 @@ class NastaveniAplikace
                     'title' => 'Zámek a přístup',
                     'sub' => 'Aplikace je jen pro vás dva. Kód, automatické zamčení a sekce, které chtějí ověření znovu.',
                     // Řádky s kódem a zařízeními doplní obrazovka ze `ZAMEK` — tam je i to, co se změnilo mezi načteními.
-                    'rows' => [
+                    'rows' => array_values(array_filter([
                         ['Zámek při spuštění', 'Bez kódu se galerie neotevře ani na přihlášeném zařízení', 'Zapnuto'],
                         ['Automatické zamčení', 'Po jak dlouhé nečinnosti se zamkne samo', '5 min'],
                         ['Odemknutí dotykem', 'Otisk nebo obličej místo kódu, pokud je zařízení umí', 'Zapnuto'],
@@ -60,7 +61,8 @@ class NastaveniAplikace
                         ['Důvěryhodná zařízení', '', ''],
                         ['Aktivní sezení', '', 'Odhlásit ostatní'],
                         ['Zamknout teď', 'Vyžádá kód okamžitě — třeba když zařízení někomu půjčíte', 'Zamknout'],
-                    ],
+                        $this->mazani($mazani),
+                    ])),
                 ],
                 'pwa' => [
                     'title' => 'Aplikace a zařízení', 'sub' => 'Galerie na ploše telefonu a co má u sebe uloženo.',
@@ -81,6 +83,47 @@ class NastaveniAplikace
                 ['menu', 'Uspořádání menu', 'ph-list'], ['export', 'Export a data', 'ph-download-simple'],
             ],
         ];
+    }
+
+    /**
+     * Mazání fotek — pravidlo, které si dvojice mění jen společně.
+     *
+     * Stav je v nápovědě, tlačítko (`SETACT`) jen to, co ten, kdo se dívá,
+     * může udělat teď: navrhnout, potvrdit návrh druhého, stáhnout svůj,
+     * nebo vrátit společné schvalování. Jména jsou v prvním pádě —
+     * skloňovat cizí jméno aplikace neumí a „čeká na potvrzení od Adrian"
+     * zní hůř než věta, ve které jméno stojí jako podmět.
+     *
+     * Kdo je v galerii sám, nemá s kým se dohodnout; hodnota malými písmeny
+     * je jen údaj, ne tlačítko.
+     *
+     * @param  array<string, mixed>  $m  `MAZANI`
+     * @return array{0: string, 1: string, 2: string}|null
+     */
+    private function mazani(array $m): ?array
+    {
+        if ($m === []) {
+            return null;
+        }
+
+        $partner = $m['partner'] ?? null;
+        $navrh = $m['navrhRezimu'] ?? null;
+
+        if (($m['rezim'] ?? 'spolecne') === 'kazdy') {
+            return ['Mazání fotek', 'Každý maže sám — potvrdili jste to oba', 'Vrátit společné schvalování'];
+        }
+
+        if (is_array($navrh) && ($navrh['rezim'] ?? null) === 'kazdy') {
+            return ! empty($navrh['ja'])
+                ? ['Mazání fotek', $partner ? 'Návrh čeká, až ho potvrdí '.$partner : 'Návrh čeká na potvrzení od druhého z vás', 'Zrušit návrh']
+                : ['Mazání fotek', ($navrh['kdo'] ?? 'Druhý z vás').' navrhuje, aby každý mazal sám — potvrďte kódem zámku nebo heslem', 'Potvrdit změnu'];
+        }
+
+        if ($partner === null) {
+            return ['Mazání fotek', 'Mažete sami — v galerii zatím nikdo další není', 'sami'];
+        }
+
+        return ['Mazání fotek', 'Jen po společném schválení — „Do koše" fotku navrhne, smaže ji až souhlas druhého', 'Navrhnout mazání bez schválení'];
     }
 
     /** @return array<string, mixed> */

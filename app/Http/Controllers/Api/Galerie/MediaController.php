@@ -325,19 +325,6 @@ class MediaController extends Controller
         return $disk->response($varianta->path, $media->original_filename, $hlavicky);
     }
 
-    /** Do koše, ne z disku — trvale maže až úklid po třiceti dnech. */
-    public function destroy(Request $request, string $uuid): JsonResponse
-    {
-        $media = $this->najdi($request, $uuid);
-
-        $media->update([
-            'trashed_at' => now(),
-            'purge_after' => now()->addDays((int) config('gallery.trash_retention_days', 30)),
-        ]);
-
-        return response()->json(['id' => $media->uuid, 'status' => 'trashed']);
-    }
-
     /**
      * Vybrané fotky jako jeden ZIP.
      *
@@ -390,43 +377,12 @@ class MediaController extends Controller
         return response()->json(['id' => $media->uuid, 'upraveno' => (int) $data['otoceni'] % 360 !== 0 || (bool) $data['vyrez']]);
     }
 
-    /**
-     * Víc položek do koše jedním požadavkem.
-     *
-     * Hromadné „Do koše" a vyřízení série měnily jen stav v prohlížeči, takže
-     * fotky na serveru zůstaly. Po jednom `DELETE` na položku by stovka
-     * vybraných fotek vyčerpala limit API (počítadlo je společné) a dávka
-     * požadavků najednou už jednou spustila WAF.
-     *
-     * Cizí a neexistující identifikátory se tiše přeskočí a vrátí se jen ty,
-     * které opravdu šly do koše — podle nich klient fotky odebere z knihovny.
+    /*
+     * „Do koše" (`DELETE media/{uuid}`, `POST media/do-kose`) tu bylo a mazalo
+     * rovnou — i fotky z trezoru se zamčeným trezorem. Dvojice se ale dohodla
+     * mazat jen po společném schválení, takže obojí je teď v MazaniController
+     * nad `MazaniFotek`.
      */
-    public function destroyMany(Request $request): JsonResponse
-    {
-        $data = $request->validate([
-            'ids' => ['required', 'array', 'min:1', 'max:500'],
-            'ids.*' => ['string', 'max:64'],
-        ]);
-
-        $par = $this->parId($request);
-
-        $polozky = MediaItem::whereIn('uuid', array_values(array_unique($data['ids'])))
-            ->where('gallery_space_id', $par)
-            ->whereNull('trashed_at')
-            ->get();
-
-        $zaDni = now()->addDays((int) config('gallery.trash_retention_days', 30));
-
-        MediaItem::whereIn('id', $polozky->pluck('id'))->update([
-            'trashed_at' => now(),
-            'purge_after' => $zaDni,
-        ]);
-
-        return response()->json([
-            'ids' => $polozky->pluck('uuid')->values()->all(),
-            'status' => 'trashed',
-        ]);
-    }
 
     // ——— přijetí souboru ———
 

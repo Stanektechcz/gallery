@@ -6,6 +6,7 @@ use App\Models\Album;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
+use App\Models\User;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Tabulky;
@@ -297,9 +298,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         // Videa taky naráz: `prehrani()` se jinak doptává po jednom a knihovna
         // s dvěma sty videi si tím přidala dvě stě dotazů.
         $this->zjistiVidea($media->where('media_type', 'video')->pluck('id')->map(fn ($i) => (int) $i)->all());
+        $navrhujici = $this->navrhujici($media);
+        $ja = auth()->id() === null ? null : (int) auth()->id();
         $poradi = 0;
 
-        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, &$poradi) {
+        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, $navrhujici, $ja, &$poradi) {
             $poradi++;
             $klic = $this->den($m)->format('Y-m-d');
             $den = $dny[$klic];
@@ -348,6 +351,19 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'fav' => isset($this->oblibene[$m->id]),
                 // Stav zpracování, ne výmysl: co ještě nemá náhled, se pozná.
                 'pending' => $m->status !== 'ready',
+                /*
+                 * Navržená ke smazání, čeká na souhlas druhého (`MazaniFotek`).
+                 *
+                 * Vlastní pole, ne `pending` — to už znamená „zpracovává se"
+                 * a dlaždice podle něj kreslí přesýpací hodiny místo náhledu.
+                 * Návrh bez navrhujícího (smazaný účet) schválit nejde, tak se
+                 * neukazuje.
+                 */
+                'navrhSmazat' => $m->trash_requested_at !== null && $m->trash_requested_by !== null ? [
+                    'kdo' => $navrhujici[(int) $m->trash_requested_by] ?? 'Někdo',
+                    'ja' => (int) $m->trash_requested_by === $ja,
+                    'kdy' => $this->kdyNavrzeno($m->trash_requested_at),
+                ] : null,
                 'error' => $m->status === 'failed',
                 /*
                  * „Je ve sdílení" se ptá na sdílení, ne na zálohu.
@@ -456,6 +472,47 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
              */
             return array_filter($radek, fn ($v) => $v !== null);
         })->values()->all();
+    }
+
+    /**
+     * Kdo fotky navrhl ke smazání: `user_id => jméno`, jedním dotazem na mřížku.
+     *
+     * Jména jako všude jinde (`System::jmenaClenu`); kdo už v galerii není,
+     * jménem z účtu — jeho návrh může zůstat, než ho někdo vyřídí.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @return array<int, string>
+     */
+    private function navrhujici(Collection $media): array
+    {
+        $navrzene = $media->filter(fn (MediaItem $m) => $m->trash_requested_at !== null && $m->trash_requested_by !== null);
+
+        if ($navrzene->isEmpty()) {
+            return [];
+        }
+
+        $prostor = GallerySpace::query()->find($navrzene->first()->gallery_space_id);
+        $jmena = $prostor ? System::jmenaClenu($prostor) : [];
+        $chybi = $navrzene->pluck('trash_requested_by')->map(fn ($id) => (int) $id)->unique()
+            ->reject(fn (int $id) => array_key_exists($id, $jmena));
+
+        if ($chybi->isNotEmpty()) {
+            $jmena += User::query()->whereIn('id', $chybi)->pluck('name', 'id')->map(fn ($j) => (string) $j)->all();
+        }
+
+        return $jmena;
+    }
+
+    /** „dnes v 9:40", „včera v 18:02", „3. 9. 2026 v 7:15" — jako `TRASH.when`. */
+    private function kdyNavrzeno(mixed $cas): string
+    {
+        $kdy = Cas::mistni($cas);
+
+        return match (true) {
+            $kdy->isToday() => 'dnes v '.$kdy->format('G:i'),
+            $kdy->isYesterday() => 'včera v '.$kdy->format('G:i'),
+            default => $kdy->format('j. n. Y').' v '.$kdy->format('G:i'),
+        };
     }
 
     /**
@@ -1224,7 +1281,10 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 'trash' => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
                     ->where('gallery_space_id', $prostor->id)->whereNotNull('trashed_at')
                     ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
-                    ->count(),
+                    ->count()
+                    // A co čeká na můj souhlas se smazáním (`MAZANI.cekaNaMe`) —
+                    // schvaluje se v koši, a bez odznaku by se tam nikdo nepodíval.
+                    + $this->cekaNaMe($prostor),
                 'shared' => Tabulky::je('shared_links') ? DB::table('shared_links')
                     ->where('gallery_space_id', $prostor->id)->where('is_active', true)
                     ->where(fn ($q) => $q->whereNull('expires_at')->orWhere('expires_at', '>', now()))
@@ -1246,6 +1306,24 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $pocty['x-teď'] = $cesta ? 'den '.((int) CarbonImmutable::parse($cesta->start_date)->diffInDays($dnes) + 1) : '';
 
         return $pocty;
+    }
+
+    /** Návrhy ke smazání od druhého z dvojice, se stejnou podmínkou trezoru jako `System::mazani`. */
+    private function cekaNaMe(GallerySpace $prostor): int
+    {
+        $ja = auth()->id();
+
+        if ($ja === null) {
+            return 0;
+        }
+
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->cekaNaSmazani()
+            ->whereNotNull('trash_requested_by')
+            ->where('trash_requested_by', '!=', $ja)
+            ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
+            ->count();
     }
 
     /** Součet na úvodní obrazovce: „24 316 vzpomínek · 7 let". */
@@ -1378,6 +1456,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                  */
                 'author' => $f['author'] ?? null,
                 'dev' => $f['dev'] ?? null,
+                // Návrh ke smazání — telefon má vlastní kopii dlaždic, bez tohohle by o něm nevěděl.
+                'navrhSmazat' => $f['navrhSmazat'] ?? null,
             ], fn ($v) => $v !== null), $fotky),
         ];
     }

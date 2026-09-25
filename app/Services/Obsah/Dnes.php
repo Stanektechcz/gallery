@@ -551,6 +551,20 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
             'media.upload' => 'nahrání',
             'media.restore' => 'obnovení z koše',
             'media.purge' => 'trvalé smazání',
+            /*
+             * Společné mazání (`MazaniFotek`). U fotky z trezoru protokol jméno
+             * souboru nenese, takže řádek zůstane bez něj — a náhled se
+             * u skryté fotky nevydává nikdy (viz `$snimky` níž).
+             */
+            'media.trash' => 'do koše',
+            'media.trash_proposed' => 'návrh ke smazání',
+            'media.trash_approved' => 'smazání po společném schválení',
+            'media.trash_rejected' => 'ponechání v knihovně',
+            'media.trash_withdrawn' => 'stažený návrh ke smazání',
+            'gallery.delete_mode_proposed' => 'návrh, aby každý mazal sám',
+            'gallery.delete_mode_confirmed' => 'potvrzení, že každý maže sám',
+            'gallery.delete_mode_cancelled' => 'zrušený návrh na mazání bez schválení',
+            'gallery.delete_mode_tightened' => 'mazání zase jen po společném schválení',
             'share.create' => 'nový sdílený odkaz',
             'share.update' => 'úprava sdíleného odkazu',
             'share.extend' => 'prodloužení sdíleného odkazu',

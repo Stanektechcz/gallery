@@ -53,6 +53,7 @@ class GalleryNotification extends Notification
             'upload.complete' => '✅',
             'media.favorited' => '❤️',
             'media.added' => '📸',
+            'media.trash_proposed' => '🗑️',
             'drive.reconnect' => '⚠️',
             'export.ready' => '📦',
             'album.created' => '📁',
@@ -65,6 +66,38 @@ class GalleryNotification extends Notification
             'finance.imported', 'bank.synced' => '💳',
             default => '🔔',
         };
+    }
+
+    /**
+     * Upozornit jen vyjmenované účty.
+     *
+     * `notifySpace()` níž píše všem členům prostoru — i hostům. U věcí, které
+     * patří jen dvojici (návrh smazat fotku), rozhoduje volající, komu přesně
+     * zpráva patří, a tady se jen doručí.
+     *
+     * @param  iterable<int>  $userIds
+     */
+    public static function notifyUsers(
+        GallerySpace $space,
+        int $actorUserId,
+        iterable $userIds,
+        string $type,
+        string $message,
+        ?string $link = null,
+        array $extra = [],
+    ): void {
+        $ids = collect($userIds)->map(fn ($id) => (int) $id)->reject(fn (int $id) => $id === $actorUserId)->unique()->values();
+
+        if ($ids->isEmpty()) {
+            return;
+        }
+
+        foreach (User::query()->whereIn('id', $ids)->get() as $user) {
+            $user->notify(new self($type, $message, $link, null, $extra + [
+                'gallery_space_id' => $space->id,
+                'actor_user_id' => $actorUserId,
+            ]));
+        }
     }
 
     /**

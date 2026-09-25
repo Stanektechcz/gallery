@@ -133,7 +133,7 @@ Podle toho, kde už skutečný obsah je a kde na něm záleží:
 | 26 | **Mechanismy pro dva** | `FAV`, `FORGIVEN`, `ANTI`, `ML_LOAD`, `FAMILY`, `TRUTHS`, `PAUSE_LOG`, `PAUSE_PLAN`, `TICHO` | `couple_favours`, `couple_forgiven`, `couple_anti_budget`, `couple_mental_load`, `couple_family_contacts`, `couple_truths`, `couple_pause` | hotovo, **píše i zpátky**; `TICHO` se počítá |
 | 27 | **Odvozené — bez vlastní tabulky** | `HOURS`, `RECON`, `CAS_ROWS`, `COSTMEAN`, `DELAY`, `EST`, `SURPRISE`, `CONFLICTS`, `DISP`, `SOLO` | `media_items`, `house_chore_log`, `house_dues`, `budget_category_limits`, `transactions`, `drive_conflicts`, `couple_disagreement_points`, `event_participants` | hotovo — počítá se, neukládá |
 | 28 | **Rozhodování** | `BUS`, `PM_DEC`, `PM_MINE`, `PM_THEIRS`, `PM_HIST`, `PAST_DEC`, `PAST_CASES`, `REVISIT` | `couple_bus_items`, `couple_premortems`, `couple_premortem_risks`, `couple_past_cases`, `couple_decision_inputs` | hotovo, **zapisuje se formulářem** (`/api/zaznamy/…`) |
-| 29 | **Úložiště a koš** | `DISK`, `TRASH`, `DVOJICE` | `storage_connections`, `media_items`, `media_variants`, `gallery_space_user` | hotovo, **maže i na Disku** (`/api/kos/…`, `/api/uloziste/prenest`) |
+| 29 | **Úložiště a koš** | `DISK`, `TRASH`, `DVOJICE`, `MAZANI`, `KE_SCHVALENI` | `storage_connections`, `media_items` (`trashed_by`, `trash_requested_by/at`), `media_variants`, `gallery_space_user`, `gallery_spaces.media_delete_mode*` | hotovo, **maže i na Disku** (`/api/kos/…`, `/api/uloziste/prenest`); **mazání po společném schválení** — viz níž |
 | 30 | **Předpověď a horizont** | `P60`, `HORIZON` | `finance_recurring`, `wallets`, `transactions` | hotovo — počítá se, neukládá |
 | 31 | **Rozhodl čas** | `AUTO_DEC` | `couple_cooling_purchases`, `shared_todos` | hotovo — tři vzorce, žádná nová tabulka |
 | 32 | **Účet radosti** | `JOY` | `calendar_events.activity_kind`, `wellbeing_moods`, `transactions` | hotovo — počítá se, **zařazení události zapisuje dvojice** |
@@ -469,6 +469,34 @@ Koš byl na tom stejně: čtyři vymyšlené řádky a dialog slibující, že s
 i originály z Disku, načež se nesmazalo nic. Maže se přes `MediaPurger`, tutéž
 službu jako druhé rozhraní — dvě implementace by znamenaly dvě místa, kde se dá
 zapomenout na kopii v cloudu.
+
+### Mazání po společném schválení
+
+Dvojice se dohodla: *„Mazat fotky mohou jen po společném schválení pokud si po
+vzájemném schválení nenastaví jinak."* Pravidlo drží `MazaniFotek`, obrazovky
+se o něm dozvídají ze skupiny `system` a z knihovny:
+
+| Kolekce | Tvar | Poznámka |
+| --- | --- | --- |
+| `MAZANI` | `{ rezim, muzuSam, partner, navrhRezimu, cekaNaMe, cekaNaPartnera }` | chodí **vždycky a celé** (je v `uplne()`) — klient v objektu přepisuje jen klíče, které přišly, a `navrhRezimu: null` po stažení návrhu by jinak nedorazilo. `rezim` je `spolecne`/`kazdy`, `navrhRezimu` `null` nebo `{ rezim, kdo, ja, kdy }` |
+| `KE_SCHVALENI` | `[{ id, name, from, bg?, by, when, ja, n }]` | návrhy ke smazání, nejnovější první, nejvýš 60. Tvar jako `TRASH`; `ja` = můj návrh (jde jen stáhnout), `bg` náhled jako `PHOTOS.bg` — u fotky z trezoru chybí |
+| `PHOTOS[*].navrhSmazat`, `MOBIL.PHOTOS[*].navrhSmazat` | `{ kdo, ja, kdy }` | chybí, když fotka navržená není. **Ne `pending`** — to znamená „zpracovává se" |
+| `NAVCNT.trash` | číslo | položky v koši + `MAZANI.cekaNaMe` |
+| `TRASH[*].by` | jméno | kdo fotku do koše poslal (`trashed_by`), u starších položek kdo ji nahrál |
+| `SETROWS.zamek` | řádek `Mazání fotek` | tlačítka `SETACT`: `mazani-navrh`, `mazani-potvrdit`, `mazani-zrusit`, `mazani-spolecne` |
+
+Počty i seznam se řídí trezorem jako koš: se zamčeným trezorem se skryté fotky
+nepočítají ani nevypisují — rozdíl mezi číslem a seznamem by prozradil, že tam
+něco je. Ze stejného důvodu odpověď na „Do koše" o přeskočených fotkách
+z trezoru mlčí úplně (ani uuid, ani počet).
+
+Akce (`MazaniController`): `DELETE /api/media/{uuid}` a `POST /api/media/do-kose`
+ve společném režimu fotku jen navrhnou — `ids` jsou dál jen fotky, které
+opravdu odešly do koše, navržené chodí v `navrzeno`/`uzNavrzeno`.
+`POST /api/kos/schvalit`, `/api/kos/ponechat`, `/api/mazani/rezim`,
+`/api/mazani/rezim/potvrdit` a `/api/mazani/rezim/zrusit` vracejí vedle
+výsledku obsah skupiny `system` (`data`, `prazdne`); knihovnu si klient obnoví
+sám.
 
 ## Co ještě není napojené
 

@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Galerie\ImportVypisuController;
 use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
 use App\Http\Controllers\Api\Galerie\KosController;
 use App\Http\Controllers\Api\Galerie\LideController;
+use App\Http\Controllers\Api\Galerie\MazaniController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
 use App\Http\Controllers\Api\Galerie\MediaController;
 use App\Http\Controllers\Api\Galerie\MilnikyController;
@@ -347,6 +348,23 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1'])->prefix('api')-
         Route::post('vratit', [KosController::class, 'restore'])->name('restore');
         Route::post('odstranit', [KosController::class, 'purge'])->name('purge');
         Route::post('vyprazdnit', [KosController::class, 'empty'])->name('empty');
+        // Návrhy ke smazání se vyřizují v koši: souhlas druhého, nebo ponechat.
+        Route::post('schvalit', [MazaniController::class, 'schvalit'])->name('schvalit');
+        Route::post('ponechat', [MazaniController::class, 'ponechat'])->name('ponechat');
+    });
+
+    /*
+     * Pravidlo mazání fotek.
+     *
+     * „Mazat fotky mohou jen po společném schválení pokud si po vzájemném
+     * schválení nenastaví jinak." Povolit „každý sám" musí potvrdit druhý
+     * z dvojice kódem zámku nebo heslem — proto vlastní, tvrdší limit jako
+     * u ověření zámku (a `PotvrzeniZamkem` k tomu počítá chybné pokusy).
+     */
+    Route::prefix('mazani/rezim')->name('galerie.mazani.rezim')->middleware('throttle:10,1,mazani-rezim')->group(function () {
+        Route::post('/', [MazaniController::class, 'rezim']);
+        Route::post('potvrdit', [MazaniController::class, 'potvrditRezim'])->name('.potvrdit');
+        Route::post('zrusit', [MazaniController::class, 'zrusitRezim'])->name('.zrusit');
     });
 
     /*
@@ -412,8 +430,9 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('
     Route::post('media', [MediaController::class, 'store'])->name('galerie.media.store');
     Route::post('media/chunk', [MediaController::class, 'chunk'])->name('galerie.media.chunk');
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
-    Route::delete('media/{uuid}', [MediaController::class, 'destroy'])->name('galerie.media.destroy');
-    Route::post('media/do-kose', [MediaController::class, 'destroyMany'])->name('galerie.media.destroy-many');
+    // „Do koše" ve společném režimu jen navrhne — viz MazaniController.
+    Route::delete('media/{uuid}', [MazaniController::class, 'smazat'])->name('galerie.media.destroy');
+    Route::post('media/do-kose', [MazaniController::class, 'doKose'])->name('galerie.media.destroy-many');
     Route::post('media/{uuid}/uprava', [MediaController::class, 'uprava'])->name('galerie.media.uprava');
     Route::post('media/archiv', [MediaController::class, 'archiv'])->name('galerie.media.archiv');
 });

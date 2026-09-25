@@ -8,7 +8,9 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Finance\LedgerService;
+use App\Services\Media\MazaniFotek;
 use App\Services\Notifications\NotificationPreferenceService;
 use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\PlanovaneUlohy;
@@ -22,6 +24,7 @@ use Carbon\CarbonImmutable;
 use Illuminate\Notifications\DatabaseNotification;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\URL;
 
 /**
  * Co aplikace ví o sobě: jak tvrdá jsou její čísla, kdo které sekce živí
@@ -39,6 +42,19 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 {
     /** Do kolika dnů bez zápisu se sekce považuje za živou. */
     private const ZIVA_DNI = 90;
+
+    /** Kolik návrhů ke smazání obrazovka koše vypíše — stejně jako koš sám. */
+    private const KE_SCHVALENI_NEJVIC = 60;
+
+    /** `MAZANI` ve tvaru, který obrazovka čte, i bez dvojice. */
+    private const MAZANI_PRAZDNE = [
+        'rezim' => MazaniFotek::SPOLECNE,
+        'muzuSam' => true,
+        'partner' => null,
+        'navrhRezimu' => null,
+        'cekaNaMe' => 0,
+        'cekaNaPartnera' => 0,
+    ];
 
     /**
      * Sekce a tabulka, do které se v nich zapisuje.
@@ -68,6 +84,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         private readonly AdministraceGalerie $sprava,
         private readonly PlanovaneUlohy $ulohy,
         private readonly NastaveniAplikace $nastaveni,
+        private readonly MazaniFotek $mazaniFotek,
     ) {}
 
     public function skupina(): string
@@ -93,7 +110,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         // něj zůstala druhá ukázková volba i s cizí adresou.
         // `SETROWS` taky: sekce, kterou server nepošle (import, ticho), nemá u dvojice zůstat z ukázky.
         // `OZNAMENI`: přečtené oznámení musí ze zvonku zmizet i po obnovení.
-        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL', 'SETROWS', 'OZNAMENI'];
+        // `MAZANI` a `KE_SCHVALENI`: stažený či schválený návrh ke smazání
+        // nesmí na obrazovce viset — klient v objektu jinak přepíše jen to, co přišlo.
+        return ['DATA_HEALTH', 'SECLIFE', 'TRASH', 'CONFLICTS', 'LOCKWHO', 'LOCKMAIL', 'SETROWS', 'OZNAMENI', 'MAZANI', 'KE_SCHVALENI'];
     }
 
     /**
@@ -124,6 +143,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'LOCKMAIL' => '',
             'ABARS' => ['health' => [], 'risk' => []],
             'AL' => ['inbox' => [], 'snoozed' => [], 'inboxDone' => [], 'vault' => [], 'users' => [], 'jobs' => [], 'api' => [], 'tarify' => []],
+            // Bez dvojice není s kým se dohodnout — jediný člověk maže sám.
+            'MAZANI' => self::MAZANI_PRAZDNE,
+            'KE_SCHVALENI' => [],
         ];
     }
 
@@ -147,6 +169,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
 
         $disk = $this->diskAStav($prostor);
         $zamek = $this->stavZamku();
+        $mazani = $this->mazani($prostor);
 
         return array_filter([
             'DATA_HEALTH' => $this->zdraviDat($prostor),
@@ -156,6 +179,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'CONFLICTS' => $this->rozpory($prostor),
             'DISK' => $disk,
             'TRASH' => $this->kos($prostor),
+            'KE_SCHVALENI' => $this->keSchvaleni($prostor),
             'DVOJICE' => $this->jmenaDvojice($prostor),
             'UCTY' => $this->uctyDvojice($prostor),
             'OZNAMENI' => $this->oznameni(),
@@ -187,6 +211,14 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                  * nebo nabídnout jeho nastavení.
                  */
                 'ZAMEK' => $zamek,
+                /*
+                 * Pravidlo mazání a co čeká na souhlas — vždycky a celé.
+                 *
+                 * Je to objekt a klient v objektu přepisuje jen klíče, které
+                 * přišly: kdyby `navrhRezimu` po stažení návrhu chybělo, místo
+                 * `null` by na obrazovce zůstal starý návrh.
+                 */
+                'MAZANI' => $mazani,
                 'TREZOR' => $this->stavTrezoru(),
                 'VAULT_ITEMS' => $this->obsahTrezoru($trezor),
                 'AL' => array_filter(
@@ -221,7 +253,151 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                 ),
             ]
             // Nastavení ze skutečného stavu — viz NastaveniAplikace.
-            + $this->nastaveni->pro($prostor, auth()->user(), $disk, $zamek);
+            + $this->nastaveni->pro($prostor, auth()->user(), $disk, $zamek, $mazani);
+    }
+
+    /**
+     * Ostatní z dvojice prostoru: `[id => ['jmeno' => …, 'aktivni' => bool]]`.
+     *
+     * Dvojice je vlastník a role `owner`/`admin`/`editor` **v tomhle
+     * prostoru** — host ne, i když ho `members()` vrací taky. Deaktivovaný
+     * partner se počítá (jako v `MazaniFotek::pocetDvojice`): obrazovka má
+     * říct, na koho se čeká, i když se zrovna nepřihlásí. Upozornění ale
+     * dostane jen aktivní (`aktivni`).
+     *
+     * Jména jako všude jinde (`jmenaClenu`), aby dva Adriani nesplynuli.
+     *
+     * @return array<int, array{jmeno: string, aktivni: bool}>
+     */
+    public static function ostatniZDvojice(GallerySpace $prostor, ?int $ja): array
+    {
+        $ids = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
+            ->pluck('user_id')
+            ->push($prostor->owner_id)
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->reject(fn (int $id) => $id === $ja)
+            ->unique()
+            ->values();
+
+        if ($ids->isEmpty()) {
+            return [];
+        }
+
+        $jmena = self::jmenaClenu($prostor);
+
+        return User::query()->whereIn('id', $ids)->orderBy('id')->get(['id', 'name', 'is_active'])
+            ->mapWithKeys(fn (User $u) => [(int) $u->id => [
+                'jmeno' => (string) ($jmena[$u->id] ?? $u->name),
+                // `null` je čerstvý účet, kterému výchozí hodnotu doplnila databáze.
+                'aktivni' => $u->is_active !== false,
+            ]])
+            ->all();
+    }
+
+    /**
+     * Jak se v galerii maže a co čeká na souhlas.
+     *
+     * `muzuSam` říká obrazovce, jestli „Do koše" maže, nebo jen navrhuje.
+     * `partner` je jméno toho, na koho se čeká (`null`, když v galerii nikdo
+     * další není). Počty se řídí trezorem jako seznam koše: se zamčeným
+     * trezorem by rozdíl mezi číslem a seznamem prozradil, že v něm něco je.
+     *
+     * @return array<string, mixed>
+     */
+    private function mazani(GallerySpace $prostor): array
+    {
+        $ja = auth()->id() === null ? null : (int) auth()->id();
+        $stav = $this->mazaniFotek->stavRezimu($prostor);
+        $ostatni = self::ostatniZDvojice($prostor, $ja);
+        $navrh = $stav['navrh'];
+        $navrhl = $navrh === null || $navrh['navrhl'] === null ? null : (int) $navrh['navrhl'];
+
+        $cekajici = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->cekaNaSmazani()
+            // Návrh bez navrhujícího (smazaný účet) schválit nejde — nečeká na nikoho.
+            ->whereNotNull('trash_requested_by')
+            ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false));
+
+        return [
+            'rezim' => $stav['rezim'],
+            'muzuSam' => $stav['rezim'] === MazaniFotek::KAZDY || $stav['pocetDvojice'] <= 1,
+            'partner' => $ostatni === [] ? null : reset($ostatni)['jmeno'],
+            'navrhRezimu' => $navrh === null ? null : [
+                'rezim' => $navrh['rezim'],
+                'kdo' => $navrhl === null ? null : ($this->jmenaNavrhujicich($prostor, [$navrhl])[$navrhl] ?? 'Někdo'),
+                'ja' => $navrhl !== null && $navrhl === $ja,
+                'kdy' => $navrh['kdy'] === null ? null : $this->kdy(CarbonImmutable::parse($navrh['kdy'])->toDateTimeString()),
+            ],
+            'cekaNaMe' => $ja === null ? 0 : (clone $cekajici)->where('trash_requested_by', '!=', $ja)->count(),
+            'cekaNaPartnera' => $ja === null ? 0 : (clone $cekajici)->where('trash_requested_by', $ja)->count(),
+        ];
+    }
+
+    /**
+     * Návrhy ke smazání: `[{ id, name, from, bg, by, when, ja, n }]`, nejnovější první.
+     *
+     * Týž tvar jako `TRASH` (obrazovka koše je kreslí nad ním), navíc `ja` —
+     * vlastní návrh jde jen stáhnout, cizí schválit nebo ponechat — a `bg`,
+     * náhled jako hodnota pro `background` (jako `PHOTOS.bg`). Fotka z trezoru
+     * jen s odemčeným trezorem a nikdy s náhledem: náhledy z trezoru se
+     * nevydávají vůbec.
+     *
+     * @return list<array<string, mixed>>
+     */
+    private function keSchvaleni(GallerySpace $prostor): array
+    {
+        $polozky = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->cekaNaSmazani()
+            ->whereNotNull('trash_requested_by')
+            ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
+            ->orderByDesc('trash_requested_at')
+            ->orderByDesc('id')
+            ->limit(self::KE_SCHVALENI_NEJVIC)
+            ->get(['id', 'uuid', 'original_filename', 'media_type', 'is_hidden', 'trash_requested_by', 'trash_requested_at']);
+
+        if ($polozky->isEmpty()) {
+            return [];
+        }
+
+        $ja = auth()->id() === null ? null : (int) auth()->id();
+        $jmena = $this->jmenaNavrhujicich($prostor, $polozky->pluck('trash_requested_by'));
+        // Konec zítřka pro všechny, jako u dlaždic knihovny — prohlížeč si náhled podrží.
+        $platnost = CarbonImmutable::tomorrow()->endOfDay();
+
+        return $polozky->map(fn (MediaItem $m) => array_filter([
+            'id' => $m->uuid,
+            'name' => $m->original_filename,
+            'from' => $m->media_type === 'video' ? 'Video' : 'Fotka',
+            'bg' => $m->is_hidden ? null : "url('".URL::temporarySignedRoute('galerie.media.thumb', $platnost, ['uuid' => $m->uuid])."') center/cover no-repeat #2b2842",
+            'by' => $jmena[(int) $m->trash_requested_by] ?? 'Někdo',
+            'when' => $this->kdy(CarbonImmutable::parse($m->trash_requested_at)->toDateTimeString()),
+            'ja' => (int) $m->trash_requested_by === $ja,
+            'n' => 0,
+        ], fn ($v) => $v !== null))->values()->all();
+    }
+
+    /**
+     * Jména navrhujících naráz: člen galerie jako všude jinde, bývalý člen
+     * jménem z účtu — návrh po něm může zůstat, než ho někdo vyřídí.
+     *
+     * @param  iterable<int>  $ids
+     * @return array<int, string>
+     */
+    private function jmenaNavrhujicich(GallerySpace $prostor, iterable $ids): array
+    {
+        $jmena = self::jmenaClenu($prostor);
+        $chybi = collect($ids)->map(fn ($id) => (int) $id)->unique()->reject(fn (int $id) => array_key_exists($id, $jmena));
+
+        if ($chybi->isNotEmpty()) {
+            $jmena += User::query()->whereIn('id', $chybi)->pluck('name', 'id')->map(fn ($j) => (string) $j)->all();
+        }
+
+        return $jmena;
     }
 
     /**
@@ -523,6 +699,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
     private function kamOznameni(string $druh): ?string
     {
         return match (true) {
+            // Návrhy ke smazání se schvalují v koši, ne v knihovně.
+            $druh === 'media.trash_proposed' => 'trash',
             str_starts_with($druh, 'upload') || str_starts_with($druh, 'media') => 'all',
             str_starts_with($druh, 'album') => 'albums',
             str_contains($druh, 'todo') || str_contains($druh, 'task') => 'x-plan',
@@ -616,7 +794,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->when(! $this->trezorOtevreny(), fn ($q) => $q->where('is_hidden', false))
             ->orderByDesc('trashed_at')
             ->limit(60)
-            ->get(['uuid', 'original_filename', 'trashed_at', 'purge_after', 'uploaded_by', 'media_type']);
+            ->get(['uuid', 'original_filename', 'trashed_at', 'purge_after', 'uploaded_by', 'trashed_by', 'media_type']);
 
         if ($polozky->isEmpty()) {
             return [];
@@ -635,7 +813,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                 // Odkud to bylo se nedopočítává: album po vyhození nemusí
                 // existovat a vymyslet cestu by znamenalo tvrdit, kde to leželo.
                 'from' => $m->media_type === 'video' ? 'Video' : 'Fotka',
-                'by' => $jmena[$m->uploaded_by] ?? '—',
+                // Sloupec „Odstranil": kdo fotku do koše poslal. Starší položky
+                // to nemají zapsané — u nich zbývá jen ten, kdo ji nahrál.
+                'by' => $jmena[$m->trashed_by ?: $m->uploaded_by] ?? '—',
                 'when' => $this->kdy($vyhozeno->toDateTimeString()),
                 'left' => $this->pocet($dnu, 'den', 'dny', 'dní'),
                 'n' => 0,

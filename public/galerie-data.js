@@ -706,7 +706,10 @@
     'Stáhnout .csv': ['ph-table', 'dl-csv'], 'Připravit': ['ph-archive', 'dl-zip'],
     'Přepnout': ['ph-cloud-slash', 'offline'],
     'Změnit kód': ['ph-password', null], 'Odhlásit ostatní': ['ph-sign-out', null],
-    'Vytisknout': ['ph-printer', null], 'Zamknout': ['ph-lock-simple', 'lock-now']
+    'Vytisknout': ['ph-printer', null], 'Zamknout': ['ph-lock-simple', 'lock-now'],
+    // Mazání fotek (NastaveniAplikace::mazani) — pravidlo mění dvojice jen společně.
+    'Navrhnout mazání bez schválení': ['ph-users', 'mazani-navrh'], 'Potvrdit změnu': ['ph-check', 'mazani-potvrdit'],
+    'Zrušit návrh': ['ph-x', 'mazani-zrusit'], 'Vrátit společné schvalování': ['ph-shield-check', 'mazani-spolecne']
   };
 
   // ——— Zprávy a hlasovky ———
