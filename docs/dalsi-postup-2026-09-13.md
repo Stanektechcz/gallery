@@ -804,6 +804,138 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2am. Čtyřicáté kolo — staré API: nahrávání, cesty, peníze, úložiště (25. 9.)
+
+Audit souborů, kterých se od 13. 9. nedotkla žádná oprava (319 souborů,
+hlavně starší API `v1`, které na produkci pořád běží): čtyři `task-plan`
+naráz — nahrávání a média, cesty a plánování, finance a banka, integrace
+a úložiště — 56 nálezů. Opravy v osmi dávkách na oddělených souborech
+plus jedna na zbytky, které dávky nahlásily; každý nález nejdřív potvrdil
+test, který bez opravy spadl.
+
+Společný kořen většiny nálezů: řadiče braly „kterékoli členství" nebo
+„každého člena prostoru" — a tím i hosta. Nový
+`PristupDoGalerie::prostoryDvojice()` / `idProstoruDvojice()` vrací jen
+prostory, které účet vlastní nebo v nich má roli dvojice; „partner" je
+vždy `dvojice($prostor)`.
+
+### Zabezpečení
+
+* **Hlasovka jako webová stránka.** Typ souboru se ukládal podle
+  prohlížeče a přehrávání ho vracelo zpět: partner mohl podstrčit HTML se
+  skriptem, který se druhému spustil na doméně galerie (CSP dovoluje
+  `unsafe-inline`). Teď typ podle obsahu z povolených zvukových, přehrání
+  s `sandbox`.
+* **Server jako průzkumník vnitřní sítě.** Vlastní úložiště WebDAV bralo
+  jakoukoli adresu `https://` a šlo za přesměrováním — kdokoli
+  zaregistrovaný tak přes server zkoušel `127.0.0.1`, metadata cloudu
+  `169.254.169.254` i vnitřní síť (hláška řekla, co odpovědělo) a zálohy
+  fotek pak mířily tam. `App\Support\VerejnaAdresa` (sdílená s importem
+  receptů), bez přesměrování, s časovým limitem a pevnou IP.
+* **Kurzy měn přepsal kdokoli.** Tabulka je jedna pro celou instalaci
+  a zápis hlídal `isAdmin()` (`users.role`) — kurz 0,0001 by „vyrovnal"
+  rozpočty všech cest. Teď jen provozovatel.
+* **Záznamy cizí galerie:** PATCH deníku cesty a itineráře vrátil celý
+  řádek (název, příběh, GPS) podle id; úlohy složek na Disku poslaly
+  Googlu token Dropboxu; pozvánka do galerie (`can:admin` =
+  `users.role`) dovolila účtu bez galerie zakládat účty i při zavřené
+  registraci.
+* **Nahrávání po částech bez mezí** — kvóta jen podle ohlášené velikosti,
+  počet ani velikost částí neomezené: disk šel zaplnit. Dvojí „dokončit"
+  založilo dvě média. Kontrola duplicity prozradila název a uuid fotky
+  z trezoru.
+* **Trezor unikal** v lidech a štítcích (počty, detail osoby, obálka),
+  stackách, médiích/návrzích/obálce cesty, deníku a itineráři, sdílených
+  chvílích, milnících, večeru vzpomínek (fotka přesunutá do trezoru po
+  naplánování skončila ve sdíleném albu), režimu akce alba, nástěnce
+  výběru, receptech a recenzích míst.
+* **Host jako partner:** třetina společných výdajů a výdajů cesty
+  (300 = 3 × 100, návrh vyrovnání chtěl peníze po hostovi), editor
+  automatických alb, účast a připomínky akcí (ICS, vaření, rezervace,
+  randíčka, výročí), úkol přidělený hostovi, partner v cyklu.
+* Synchronizace banky vracela id žádosti a souhlasu GoCardless a text
+  chyby poskytovatele; nepotvrzené připojení se jí aktivovalo. Soukromou
+  cestu v Rozpočtu četl i druhý z dvojice. Klíč k databázi filmů mohl
+  skončit v protokolu.
+
+### Co padalo nebo počítalo špatně
+
+* **Peníze:** pravidelná platba se po posunutí dne založila znovu (nájem
+  dvakrát), souběžné přehledy ji zdvojily; výdaj ze společného účtu
+  dělal dluh mezi partnery; zahrnutý poplatek se v galerii odečetl
+  podruhé, poplatek v cizí měně šel z účtu v jiné měně; převod 100 → 1000
+  vyráběl peníze z ničeho. **Import Revolutu** zdvojil řádky překrývajícího
+  se výpisu (otisk řádku bral čas z hodin serveru) a zamítnuté platby
+  počítal do útrat i do cest.
+* **Na MySQL (SQLite délku ani rozsah nehlídá):** přípona souboru
+  nad 20 znaků, částky a vypočtený kurz bez horní meze, rozpočet cesty,
+  nadpis akce s předponou („Vaření · …"), hodnoty ze zprávy pomocníka,
+  datum úpravy společného výdaje, dlouhé jméno souboru z Disku (zablokovalo
+  všechny další změny připojení).
+* **Čas:** připomínky rezervací o 1–2 h později (UTC), pohled „Teď"
+  cesty, „tento den", deník z 0:30 odmítnutý, check-in do včerejška,
+  Rozpočet 1. den měsíce v noci na minulém měsíci, prošlé doklady; čas
+  změny souboru se ukládal v UTC místo pražských hodin; `date_to` bez
+  času uřízl poslední den.
+* Uložení cesty se stejnými daty přesunulo všechny navázané akce na první
+  den. Konec cesty před začátkem, cesta na tisíc let (řádek na každý den),
+  období Rozpočtu `od=abc` (500) nebo 0001–9999 (miliony řádků).
+* Dvojí klik: večer vzpomínek, převod akce na cestu, plán z přání
+  a ankety, schválení nahrávky hosta — vše dvakrát.
+
+### Po nasazení
+
+* **Bez migrace.**
+* Nahrávání, které klient po výpadku dokončí znovu, dostane totéž médium
+  (dřív 404); relace, která se právě skládá nebo selhala, vrací 409.
+* Řádky Revolutu naimportované dřív s datem bez času mají v otisku čas
+  z hodin serveru — překrývající se výpis je zdvojí ještě jednou.
+* Oprávnění a účasti, které dostali hosté dřív (editor alb, účastník
+  akcí), zůstávají v databázi — nejde je odlišit od záměrně udělených.
+  Výročí je odebere při dalším uložení, příprava cesty smaže čekající
+  automatické připomínky hostů.
+* Staré výdaje rozdělené i na hosta se v bilanci přepočtou na rovný díl
+  dvojice; sloupec `split` zůstává, jak byl. Výdaj, který **zaplatil**
+  někdo mimo dvojici (host, účet s odebraným přístupem), vyrovnání mezi
+  partnery vynechá celý — tak to bylo i dřív, jen „dvojice" je teď užší.
+* `can_delete` u členství (`MediaPolicy`) se dál nevynucuje — výchozí
+  hodnota je 0 a žádná obrazovka ji nenastavuje; oprava by vzala mazání
+  každému pozvanému partnerovi. Rozhodnutí o výchozí hodnotě.
+
+### Zbývá (vědomě neřešené)
+
+* Rozpracované načtení čekajících karetních plateb (`pending`) Revolutu
+  se do útrat počítá dál (blokace zůstatek opravdu snižuje).
+* `walletBalances` filtruje podle stavu platby, `balances` ne — u konceptů
+  se mohou lišit. Přiřazení cesty u platby bere kteroukoli cestu prostoru.
+* Relace nahrávání, kterou uprostřed skládání zabije pád procesu (paměť,
+  časový limit), zůstane ve stavu `assembling` — klient dostane výzvu
+  nahrát znovu (nová relace), části uklidí `gallery:clean-temp`. Tak to
+  bylo i dřív.
+* Posun cesty neposouvá řádky `trip_days`; poskytovatelé obsahu galerie
+  (`app/Services/Obsah/*`) mohou u nadcházejících plateb ještě brát „dnes"
+  v UTC.
+* Z předchozího kola: `r3` panelu rizik, souběh zamčení trezoru,
+  `SpaceContext` ve statické proměnné, staré rozhraní podle `users.role`.
+
+| Commit | Co |
+|---|---|
+| `e6b08a8c` | Prostory, kde účet patří do dvojice |
+| `e4826504` | Společné výdaje jen mezi dvojicí, Revolut, bankovní připojení |
+| `b3716fe7` | Nahrávání po částech, hlasovky, duplicity a trezor |
+| `02260c90` | WebDAV do vnitřní sítě, disková úloha s cizím tokenem, pozvánky |
+| `94376c5b` | Připomínky hostům, trezor v nástěnkách a receptech, pomocník |
+| `1d11ce8a` | Vzpomínky bez trezoru, host není partner, pražský den, dvojí klik |
+| `d926ed40` | Staré API — lidé a štítky bez trezoru, stacky, meze |
+| `771b7029` | Cesty — kurzy měn, cizí záznamy, trezor, hosté, termíny |
+| `e93ab4ce`, `8758397d` | Rozpočet — pravidelné platby, společný účet, poplatky |
+| `82c550c4` | Dodělky — prostory dvojice, trezor při čtení, výdaje cest |
+| `be05ed81` | Po revizi: zrušení nahrávání uprostřed skládání, alias `spravce` |
+| `d91a09b2` | Testy Rozpočtu podle pražského dne i na přelomu roku |
+
+Testy: **2155 PHP testů** (184 nových), všechny prošly — i v noci na Silvestra
+a v letní noci přes `TESTY_CAS`. **Bez migrace.**
+
 ## 2al. Třicáté deváté kolo — fakturace, provozovatel, trezor, média (25. 9.)
 
 Audit souborů, kterých se dosud nedotkla žádná oprava (podle `git log`):
