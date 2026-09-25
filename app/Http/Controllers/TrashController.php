@@ -3,10 +3,17 @@
 namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\User;
+use App\Services\Media\MazaniFotek;
 use App\Services\Media\MediaPurger;
+use App\Support\SpaceContext;
+use App\Support\Trezor;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -30,7 +37,8 @@ class TrashController extends Controller
         return Inertia::render('Trash/Index', [
             'media' => $media,
             'retention_days' => $retentionDays,
-            'can_purge' => $user->isAdmin(),
+            // Tlačítko jen tomu, komu ho server opravdu provede (`smiTrvaleMazat`).
+            'can_purge' => $space !== null && $this->smiTrvaleMazat($space, $user),
         ]);
     }
 
@@ -63,14 +71,8 @@ class TrashController extends Controller
 
     public function purge(Request $request, string $uuid): JsonResponse
     {
-        if (! $request->user()->isAdmin()) {
-            abort(403, 'Trvalé smazání vyžaduje admin oprávnění.');
-        }
-
-        $space = $request->user()->gallerySpaces()->first();
-        $media = MediaItem::where('uuid', $uuid)
-            ->where('gallery_space_id', $space->id)
-            ->firstOrFail();
+        $space = $this->prostorSpravce($request);
+        $media = $this->vKosi($space)->where('uuid', $uuid)->firstOrFail();
 
         AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
 
@@ -84,14 +86,7 @@ class TrashController extends Controller
 
     public function emptyTrash(Request $request): JsonResponse
     {
-        if (! $request->user()->isAdmin()) {
-            abort(403);
-        }
-
-        $space = $request->user()->gallerySpaces()->first();
-        $items = MediaItem::where('gallery_space_id', $space->id)
-            ->whereNotNull('trashed_at')
-            ->get();
+        $items = $this->vKosi($this->prostorSpravce($request))->get();
 
         foreach ($items as $item) {
             AuditLog::record('media.purge', $item, ['via' => 'empty_trash']);
@@ -122,6 +117,68 @@ class TrashController extends Controller
                 'aspect_ratio' => $v->aspect_ratio,
             ]),
         ];
+    }
+
+    /**
+     * Prostor, jehož koš se trvale maže — a jen když je v něm přihlášený
+     * správcem.
+     *
+     * Dřív rozhodovalo `isAdmin()`, tedy `users.role`, a `owner` má každý
+     * zaregistrovaný účet: běžný člen dvojice (`editor`) i kdokoli s vlastním
+     * účtem tak mazal nevratně. Oprávnění je role v **tomhle** prostoru.
+     */
+    private function prostorSpravce(Request $request): GallerySpace
+    {
+        $space = $request->user()->gallerySpaces()->first();
+
+        abort_if($space === null, 404);
+        abort_unless(
+            $this->smiTrvaleMazat($space, $request->user()),
+            403,
+            'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
+        );
+
+        return $space;
+    }
+
+    /**
+     * Vlastník prostoru nebo jeho správce (pivot `owner`/`admin`), a zároveň
+     * aktivní člen dvojice — účet jen pro čtení nevratně nemaže. Totéž
+     * pravidlo jako `Api\Galerie\KosController::smiMazat`.
+     */
+    private function smiTrvaleMazat(GallerySpace $space, User $kdo): bool
+    {
+        if (! app(MazaniFotek::class)->jeClenDvojice($space, $kdo)) {
+            return false;
+        }
+
+        if ((int) $space->owner_id === (int) $kdo->id) {
+            return true;
+        }
+
+        $role = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $space->id)
+            ->where('user_id', $kdo->id)
+            ->value('role');
+
+        return in_array((string) $role, ['owner', 'admin'], true);
+    }
+
+    /**
+     * Co koš ukazuje, s tím se smí nevratně pracovat — nic víc.
+     *
+     * Jen položky opravdu v koši (dřív šlo trvale smazat i fotku z knihovny)
+     * a skryté jen s odemčeným trezorem: „Vysypat koš" by jinak smazal
+     * i to, co na obrazovce se zamčeným trezorem nestálo.
+     *
+     * @return Builder<MediaItem>
+     */
+    private function vKosi(GallerySpace $space): Builder
+    {
+        return MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $space->id)
+            ->whereNotNull('trashed_at')
+            ->when(! Trezor::odemcen(), fn (Builder $q) => $q->where('is_hidden', false));
     }
 
     /**

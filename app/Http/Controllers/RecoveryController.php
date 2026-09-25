@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use App\Services\Media\MazaniFotek;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -229,29 +230,40 @@ class RecoveryController extends Controller
     /**
      * DELETE /api/v1/recovery/duplicates/trash
      * Move duplicate items (all but oldest per group) to trash.
+     *
+     * Přes dohodu dvojice (`MazaniFotek`) jako každé jiné „Do koše": ve
+     * dvojici se kopie jen navrhnou (`pending`), do koše je pošle souhlas
+     * druhého. Dřív šly do koše rovnou, s pevnou třicetidenní lhůtou a bez
+     * záznamu v protokolu.
      */
     public function trashDuplicates(Request $request): JsonResponse
     {
-        $space = $request->user()->gallerySpaces()->first();
+        $user = $request->user();
+        $space = $user->gallerySpaces()->first();
         $v = $request->validate([
             'media_ids' => 'required|array|max:500',
             'media_ids.*' => 'integer',
         ]);
 
+        if ($space === null) {
+            return response()->json(['trashed' => 0, 'pending' => 0]);
+        }
+
         // Zamčený trezor se odsud přesouvat nedá — bez podmínky by tahle akce fungovala
         // jako obchvat, který smaže položku z trezoru, aniž by ho kdokoli odemkl.
-        $trashed = MediaItem::where('gallery_space_id', $space->id)
+        // Skryté se vynechávají vždy: seznam duplicit je neukazuje ani s odemčeným trezorem.
+        $uuids = MediaItem::where('gallery_space_id', $space->id)
             ->where('is_hidden', false)
             ->whereIn('id', $v['media_ids'])
             ->whereNull('trashed_at')
-            ->get();
+            ->pluck('uuid');
 
-        $count = 0;
-        foreach ($trashed as $m) {
-            $m->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]);
-            $count++;
-        }
+        $vysledek = app(MazaniFotek::class)->doKose($space, $user, $uuids, 'obnova-duplicity', false);
 
-        return response()->json(['trashed' => $count]);
+        return response()->json([
+            'trashed' => count($vysledek->vKosi()),
+            'pending' => count($vysledek->navrzeno) + count($vysledek->uzNavrzeno),
+            'message' => $vysledek->zprava(),
+        ]);
     }
 }

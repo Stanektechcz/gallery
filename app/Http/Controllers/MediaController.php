@@ -5,13 +5,19 @@ namespace App\Http\Controllers;
 use App\Jobs\Media\ApplyMediaEditJob;
 use App\Models\Album;
 use App\Models\AuditLog;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Models\StorageConnection;
 use App\Models\User;
 use App\Services\Media\ImageVariantService;
+use App\Services\Media\MazaniFotek;
+use App\Services\Media\MediaPurger;
+use App\Services\Media\VysledekMazani;
 use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Support\Trezor;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -282,22 +288,33 @@ class MediaController extends Controller
         return response()->json($media->fresh()->load(['variants', 'tags', 'people', 'places']));
     }
 
+    /**
+     * „Do koše" ze starého webu — přes tutéž dohodu dvojice jako prototyp.
+     *
+     * Dřív fotku přesunul rovnou, bez souhlasu druhého a s pevnou lhůtou.
+     * Ve dvojici ji teď jen navrhne (202, fotka zůstává v knihovně); do koše
+     * ji pošle až souhlas druhého — i jeho vlastní „Do koše" na tutéž fotku.
+     */
     public function trash(Request $request, string $uuid): JsonResponse
     {
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        $trezor = Trezor::odemcen();
+
+        // Zamčený trezor zastaví už `ProtectVaultMedia`; tady pro jistotu,
+        // kdyby cesta někdy přišla o middleware — fotka pak „neexistuje".
+        abort_if($media->is_hidden && ! $trezor, 404);
         Gate::authorize('delete', $media);
 
-        if ($request->user()->read_only_mode) {
-            abort(403);
+        $vysledek = app(MazaniFotek::class)->doKose($media->gallerySpace, $request->user(), [$uuid], 'stare-rozhrani', $trezor);
+
+        if ($vysledek->navrzeno !== [] || $vysledek->uzNavrzeno !== []) {
+            return response()->json([
+                'status' => 'pending_approval',
+                'message' => 'Čeká na schválení druhým z vás',
+            ], 202);
         }
 
-        $media->update([
-            'trashed_at' => now(),
-            'purge_after' => now()->addDays((int) config('gallery.trash_retention_days', 30)),
-        ]);
-
-        AuditLog::record('media.trash', $media);
-
+        // Prázdný výsledek = fotka už v koši byla (dvojklik) — pro volajícího totéž.
         return response()->json(['status' => 'trashed']);
     }
 
@@ -313,47 +330,59 @@ class MediaController extends Controller
         return response()->json(['status' => 'restored']);
     }
 
+    /**
+     * Trvalé smazání — jen z koše a jen správcem prostoru fotky.
+     *
+     * Dřív stačilo právo „smazat" a fotka nemusela být v koši vůbec: jedno
+     * volání obešlo koš, lhůtu i souhlas druhého a smazalo originál i kopii
+     * na Disku. Fotka mimo koš (a skrytá se zamčeným trezorem) se tváří jako
+     * neexistující; nevratný krok je vyhrazen vlastníkovi a správci prostoru
+     * jako v koši prototypu, ne běžnému členu dvojice (`editor`).
+     */
     public function purge(Request $request, string $uuid): JsonResponse
     {
-        $media = MediaItem::where('uuid', $uuid)->firstOrFail();
+        $media = MediaItem::where('uuid', $uuid)->whereNotNull('trashed_at')->firstOrFail();
+
+        abort_if($media->is_hidden && ! Trezor::odemcen(), 404);
         Gate::authorize('delete', $media);
+        abort_unless(
+            $this->smiTrvaleMazat($media->gallerySpace, $request->user()),
+            403,
+            'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
+        );
 
         AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
-
-        // Delete local files synchronously
-        foreach ($media->variants as $variant) {
-            if ($variant->disk === 'public') {
-                Storage::disk('public')->delete($variant->path);
-            }
-        }
-        Storage::disk('public')->deleteDirectory("media/{$media->uuid}");
-
-        // Delete assembled source
-        $uploadDir = storage_path("app/uploads/{$media->uuid}");
-        if (is_dir($uploadDir)) {
-            array_map('unlink', glob("$uploadDir/*") ?: []);
-            @rmdir($uploadDir);
-        }
-
-        // Trash on Drive synchronously (best-effort)
-        if ($media->drive_file_id) {
-            try {
-                $conn = StorageConnection::whereHas(
-                    'owner',
-                    fn ($q) => $q->whereHas('gallerySpaces', fn ($q2) => $q2->where('gallery_spaces.id', $media->gallery_space_id))
-                )->where('provider', 'google_drive')->where('connection_status', 'healthy')->first();
-
-                if ($conn) {
-                    (new GoogleDriveStorageProvider($conn))->trash($media->drive_file_id);
-                }
-            } catch (\Throwable $e) {
-                Log::warning('Drive trash failed', ['error' => $e->getMessage()]);
-            }
-        }
-
+        // Tatáž služba jako koš prototypu i `TrashController` — jinak by se
+        // tu dalo zapomenout na kopii na Disku.
+        app(MediaPurger::class)->purge($media);
+        // `forceDelete`, ne `delete`: soft delete by nechal řádek bez souborů.
         $media->forceDelete();
 
         return response()->json(['status' => 'purged']);
+    }
+
+    /**
+     * Vlastník prostoru nebo jeho správce (role v **tomhle** prostoru, ne
+     * `users.role`), a zároveň aktivní člen dvojice — účet jen pro čtení
+     * nebo deaktivovaný nevratně nemaže. Pravidlo je totéž jako
+     * `Api\Galerie\KosController::smiMazat` a `TrashController::smiTrvaleMazat`.
+     */
+    private function smiTrvaleMazat(?GallerySpace $prostor, User $kdo): bool
+    {
+        if ($prostor === null || ! app(MazaniFotek::class)->jeClenDvojice($prostor, $kdo)) {
+            return false;
+        }
+
+        if ((int) $prostor->owner_id === (int) $kdo->id) {
+            return true;
+        }
+
+        $role = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('user_id', $kdo->id)
+            ->value('role');
+
+        return in_array((string) $role, ['owner', 'admin'], true);
     }
 
     /**
@@ -747,16 +776,22 @@ class MediaController extends Controller
         $tataGalerie = fn (mixed $galerie, MediaItem $item) => $galerie !== null && (int) $galerie === (int) $item->gallery_space_id;
 
         $action = $data['action'];
+
+        if ($action === 'trash') {
+            return $this->hromadneDoKose($media, $user);
+        }
+
         $hoursOffset = (float) ($data['hours_offset'] ?? 0);
         $ratingVal = $data['rating'] ?? null;
         $processed = 0;
 
         foreach ($media as $item) {
             try {
-                Gate::authorize(in_array($action, ['trash']) ? 'delete' : 'update', $item);
+                // Vrátit z koše smí jen dvojice (`MediaPolicy::restore`); dřív
+                // stačilo „upravit", tedy jakékoli členství — i host cizí galerie.
+                Gate::authorize($action === 'restore' ? 'restore' : 'update', $item);
 
                 match ($action) {
-                    'trash' => $item->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]),
                     'restore' => $item->update(['trashed_at' => null, 'purge_after' => null]),
                     'archive' => $item->update(['is_archived' => true]),
                     'unarchive' => $item->update(['is_archived' => false]),
@@ -817,6 +852,53 @@ class MediaController extends Controller
         }
 
         return response()->json(['processed' => $processed]);
+    }
+
+    /**
+     * Hromadné „Do koše" — po prostorech, každý podle své dohody dvojice.
+     *
+     * Výběr může míchat fotky z víc galerií účtu. Brána `dvojice` hlídá jen
+     * první prostor účtu, takže host cizí galerie dřív poslal do koše i její
+     * fotky. Každá skupina se teď ověří ve **svém** prostoru a prostor, kde
+     * účet do dvojice nepatří, se přeskočí. Služba běží jednou za prostor,
+     * ne za fotku — jedna transakce a jeden souhlas pro celou dávku.
+     *
+     * Cesta nemá `{uuid}`, takže `ProtectVaultMedia` na ni nesáhne — skryté
+     * fotky se zamčeným trezorem vynechá služba.
+     *
+     * @param  EloquentCollection<int, MediaItem>  $media
+     */
+    private function hromadneDoKose(EloquentCollection $media, User $user): JsonResponse
+    {
+        $mazani = app(MazaniFotek::class);
+        $trezor = Trezor::odemcen();
+        $vysledek = new VysledekMazani;
+        $povoleno = false;
+
+        foreach ($media->groupBy('gallery_space_id') as $prostorId => $polozky) {
+            $prostor = GallerySpace::find($prostorId);
+
+            if ($prostor === null || ! $mazani->jeClenDvojice($prostor, $user)) {
+                continue;
+            }
+
+            $povoleno = true;
+            $vysledek = $vysledek->spoj($mazani->doKose($prostor, $user, $polozky->pluck('uuid'), 'stare-rozhrani', $trezor));
+        }
+
+        // Nic z výběru nepatří do galerie, kde by účet byl z dvojice — říct to,
+        // ne tvářit se, že se „zpracovalo 0".
+        abort_if($media->isNotEmpty() && ! $povoleno, 403, 'Mazat fotky může jen dvojice galerie.');
+
+        $doKose = count($vysledek->vKosi());
+        $ceka = count($vysledek->navrzeno) + count($vysledek->uzNavrzeno);
+
+        return response()->json([
+            'processed' => $doKose + $ceka,
+            'trashed' => $doKose,
+            'pending' => $ceka,
+            'message' => $vysledek->zprava(),
+        ]);
     }
 
     public function shareTarget(Request $request): RedirectResponse

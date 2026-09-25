@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\User;
 use App\Models\VoiceNote;
+use App\Services\Media\MazaniFotek;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -34,6 +35,8 @@ class ZruseniUctu
 
     /** Disk příloh zpráv, hlasovek a nahraných fotek profilu (viz ChatController, VoiceNoteController, AvatarController). */
     private const DISK = 'local';
+
+    public function __construct(private readonly MazaniFotek $mazani) {}
 
     /** Proč zrušit teď nejde, nebo `null`. */
     public function prekazka(User $user): ?string
@@ -106,6 +109,11 @@ class ZruseniUctu
             if (Schema::hasTable('notifications')) {
                 DB::table('notifications')->where('notifiable_type', User::class)->where('notifiable_id', $id)->delete();
             }
+
+            // Před odchodem z prostorů: návrh smazání (fotky i režimu) by po
+            // zrušeném účtu zůstal viset a nikdo by ho nemohl stáhnout. Uvnitř
+            // transakce — když zrušení padne, návrhy zůstanou jako dřív.
+            $pocty['navrhy_mazani'] = $this->mazani->zrusNavrhyUzivatele($user);
 
             $user->gallerySpaces()->detach();
 
