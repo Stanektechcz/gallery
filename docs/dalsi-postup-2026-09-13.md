@@ -804,6 +804,115 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2al. Třicáté deváté kolo — fakturace, provozovatel, trezor, média (25. 9.)
+
+Audit souborů, kterých se dosud nedotkla žádná oprava (podle `git log`):
+16 řadičů API galerie, webové řadiče a middleware, OAuth/webhooky/
+fakturace/úlohy a zpracování médií (čtyři `task-plan` naráz). Opravy
+v šesti dávkách na oddělených souborech (`task-deep`, `task-build`);
+každý nález nejdřív potvrdil test, který bez opravy spadl.
+
+### Zabezpečení
+
+* **Placený tarif zdarma.** `PUT /api/v1/billing/plan` a `/modules/{code}`
+  pouštěly každého s `users.role = owner` — a tu dostane každý, kdo se
+  zaregistruje; přes `gallery_space_id` i v cizím prostoru. Teď role
+  v prostoru, placené bez platby jen provozovatel; totéž zkušební
+  období a zahájení nákupu.
+* **Zaplacené období nekončilo.** O platnosti rozhoduje `ends_at`, platba
+  psala jen `current_period_ends_at` (a ten kvůli `$fillable` ani
+  neukládala): jedna měsíční platba = navždy, upomínky mlčely, zápočet
+  při přechodu na dražší tarif nikdy nenastal. Souběžné dvojí potvrzení
+  platby prošlo dvakrát.
+* **Převzetí instalace přes adresu provozovatele.** Provozovatel se pozná
+  jen podle e-mailu; změna adresy v profilu, registrace i pozvánky
+  (odkaz dostane ten, kdo zve) vzaly jakoukoli adresu. Když adresu
+  provozovatele nedržel žádný účet, vzal si ji kdokoli — i s `/admin`.
+  Teď `Provozovatel::pravidlo()` na všech čtyřech místech.
+* **Trezor patřil prohlížeči, ne člověku.** Kdo se přihlásil po partnerovi
+  (i z jiné dvojice) v témže prohlížeči, měl trezor otevřený až 15 minut.
+  `App\Support\Trezor` si pamatuje, kdo odemkl; přihlášení ho zapomene.
+* **Disk hosta dostával originály dvojice** (výběr připojení bral každého
+  člena, i hosta) a „Odpojit Google Disk" odpojil Dropbox — a u Googlu
+  neodvolal nic (posílal celý JSON místo tokenu).
+* **Trezor unikal:** počet a obálka alba, odznak koše, vzkazy hostů,
+  „Vysypat koš" z panelu rizik (mazal i trezor), vzpomínky (výročí cesty,
+  místa), nástěnka výběru alba, fotokniha (ZIP s `001_pas.jpg`), a ve
+  starém rozhraní archiv, obálky alb (celý řádek i s GPS), duplicity,
+  statistiky. Soubory z trezoru `no-store`; `response()->file()` dělalo
+  ze `private` `public` (originály, videa, nahrávky).
+* Oprávnění k albu ve starém rozhraní bralo `users.role` — host cizí
+  galerie tam alba přejmenoval i přesouval; oblíbené počítaly hosty do
+  dvojice; webhook Disku bez tokenu prošel; `?error=` z Googlu se ukázal
+  doslova; chybové hlášky nesly text výjimky.
+
+### Co padalo nebo počítalo špatně
+
+* **Na MySQL (SQLite délku ani rozsah nehlídá):** sledovací číslo tisku,
+  město nového cíle, nadpis deníku z pravidla (a „Spustit teď" vrátil
+  celé SQLSTATE), EXIF s ISO 102400 nebo hodnocením −1 — to shodilo celý
+  zápis metadat fotky.
+* **Čas videí v UTC** (video z 0:30 leželo na předchozím dni) a náhledová
+  úloha přepisovala datum z EXIF; rozměry fotek na výšku neotočené.
+* Obrázek 30000×30000 zabil pracovníka fronty při každém pokusu; otočení
+  RAW padalo na 500; webová kopie videa často nevznikla; `--force` náhledů
+  smazal, co neměl z čeho obnovit; automatické série viděly jen nejstarších
+  2000 fotek; `reconcile-dates --limit` chodil dokola.
+* Pravidlo po zrušeném účtu autora padalo; ruční spuštění nechávalo
+  `{title}`; ruční úloha přeskočená kvůli překryvu hlásila HOTOVO;
+  počítadlo špatných hesel nebylo atomické; kvóta Disku se řadila při
+  každém otevření galerie; první stažení z banky, které selhalo, hlásilo
+  nepovedené připojení.
+* Faktura 1. 1. v 0:30 měla loňské číslo; přehled a schránka starého
+  rozhraní počítaly den v UTC.
+
+### Po nasazení
+
+* **Migrace `invoices_payment_id_unique`** — unikátní index; při existujících
+  duplicitách se přeskočí (zapíše varování), faktury nemaže.
+* **Ověřit:** `SELECT email FROM users WHERE LOWER(email) IN (…adresy
+  provozovatele…)`. Pokud adresu provozovatele nedrží žádný účet, díra
+  byla otevřená — prohlédnout protokol `profile.email_changed`
+  a `auth.registered` a účet provozovatele založit.
+* Rozběhnutá odemčení trezoru po nasazení platit přestanou (chybí jim, kdo
+  odemkl) — odemknout znovu.
+* Předplatná zaplacená před nasazením mají `ends_at = null` a platí dál
+  navždy; konec období se nikde neuložil, takže ho doplnit jde jen ručně.
+  Měsíční tržba u ročních zákazníků (matice provozovatele) teď klesne na
+  dvanáctinu — dřív se počítali jako měsíční.
+* Dřívější „odpojení" Google Disku přístup u Googlu neodvolalo; staré
+  souhlasy jde zrušit jen v účtu Google.
+* Videa s časem v UTC z doby před opravou se sama neopraví.
+
+### Zbývá (vědomě neřešené)
+
+* Panel rizik: „Ověřit obnovu" (`r3`) hlásí „Obnova ověřena — zkušební
+  stažení proběhlo" a nedělá nic (oblast záloh).
+* Náhledový požadavek, který přečetl sezení před zamčením trezoru, ho po
+  zamčení může zapsat zpět (souběh; řešení: stav trezoru v cache).
+* `SpaceContext` drží seznam prostorů ve statické proměnné bez obnovy
+  — u dlouho běžících procesů může zastarat.
+* Staré rozhraní ukazuje tlačítka nákupu podle `users.role`; hláška
+  `warning` se v něm nezobrazuje. Live Photo se nepárují.
+  `GenerateImageVariantsJob` bere rozměry neotočené; čas z prohlížeče
+  (`lastModified`) se ukládá jako okamžik v UTC.
+* Výběr Disku nevylučuje neaktivní účty dvojice (rozhodnutí o zálohách).
+
+| Commit | Co |
+|---|---|
+| `cfe8de97`, `dd31c15d` | Počet a obálka alba, odznak koše bez trezoru |
+| `5163d719`, `e644816a` | Disk hosta, poskytovatel, kvóta, webhook, odvolání u Googlu |
+| `69216a0d` | Placený tarif si zákazník nepřidělí, období končí, jedna faktura |
+| `774fdb5d` | Adresa provozovatele, trezor patří tomu, kdo odemkl |
+| `5a03f266` | Vzkazy hostů, vysypání koše, pády na MySQL, pravidla, úlohy |
+| `6dabb2e8`, `97dd18b2` | Staré rozhraní: archiv, obálky, duplicity, alba hostů, statistiky |
+| `bd06ae80` | Zpracování médií — vzpomínky, čas videí, EXIF, náhledy |
+| `11b0262f` | Fotokniha bez trezoru a koše |
+| `c44e4f38` | Testy: příprava dat podle pražského dne |
+
+Testy: **1971 PHP testů**, všechny prošly — i v noci na Silvestra
+a v letní noci přes `TESTY_CAS`. **Jedna migrace.**
+
 ## 2ak. Třicáté osmé kolo — zámek, noční úlohy, peníze, alba (25. 9.)
 
 Audit oblastí, které dosud neprošly: plánované příkazy, řadiče galerie pro
