@@ -50,7 +50,9 @@ class CestyAkceTest extends TestCase
         $this->postJson('/api/cesty/'.$cesta.'/program', ['den' => 1, 'nazev' => 'Krka', 'cas' => '9:30', 'misto' => 'NP Krka'])
             ->assertStatus(201);
 
-        $den = DB::table('trip_days')->sole();
+        // Založí se všechny dny termínu (TripDayShiftService), bod programu visí na druhém.
+        $this->assertSame(8, DB::table('trip_days')->count());
+        $den = DB::table('trip_days')->where('id', DB::table('trip_activities')->value('trip_day_id'))->first();
         $this->assertSame(now()->addWeek()->addDay()->toDateString(), substr((string) $den->date, 0, 10));
         $this->assertSame('Krka', DB::table('trip_activities')->value('title'));
 
@@ -76,7 +78,8 @@ class CestyAkceTest extends TestCase
                 ->assertStatus(201);
         }
 
-        $poradi = DB::table('trip_days')->orderBy('date')->pluck('sort_order')->map('intval')->all();
+        $poradi = DB::table('trip_days')->whereIn('id', DB::table('trip_activities')->pluck('trip_day_id'))
+            ->orderBy('date')->pluck('sort_order')->map('intval')->all();
 
         // `den => N` je N. den po začátku cesty (viz test výš), takže pořadí
         // je rovnou N. Podstatné je, že roste a není záporné.

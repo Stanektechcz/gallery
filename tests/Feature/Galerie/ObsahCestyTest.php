@@ -107,13 +107,15 @@ class ObsahCestyTest extends TestCase
         $this->assertSame(now()->addWeek()->toDateString(), $telefon['od']);
 
         $this->postJson('/api/cesty/'.$telefon['n'].'/program', ['den' => 1, 'nazev' => 'Svatý Kopeček', 'cas' => '10:30'])->assertCreated();
-        $den = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava')['days'][0];
+        // Bod programu založí všechny dny cesty (TripDayShiftService), ne jen ten jeden.
+        $den = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava')['days'][1];
+        $this->assertSame('Den 2', $den[0]);
         [$nazev, $cas, $hotovo, $id] = $den[2][0];
         $this->assertSame(['Svatý Kopeček', '10:30', 0], [$nazev, $cas, $hotovo]);
 
         // „Splněno" z telefonu se uloží k bodu — dřív jen v jednom telefonu.
         $this->postJson('/api/cesty/program/'.$id.'/hotovo', ['hotovo' => true])->assertOk();
-        $den = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava')['days'][0];
+        $den = collect($this->getJson('/api/data/cesty')->json('data.MOBIL.TRIPS'))->firstWhere('title', 'Pálava')['days'][1];
         $this->assertSame(1, $den[2][0][2]);
     }
 

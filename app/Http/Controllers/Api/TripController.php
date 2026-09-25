@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Media\AlbumCurationAssistantService;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Services\Planning\TripDayShiftService;
 use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Travel\TransportSearchService;
 use App\Support\Trezor;
@@ -29,10 +30,10 @@ class TripController extends Controller
 {
     /**
      * Nejdelší cesta ve dnech. Každý den je řádek v `trip_days`
-     * (`TripPlanController::ensureDays()`) — stejný strop jako
+     * (`TripDayShiftService`) — stejný strop jako
      * `CalendarEventTripService::createDays()`.
      */
-    public const MAX_DNI = 366;
+    public const MAX_DNI = TripDayShiftService::MAX_DNI;
 
     /** Horní mez rozpočtu — sloupec `trips.budget` je `decimal(12,2)`. */
     private const MAX_ROZPOCET = '9999999999.99';
@@ -42,6 +43,7 @@ class TripController extends Controller
         private readonly TripPreparationTimelineService $tripPreparation,
         private readonly AlbumCurationAssistantService $albumCuration,
         private readonly CalendarEventCreationService $calendarEvents,
+        private readonly TripDayShiftService $dnyCesty,
     ) {}
 
     // ─── Trips CRUD ────────────────────────────────────────────────────────
@@ -153,17 +155,25 @@ class TripController extends Controller
         $toUpdate = $v;
         $toUpdate['updated_at'] = now();
 
-        DB::table('trips')
-            ->where('id', $id)
-            ->where('gallery_space_id', $space->id)
-            ->update($toUpdate);
+        // Termín, události a dny jdou v jedné transakci pod zámkem řádku cesty:
+        // dvě souběžná uložení by jinak obě posunula dny od téhož „před".
+        $trip = DB::transaction(function () use ($id, $space, $toUpdate) {
+            $before = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->lockForUpdate()->first();
+            if (! $before) {
+                return null;
+            }
+            DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->update($toUpdate);
+            $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
 
-        $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
+            $this->dnyCesty->posunUdalosti($before, $trip);
+            $this->dnyCesty->posun((int) $trip->id, $before->start_date, $before->end_date, $trip->start_date, $trip->end_date);
+
+            return $trip;
+        });
         if (! $trip) {
             return response()->json(['error' => 'not found'], 404);
         }
 
-        $this->posunUdalostiCesty($before, $trip);
         if ($this->tripPreparation->canSync()) {
             $this->tripPreparation->sync($trip);
         }
@@ -1320,59 +1330,6 @@ class TripController extends Controller
         }
         if ((int) round($od->diffInDays($do)) + 1 > self::MAX_DNI) {
             throw ValidationException::withMessages(['end_date' => 'Cesta může trvat nejvýš '.self::MAX_DNI.' dní.']);
-        }
-    }
-
-    /**
-     * Posune události kalendáře navázané na cestu, když se změnil její termín.
-     *
-     * Dřív každé uložení s datem (i beze změny) přepsalo datum **všech**
-     * událostí s `trip_id` na začátek a konec cesty — večerní vlak z
-     * posledního dne tak skončil na prvním dni a úkoly přišly o své termíny.
-     *
-     * - Hlavní karta cesty dostane nový termín; časy dne zůstanou. Hlavní je
-     *   karta `type = trip`, nebo ta, která pokrývá právě celý dosavadní
-     *   termín — kalendář ji umí založit s jiným typem a termín cesty podle
-     *   ní řídí (`CalendarPlanningController::syncTripSchedule()`).
-     * - Ostatní navázané události (rezervace, úkoly…) se posunou o tolik dní,
-     *   o kolik se posunul začátek cesty. Samotné prodloužení nebo zkrácení
-     *   konce je nechá na místě.
-     *
-     * S událostí se posunou i její čekající připomínky, o stejný rozdíl.
-     */
-    private function posunUdalostiCesty(object $before, object $trip): void
-    {
-        $oldStart = Carbon::parse($before->start_date)->startOfDay();
-        $oldEnd = Carbon::parse($before->end_date)->startOfDay();
-        $newStart = Carbon::parse($trip->start_date)->startOfDay();
-        $newEnd = Carbon::parse($trip->end_date)->startOfDay();
-        if ($oldStart->equalTo($newStart) && $oldEnd->equalTo($newEnd)) {
-            return;
-        }
-        $shiftDays = (int) round($oldStart->diffInDays($newStart, false));
-
-        $events = DB::table('calendar_events')->where('trip_id', $trip->id)->where('gallery_space_id', $trip->gallery_space_id)->get();
-        foreach ($events as $event) {
-            $startsAt = Carbon::parse($event->starts_at);
-            $endsAt = $event->ends_at ? Carbon::parse($event->ends_at) : null;
-            $isMain = $event->type === 'trip'
-                || ($startsAt->isSameDay($oldStart) && ($endsAt ?? $startsAt)->isSameDay($oldEnd));
-            if (! $isMain && $shiftDays === 0) {
-                continue;
-            }
-            $newStartsAt = $isMain ? $startsAt->copy()->setDateFrom($newStart) : $startsAt->copy()->addDays($shiftDays);
-            $update = ['starts_at' => $newStartsAt, 'updated_at' => now()];
-            if ($endsAt) {
-                $update['ends_at'] = $isMain ? $endsAt->copy()->setDateFrom($newEnd) : $endsAt->copy()->addDays($shiftDays);
-            }
-            DB::table('calendar_events')->where('id', $event->id)->update($update);
-
-            $seconds = $newStartsAt->getTimestamp() - $startsAt->getTimestamp();
-            if ($seconds !== 0) {
-                foreach (DB::table('event_reminders')->where('event_id', $event->id)->where('status', 'pending')->get(['id', 'remind_at']) as $reminder) {
-                    DB::table('event_reminders')->where('id', $reminder->id)->update(['remind_at' => Carbon::parse($reminder->remind_at)->addSeconds($seconds), 'updated_at' => now()]);
-                }
-            }
         }
     }
 

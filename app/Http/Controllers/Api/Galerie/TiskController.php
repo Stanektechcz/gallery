@@ -7,7 +7,7 @@ use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Pribeh;
-use Carbon\CarbonImmutable;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -64,8 +64,10 @@ class TiskController extends Controller
              * Deset pracovních dní je běžná lhůta fotoknihy, ale aplikace ji
              * od tiskárny nemá. `due_estimated` je proto zapnuté a obrazovka
              * píše „odhad 20. 9." místo data, které by vypadalo jako slib.
+             * Počítá se od pražského dne — v UTC byla objednávka po půlnoci
+             * ještě včerejší a odhad o den dřív.
              */
-            'due_on' => CarbonImmutable::now()->addWeekdays(10)->toDateString(),
+            'due_on' => Cas::dnes()->addWeekdays(10)->toDateString(),
             'due_estimated' => true,
             'note' => $this->text($data['note'] ?? null),
             'created_at' => now(),

@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Cesty;
 use App\Services\Planning\TravelInboxService;
+use App\Services\Planning\TripDayShiftService;
+use App\Support\Cas;
 use App\Support\Tabulky;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -36,7 +38,10 @@ class CestyAkceController extends Controller
         'nákupy' => 'shopping', 'rezerva' => 'reserve', 'letenky' => 'flights',
     ];
 
-    public function __construct(private readonly Cesty $obsah) {}
+    public function __construct(
+        private readonly Cesty $obsah,
+        private readonly TripDayShiftService $dnyCesty,
+    ) {}
 
     public function vydaj(Request $request, int $cesta): JsonResponse
     {
@@ -57,7 +62,9 @@ class CestyAkceController extends Controller
             'currency' => Tabulky::sloupec('trips', 'currency') && ! empty($radek->currency) ? $radek->currency : 'CZK',
             'paid_by' => $data['zaplatil'] ?? $request->user()->name,
             'state' => 'actual',
-            'occurred_at' => now(),
+            // `occurred_at` je DATETIME bez pásma a obrazovka ho čte jako místní
+            // čas (den i „G:i"). `now()` v UTC dal výdaji po půlnoci včerejší den.
+            'occurred_at' => Cas::naCeste($radek->timezone ?? null)->format('Y-m-d H:i:s'),
             'created_at' => now(),
             'updated_at' => now(),
         ]);
@@ -69,7 +76,7 @@ class CestyAkceController extends Controller
      * Bod programu do dne cesty.
      *
      * Den chodí jako pořadí (0 = první den), jak ho obrazovka kreslí. Když
-     * cesta dny ještě nemá, den se založí podle data začátku.
+     * cesta dny ještě nemá, založí se všechny dny jejího termínu.
      */
     public function program(Request $request, int $cesta): JsonResponse
     {
@@ -90,25 +97,16 @@ class CestyAkceController extends Controller
         }
 
         DB::transaction(function () use ($radek, $datum, $data, $request) {
-            $den = DB::table('trip_days')->where('trip_id', $radek->id)->whereDate('date', $datum->toDateString())->first();
-
-            $denId = $den?->id ?? DB::table('trip_days')->insertGetId([
-                'trip_id' => $radek->id,
-                'date' => $datum->toDateString(),
-                /*
-                 * Kolikátý den cesty to je — počítáno od začátku, ne naopak.
-                 *
-                 * Carbon 3 vrací `diffInDays` **se znaménkem** a `$a->diffInDays($b)`
-                 * je `$b − $a`. V původním pořadí tedy vycházelo `start − datum`,
-                 * což je pro každý den po tom prvním záporné číslo. Sloupec je
-                 * `unsignedSmallInteger`: na MySQL ve striktním režimu spadne
-                 * celá transakce a bod programu nejde přidat na žádný den kromě
-                 * prvního; na SQLite se itinerář jen seřadí obráceně.
-                 */
-                'sort_order' => (int) CarbonImmutable::parse($radek->start_date)->diffInDays($datum),
-                'created_at' => now(),
-                'updated_at' => now(),
-            ]);
+            /*
+             * Den jde přes TripDayShiftService, stejně jako ve starém API.
+             *
+             * Dřív se tu zakládal jediný den podle data — u cesty, jejíž dny
+             * zůstaly na starém termínu, vedle nich: smíšený itinerář,
+             * duplicitní pořadí a víc dnů, než cesta má. Služba doplní dny
+             * v termínu, prázdné zastaralé uklidí a pořadí srovná po datech.
+             */
+            $denId = $this->dnyCesty->denCesty($radek, $datum);
+            abort_if($denId === null, 422, 'Takový den cesta nemá.');
 
             DB::table('trip_activities')->insert([
                 'trip_day_id' => $denId,

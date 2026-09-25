@@ -105,7 +105,18 @@ class FinanceAkceController extends Controller
         $den = Carbon::parse($t->occurred_at);
         $start = $this->dalsiTermin($den);
 
-        DB::transaction(function () use ($t, $prostor, $request, $ucet, $castka, $den, $start) {
+        $zalozeno = DB::transaction(function () use ($t, $prostor, $request, $ucet, $castka, $den, $start) {
+            /*
+             * Dvojklik (nebo oba z dvojice naráz): obě kliknutí prošla kontrolou
+             * `recurring_id` výš dřív, než první zapsalo. Vznikly dva předpisy,
+             * platba ukazovala jen na druhý a první — osiřelý — dál generoval
+             * budoucí platby. Tady se řádek znovu přečte pod zámkem.
+             */
+            $volna = Transaction::whereKey($t->id)->whereNull('recurring_id')->lockForUpdate()->exists();
+            if (! $volna) {
+                return false;
+            }
+
             $predpis = FinanceRecurring::create([
                 'gallery_space_id' => $prostor->id,
                 'name' => $t->description ?: ($t->counterparty ?: 'Pravidelná platba'),
@@ -123,7 +134,13 @@ class FinanceAkceController extends Controller
             ]);
 
             $t->update(['recurring_id' => $predpis->id]);
+
+            return true;
         });
+
+        if (! $zalozeno) {
+            return $this->chyba('Tahle platba už opakovaná je.');
+        }
 
         return $this->hotovo($prostor, 'Opakuje se každý měsíc '.$den->day.'. dne · další platba se objeví v Nadcházejících');
     }
@@ -452,7 +469,8 @@ class FinanceAkceController extends Controller
         // Měna existujícího rozpočtu, jinak domácí měna prostoru — odhad limitů
         // počítá jen útratu ve stejné měně, ve které se rozpočet zakládá.
         $mena = $rozpocet?->currency ?: (FinanceSettings::proProstor($prostor->id)->home_currency ?: 'CZK');
-        $obvykle = $this->obsah->obvykleUtraty($prostor, now()->toImmutable(), $mena);
+        // Pražský měsíc, jako obrazovka (`Finance`): v UTC byl 1. den měsíce po půlnoci ještě minulý měsíc.
+        $obvykle = $this->obsah->obvykleUtraty($prostor, Cas::dnes(), $mena);
         $kategorii = 0;
 
         DB::transaction(function () use ($prostor, $request, $data, $obvykle, &$rozpocet, &$kategorii) {
@@ -605,18 +623,26 @@ class FinanceAkceController extends Controller
         $mesicu = max(1, $rozpocet->monthsCovered());
         $castka = round((float) $data['castka'] * $mesicu, 2);
 
-        $limitZ = (float) DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->where('finance_category_id', $z->id)->value('amount');
+        $presunuto = DB::transaction(function () use ($rozpocet, $z, $do, $castka, $prostor, $request) {
+            /*
+             * Limit se čte až tady, pod zámkem řádku.
+             *
+             * Čtený před transakcí mohl mezitím změnit druhý z dvojice (jiný
+             * přesun, nový plán) a zápis `limit − částka` by jeho změnu přepsal
+             * — nebo přesunul peníze, které v kategorii už nebyly.
+             */
+            $limitZ = (float) DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->where('finance_category_id', $z->id)
+                ->lockForUpdate()->value('amount');
 
-        if ($limitZ + 0.001 < $castka) {
-            return $this->chyba('V kategorii '.$z->name.' tolik volných peněz není.');
-        }
+            if ($limitZ + 0.001 < $castka) {
+                return false;
+            }
 
-        DB::transaction(function () use ($rozpocet, $z, $do, $castka, $limitZ, $prostor, $request) {
             DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->where('finance_category_id', $z->id)
                 ->update(['amount' => $limitZ - $castka, 'updated_at' => now()]);
 
             $cil = DB::table('budget_category_limits')->where('budget_id', $rozpocet->id)->where('finance_category_id', $do->id);
-            $puvodni = $cil->value('amount');
+            $puvodni = (clone $cil)->lockForUpdate()->value('amount');
 
             if ($puvodni === null) {
                 DB::table('budget_category_limits')->insert([
@@ -630,7 +656,13 @@ class FinanceAkceController extends Controller
 
             $this->log($prostor, $rozpocet, 'presun', $z->id, $limitZ, $limitZ - $castka, $request);
             $this->log($prostor, $rozpocet, 'presun', $do->id, $puvodni === null ? null : (float) $puvodni, (float) ($puvodni ?? 0) + $castka, $request);
+
+            return true;
         });
+
+        if (! $presunuto) {
+            return $this->chyba('V kategorii '.$z->name.' tolik volných peněz není.');
+        }
 
         return $this->hotovo($prostor, 'Přesunuto z '.$z->name.' do '.$do->name);
     }
@@ -653,7 +685,8 @@ class FinanceAkceController extends Controller
         $data = $request->validate([
             'nazev' => ['required', 'string', 'max:120'],
             'castka' => ['required', 'numeric', 'gt:0', 'max:100000000'],
-            'termin' => ['nullable', 'date', 'after:'.Cas::dnes()->toDateString()],
+            // Obrazovka píše rok-měsíc-den; `date` bralo i „tomorrow" a to šlo surově do sloupce DATE.
+            'termin' => ['nullable', 'date_format:Y-m-d', 'after:'.Cas::dnes()->toDateString()],
             'poznamka' => ['nullable', 'string', 'max:500'],
         ]);
 
@@ -678,13 +711,23 @@ class FinanceAkceController extends Controller
         $data = $request->validate(['castka' => ['required', 'numeric', 'not_in:0', 'between:-100000000,100000000']]);
 
         $cil = BudgetGoal::where('budget_id', $rozpocet->id)->where('uuid', $uuid)->firstOrFail();
-        $nove = round((float) $cil->saved_amount + (float) $data['castka'], 2);
+        $castka = round((float) $data['castka'], 2);
 
-        if ($nove < 0) {
+        /*
+         * Přičte databáze, ne PHP.
+         *
+         * Dřív se zůstatek přečetl, sečetl a zapsal: vložili-li oba z dvojice
+         * naráz, druhý zápis přepsal první a jeden vklad zmizel. Výběr hlídá
+         * nezápornost ve stejném dotazu — podmínka platí pro zůstatek v okamžiku
+         * zápisu, ne pro ten přečtený o chvíli dřív.
+         */
+        $zapsano = BudgetGoal::whereKey($cil->id)
+            ->when($castka < 0, fn ($dotaz) => $dotaz->where('saved_amount', '>=', -$castka))
+            ->increment('saved_amount', $castka);
+
+        if ($zapsano === 0) {
             return $this->chyba('Vybrat víc, než je v „'.$cil->name.'“ uloženo, nejde.');
         }
-
-        $cil->update(['saved_amount' => $nove]);
 
         return $this->hotovo($prostor, ((float) $data['castka'] > 0 ? 'Vloženo do' : 'Vybráno z').' „'.$cil->name.'“');
     }
@@ -780,9 +823,13 @@ class FinanceAkceController extends Controller
     private function aktualniRozpocet(GallerySpace $prostor): ?Budget
     {
         // Stejný výběr jako poskytovatel obsahu — obrazovka musí zapisovat tam, co ukazuje.
+        // Pražský den jako datum: `now()` (UTC s časem) proti DATE vyřadilo
+        // rozpočet končící dnes už o půlnoci UTC.
+        $dnes = Cas::dnes()->toDateString();
+
         return Budget::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->orderByRaw('CASE WHEN starts_on <= ? AND (ends_on IS NULL OR ends_on >= ?) THEN 0 ELSE 1 END', [now(), now()])
+            ->orderByRaw('CASE WHEN starts_on <= ? AND (ends_on IS NULL OR ends_on >= ?) THEN 0 ELSE 1 END', [$dnes, $dnes])
             ->orderByDesc('starts_on')
             ->first();
     }

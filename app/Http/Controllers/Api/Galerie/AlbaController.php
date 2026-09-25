@@ -150,7 +150,9 @@ class AlbaController extends Controller
         $data = $request->validate([
             'nazev' => ['required', 'string', 'min:2', 'max:160'],
             'misto' => ['nullable', 'string', 'max:160'],
-            'datum' => ['nullable', 'date'],
+            // Obrazovka posílá rok-měsíc-den. Pravidlo `date` bralo i „tomorrow"
+            // nebo datum s časem a hodnota šla surově do sloupce DATE.
+            'datum' => ['nullable', 'date_format:Y-m-d'],
             'popis' => ['nullable', 'string', 'max:5000'],
         ]);
 

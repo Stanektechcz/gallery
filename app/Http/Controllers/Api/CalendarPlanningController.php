@@ -27,6 +27,7 @@ use App\Services\Planning\ExperienceMediaService;
 use App\Services\Planning\PersonalCelebrationService;
 use App\Services\Planning\ReminderActionService;
 use App\Services\Planning\TravelInboxService;
+use App\Services\Planning\TripDayShiftService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Support\Cas;
 use Carbon\Carbon;
@@ -352,10 +353,11 @@ class CalendarPlanningController extends Controller
         $changed = collect($restore)->filter(fn ($value, $key) => $this->comparableEventValue($value) !== $this->comparableEventValue($before[$key] ?? null))->keys()->values()->all();
         abort_if($changed === [], 422, 'Tato verze už odpovídá aktuální podobě akce.');
         $originalStartsAt = $event->starts_at->copy();
-        DB::transaction(function () use ($event, $restore, $originalStartsAt): void {
+        $puvodne = $this->puvodniTermin($event);
+        DB::transaction(function () use ($event, $restore, $originalStartsAt, $puvodne): void {
             $event->update($restore);
             $this->reschedulePendingReminders($event, $originalStartsAt);
-            $this->syncTripSchedule($event);
+            $this->syncTripSchedule($event, $puvodne);
         });
         $event->refresh();
         $this->revisions->record($event, $user->id, 'restore', $before, $changed);
@@ -385,11 +387,12 @@ class CalendarPlanningController extends Controller
         $this->validateTripAndAlbum($data + ['trip_id' => $event->trip_id, 'album_id' => $event->album_id], $spaceId);
         $revisionSnapshot = $this->revisions->snapshot($event);
         $originalStartsAt = $event->starts_at->copy();
+        $puvodne = $this->puvodniTermin($event);
 
-        DB::transaction(function () use ($event, $data, $user, $originalStartsAt): void {
+        DB::transaction(function () use ($event, $data, $user, $originalStartsAt, $puvodne): void {
             $event->update(collect($data)->except(['participant_ids', 'reminders'])->all());
             $this->reschedulePendingReminders($event, $originalStartsAt);
-            $this->syncTripSchedule($event);
+            $this->syncTripSchedule($event, $puvodne);
             if (array_key_exists('participant_ids', $data)) {
                 $this->replaceParticipants($event, $data['participant_ids'], $user);
             }
@@ -1583,9 +1586,27 @@ class CalendarPlanningController extends Controller
         }
     }
 
-    private function syncTripSchedule(CalendarEvent $event): void
+    /**
+     * Termín cesty podle její hlavní karty v kalendáři.
+     *
+     * Dřív se přepsaly jen `trips.start_date/end_date`: dny cesty zůstaly na
+     * starém termínu a ostatní navázané události (rezervace, jídla) také.
+     * Teď se posunou stejně jako při úpravě cesty (`TripDayShiftService`).
+     *
+     * Termín řídí jen hlavní karta — `type = trip`, karta, která pokrývala
+     * celý dosavadní termín, nebo akce právě navázaná na cestu. Úprava času
+     * vlaku nebo jídla navázaného na cestu dřív přepsala termín celé cesty na
+     * den vlaku; s posunem dnů by se k tomu posunul celý itinerář.
+     *
+     * @param  array{trip_id: int|null, starts_at: Carbon, ends_at: Carbon|null}|null  $puvodne  akce před úpravou; `null` u nově založené
+     */
+    private function syncTripSchedule(CalendarEvent $event, ?array $puvodne = null): void
     {
         if (! $event->trip_id) {
+            return;
+        }
+        $before = DB::table('trips')->where('id', $event->trip_id)->where('gallery_space_id', $event->gallery_space_id)->lockForUpdate()->first();
+        if (! $before || ! $this->ridiTerminCesty($event, $before, $puvodne)) {
             return;
         }
         $end = $event->ends_at ?? $event->starts_at;
@@ -1594,6 +1615,11 @@ class CalendarPlanningController extends Controller
             'end_date' => $end->toDateString(),
             'updated_at' => now(),
         ]);
+        $trip = DB::table('trips')->find($event->trip_id);
+        $dnyCesty = app(TripDayShiftService::class);
+        // Tahle karta nové datum už má; posouvají se ostatní události a dny.
+        $dnyCesty->posunUdalosti($before, $trip, (int) $event->id);
+        $dnyCesty->posun((int) $trip->id, $before->start_date, $before->end_date, $trip->start_date, $trip->end_date);
 
         // A simple event-created trip starts with one waypoint. Keep that
         // location useful without overwriting a later, carefully built route.
@@ -1608,6 +1634,25 @@ class CalendarPlanningController extends Controller
                 'updated_at' => now(),
             ]);
         }
+    }
+
+    /** @param  array{trip_id: int|null, starts_at: Carbon, ends_at: Carbon|null}|null  $puvodne */
+    private function ridiTerminCesty(CalendarEvent $event, object $trip, ?array $puvodne): bool
+    {
+        if ($event->type === 'trip' || $puvodne === null || (int) $puvodne['trip_id'] !== (int) $event->trip_id) {
+            return true;
+        }
+        $od = $puvodne['starts_at'];
+        $do = $puvodne['ends_at'] ?? $od;
+
+        return $od->toDateString() === substr((string) $trip->start_date, 0, 10)
+            && $do->toDateString() === substr((string) $trip->end_date, 0, 10);
+    }
+
+    /** @return array{trip_id: int|null, starts_at: Carbon, ends_at: Carbon|null} */
+    private function puvodniTermin(CalendarEvent $event): array
+    {
+        return ['trip_id' => $event->trip_id, 'starts_at' => $event->starts_at->copy(), 'ends_at' => $event->ends_at?->copy()];
     }
 
     private function validateInboxLinks(array $data, int $spaceId): array

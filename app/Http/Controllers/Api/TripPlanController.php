@@ -4,12 +4,12 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Services\Auth\PristupDoGalerie;
+use App\Services\Planning\TripDayShiftService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Travel\TravelJournalStoryService;
 use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -376,21 +376,16 @@ class TripPlanController extends Controller
         return $activity;
     }
 
+    /**
+     * Dny v termínu cesty — i když už nějaké existují.
+     *
+     * Dřív se dny zakládaly jen cestě, která žádné neměla: cesta prodloužená
+     * nebo posunutá dřív, než se dny posouvaly s termínem, nebo s jediným
+     * dnem založeným z galerie, tak neměla dny pro zbytek termínu.
+     */
     private function ensureDays(object $trip): void
     {
-        if (DB::table('trip_days')->where('trip_id', $trip->id)->exists()) {
-            return;
-        }
-        $start = Carbon::parse($trip->start_date);
-        $end = Carbon::parse($trip->end_date);
-        $rows = [];
-        $order = 0;
-        // Strop jako v `CalendarEventTripService::createDays()` — i cesta uložená
-        // před omezením délky nezaloží tisíce dní najednou.
-        for ($date = $start->copy(); $date->lte($end) && $order < TripController::MAX_DNI; $date->addDay()) {
-            $rows[] = ['trip_id' => $trip->id, 'date' => $date->toDateString(), 'title' => 'Den '.($order + 1), 'sort_order' => $order++, 'created_at' => now(), 'updated_at' => now()];
-        }
-        DB::table('trip_days')->insert($rows);
+        app(TripDayShiftService::class)->zajisti($trip);
     }
 
     private function activityRules(bool $partial = false): array
