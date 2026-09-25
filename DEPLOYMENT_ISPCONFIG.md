@@ -50,8 +50,9 @@ chmod -R 775 storage bootstrap/cache
 # Database
 php artisan migrate --force
 
-# Storage link
-php artisan storage:link
+# storage:link NESPOUŠTĚT — odkaz public/storage by vydával originály fotek
+# (i z trezoru) bez přihlášení. Soubory chodí jen přes /files s podpisem
+# nebo členstvím; deploy.sh odkaz, když ho najde, odstraní.
 
 # Optimize
 php artisan config:cache
