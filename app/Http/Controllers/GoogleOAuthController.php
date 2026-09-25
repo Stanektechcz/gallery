@@ -145,10 +145,12 @@ class GoogleOAuthController extends Controller
             return redirect()->route('settings.storage.google')
                 ->with('success', "Google Drive připojen. Účet: {$connection->account_email}. Existující média byla zařazena k synchronizaci.");
         } catch (\Throwable $e) {
-            Log::error('Google OAuth callback failed', ['error' => $e->getMessage()]);
+            // Podrobnosti do logu, ne do stránky — text výjimky nese adresy,
+            // tokeny i SQL (viz `hlaskaSelhani()`).
+            report($e);
 
             return redirect()->route('settings.storage.google')
-                ->with('error', 'Připojení Google Drive selhalo: '.$e->getMessage());
+                ->with('error', $this->hlaskaSelhani('Připojení Google Disku se nepodařilo dokončit.'));
         }
     }
 
@@ -266,10 +268,22 @@ class GoogleOAuthController extends Controller
 
             return back()->with('success', 'Struktura Google Drive byla inicializována. Root ID: '.$structure['root_id']);
         } catch (\Throwable $e) {
-            Log::error('Drive initStructure failed', ['error' => $e->getMessage()]);
+            report($e);
 
-            return back()->with('error', 'Inicializace selhala: '.$e->getMessage());
+            return back()->with('error', $this->hlaskaSelhani('Složky galerie na Google Disku se nepodařilo založit.'));
         }
+    }
+
+    /**
+     * Pevná hláška po selhání — bez textu výjimky.
+     *
+     * Hlášky dřív končily `$e->getMessage()`: uživatel tak na stránce viděl
+     * adresy API, útržky tokenů nebo SQL z chyby databáze. Podrobnosti jdou
+     * přes `report()` do logu.
+     */
+    private function hlaskaSelhani(string $co): string
+    {
+        return $co.' Zkuste to prosím za chvíli znovu; když to nepomůže, podrobnosti jsou v záznamu chyb.';
     }
 
     /**

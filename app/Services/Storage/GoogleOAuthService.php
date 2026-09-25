@@ -117,21 +117,55 @@ class GoogleOAuthService
     }
 
     /**
-     * Revoke token at Google.
+     * Odvolá souhlas u Googlu; `true` jen tehdy, když ho Google potvrdil.
+     *
+     * Dvě chyby dohromady tvrdily „odpojeno", i když aplikace přístup k Disku
+     * dál měla. `Google\Client::revokeToken()` při odmítnutí nevyhodí výjimku,
+     * jen vrátí `false` — a to se zahazovalo. A posílal se mu celý uložený JSON
+     * tokenu, takže Google odmítal pokaždé. Posílá se proto refresh token
+     * (odvolá celý souhlas), jinak přístupový token vytažený z JSONu.
+     *
+     * Při odmítnutí se připojení tady neoznačuje — to i s poctivou hláškou
+     * řeší `GoogleOAuthController::disconnect()`.
      */
     public function revokeToken(StorageConnection $connection): bool
     {
         try {
-            $token = $connection->getAccessToken();
-            if ($token) {
-                $this->client->revokeToken($token);
+            $token = $this->tokenKOdvolani($connection);
+
+            if ($token !== null && ! $this->client->revokeToken($token)) {
+                return false;
             }
+
             $connection->markStatus('revoked');
             $connection->update(['revoked_at' => now()]);
 
             return true;
         } catch (\Throwable $e) {
+            report($e);
+
             return false;
         }
+    }
+
+    /** Samotný token pro Google — ne JSON, ve kterém je uložený přístupový token. */
+    private function tokenKOdvolani(StorageConnection $connection): ?string
+    {
+        $refresh = $connection->getRefreshToken();
+
+        if (is_string($refresh) && $refresh !== '') {
+            return $refresh;
+        }
+
+        $ulozeny = $connection->getAccessToken();
+
+        if (! is_string($ulozeny) || $ulozeny === '') {
+            return null;
+        }
+
+        $data = json_decode($ulozeny, true);
+        $pristup = is_array($data) ? ($data['access_token'] ?? null) : $ulozeny;
+
+        return is_string($pristup) && $pristup !== '' ? $pristup : null;
     }
 }
