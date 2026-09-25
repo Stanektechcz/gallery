@@ -357,7 +357,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:3px; padding:0 18px">
                 <sc-for list="{{ homeTiles }}" as="t" hint-placeholder-count="9">
                   <button onClick="{{ t.open }}" aria-label="Otevřít fotku" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}">
-                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if>
+                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                     <sc-if value="{{ t.video }}"><span style="position:absolute; right:5px; bottom:4px; font-size:10.5px; color:#fff">{{ t.dur }}</span></sc-if>
                   </button>
                 </sc-for>
@@ -402,7 +402,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                             <sc-if value="{{ t.on }}"><i class="ph-bold ph-check" style="font-size:12px; color:#fff"></i></sc-if>
                           </span>
                         </sc-if>
-                        <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if>
+                        <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                         <sc-if value="{{ t.video }}"><span style="position:absolute; right:5px; bottom:4px; font-size:10.5px; color:#fff">{{ t.dur }}</span></sc-if>
                       </button>
                     </sc-for>
@@ -2114,7 +2114,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:3px; padding:0 6px">
                 <sc-for list="{{ album.items }}" as="t" hint-placeholder-count="9">
                   <button onClick="{{ t.tap }}" aria-label="Fotka v albu" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}">
-                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if>
+                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                   </button>
                 </sc-for>
               </div>
@@ -2141,6 +2141,29 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           <sc-if value="{{ isTrash }}">
             <div data-screen-label="Mobil — Koš" style="animation:mIn .2s ease; padding:0 18px">
               <div style="font-size:12px; color:var(--g-ink3); padding-bottom:12px">{{ trashMeta }}</div>
+              <!-- Návrhy ke smazání: ještě v knihovně, smažou se až se souhlasem druhého. -->
+              <sc-if value="{{ kschHas }}">
+                <div style="padding-bottom:18px">
+                  <div style="display:flex; align-items:center; gap:7px; font-size:15px"><i class="ph-duotone ph-hourglass" style="font-size:17px; color:var(--g-warn)"></i>Čeká na schválení</div>
+                  <div style="font-size:12px; color:var(--g-ink3); margin-top:3px; text-wrap:pretty">{{ kschMeta }}</div>
+                  <sc-for list="{{ ksch }}" as="k" hint-placeholder-count="2">
+                    <div style="display:flex; align-items:center; gap:12px; padding:11px 2px; border-bottom:1px solid var(--g-line2)">
+                      <div style="flex:none; width:48px; height:48px; border-radius:2px; background:{{ k.bg }}"></div>
+                      <div style="flex:1; min-width:0">
+                        <div style="font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap">{{ k.name }}</div>
+                        <div style="font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ k.meta }}</div>
+                      </div>
+                      <sc-if value="{{ k.cizi }}">
+                        <button onClick="{{ k.ponechat }}" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit" style-hover="background:var(--g-panel)">Ponechat</button>
+                        <button onClick="{{ k.schvalit }}" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-mag); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-mag)" style-hover="background:var(--g-panel)">Smazat</button>
+                      </sc-if>
+                      <sc-if value="{{ k.moje }}">
+                        <button onClick="{{ k.ponechat }}" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit" style-hover="background:var(--g-panel)">Stáhnout návrh</button>
+                      </sc-if>
+                    </div>
+                  </sc-for>
+                </div>
+              </sc-if>
               <sc-for list="{{ trashRows }}" as="t" hint-placeholder-count="3">
                 <div style="display:flex; align-items:center; gap:12px; padding:11px 2px; border-bottom:1px solid var(--g-line2)">
                   <div style="flex:none; width:48px; height:48px; border-radius:2px; background:{{ t.bg }}"></div>
@@ -4196,7 +4219,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:3px; padding:0 6px">
                 <sc-for list="{{ day.photos }}" as="t" hint-placeholder-count="9">
                   <button onClick="{{ t.tap }}" aria-label="Fotka dne" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}">
-                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if>
+                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                     <sc-if value="{{ t.video }}"><span style="position:absolute; right:5px; bottom:4px; font-size:10.5px; color:#fff">{{ t.dur }}</span></sc-if>
                   </button>
                 </sc-for>
@@ -4237,7 +4260,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
               <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:3px; padding:0 6px">
                 <sc-for list="{{ place.photos }}" as="t" hint-placeholder-count="6">
                   <button onClick="{{ t.tap }}" aria-label="Fotka z místa" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}">
-                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if>
+                    <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                   </button>
                 </sc-for>
               </div>
@@ -5134,6 +5157,13 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                 </sc-for>
                 <div style="font-size:11.5px; color:rgba(255,255,255,.6); padding:9px 0 2px">Nahrál {{ lbDetail.author }} · {{ lbDetail.uploaded }}</div>
+              </div>
+            </sc-if>
+            <!-- Návrh ke smazání: fotka zůstává v knihovně, dokud to nepotvrdí druhý z dvojice. -->
+            <sc-if value="{{ lbNavrhOn }}">
+              <div role="status" style="flex:none; display:flex; align-items:center; gap:8px; margin:6px 12px 0; padding:9px 12px; border-radius:2px; background:rgba(0,0,0,.55); color:#fff; font-size:12.5px; line-height:1.4">
+                <i class="ph-duotone ph-hourglass" style="flex:none; font-size:17px; color:var(--g-warn)"></i>
+                <span style="text-wrap:pretty">{{ lbNavrhText }}</span>
               </div>
             </sc-if>
             <div style="flex:none; display:flex; padding:8px 10px 18px">
@@ -9400,10 +9430,54 @@ class Component extends DCLogic {
       acSave: save
     });
   }
+  /*
+   * Potvrzení „každý maže sám" — kódem zámku, bez něj heslem do galerie.
+   *
+   * Hodnota žije jen v `acDlg` (to se nesdílí ani neukládá) a po odeslání
+   * se zahodí; nic se nepředvyplňuje. Počet pokusů hlídá server (422/429
+   * s `chyba`), stejně jako u odemykání.
+   */
+  mazaniPotvrzeniVals(d) {
+    const kodem = !!this.zamek().nastaveno;
+    const navrh = ((window.GalerieData || {}).MAZANI || {}).navrhRezimu || {};
+    const set = patch => this.setState({ acDlg: Object.assign({}, this.state.acDlg, patch, { err: null }) });
+    const chyba = zprava => this.setState({ acDlg: Object.assign({}, this.state.acDlg, { busy: false, a: '', err: zprava }) });
+    const save = () => {
+      const api = window.GalerieApi;
+      if (d.busy) return;
+      if (!this.galerieNaServeru()) { chyba('Pravidlo mazání se mění jen s připojeným serverem.'); return; }
+      const hodnota = String(d.a || '');
+      if (!hodnota.trim()) { chyba(kodem ? 'Zadejte kód zámku.' : 'Zadejte heslo do galerie.'); return; }
+      this.setState({ acDlg: Object.assign({}, d, { busy: true, err: null }) });
+      api.post('mazani/rezim/potvrdit', kodem ? { kod: hodnota } : { heslo: hodnota }).then(res => {
+        this.setState({ acDlg: null });
+        if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        this.toast((res && res.zprava) || 'Každý teď maže sám — potvrdili jste oba', { icon: 'ph-check' });
+      }).catch(e => {
+        const b = (e && e.body) || {};
+        chyba(b.chyba || b.message || (e && e.status === 429 ? 'Příliš mnoho pokusů. Zkuste to za chvíli.' : 'Potvrdit se nepodařilo — server neodpověděl.'));
+      });
+    };
+    return {
+      acOpen: true, acShowA: true, acShowB: false, acShowC: false, acCancelOn: true, acInfoOn: false, acInfo: '',
+      acTitle: 'Každý bude mazat sám',
+      acBody: (navrh.kdo || 'Druhý z vás') + ' navrhuje, aby „Do koše“ mazalo hned, bez vašeho souhlasu. Platí to pro vás oba. Potvrďte '
+        + (kodem ? 'svým kódem zámku.' : 'heslem do galerie — kód zámku zatím nemáte.'),
+      acLabelA: kodem ? 'Kód zámku' : 'Heslo do galerie', acTypeA: 'password', acAutoA: kodem ? 'off' : 'current-password',
+      acLabelB: '', acTypeB: 'text', acAutoB: 'off', acLabelC: '', acAutoC: 'off',
+      acA: d.a || '', acB: '', acC: '',
+      acSetA: e => set({ a: e.target.value }), acSetB: () => {}, acSetC: () => {},
+      acHasErr: !!d.err, acErr: d.err || '',
+      acCta: d.busy ? 'Ověřuji…' : 'Potvrdit změnu',
+      acClose: () => this.setState({ acDlg: null }),
+      acSave: save
+    };
+  }
   uctoveVals() {
     const s = this.state, d = s.acDlg;
     if (!d) return { acOpen: false };
     if (String(d.mode || '').indexOf('2fa') === 0) return this.dvaFVals(d);
+    if (d.mode === 'mazani') return this.mazaniPotvrzeniVals(d);
     const heslo = d.mode === 'heslo';
     const set = patch => this.setState({ acDlg: Object.assign({}, this.state.acDlg, patch, { err: null }) });
     const chyba = zprava => this.setState({ acDlg: Object.assign({}, this.state.acDlg, { busy: false, err: zprava }) });
@@ -9461,6 +9535,32 @@ class Component extends DCLogic {
   nastaveniAkce(kind) {
     const api = window.GalerieApi;
     const naServeru = this.galerieNaServeru();
+    /*
+     * Pravidlo mazání fotek — mění se jen po vzájemném schválení.
+     *
+     * „Mazat fotky mohou jen po společném schválení pokud si po vzájemném
+     * schválení nenastaví jinak." Návrh „každý sám" platí, až ho druhý potvrdí
+     * kódem zámku (nebo heslem, když kód nemá); zpřísnit na společné smí každý
+     * hned. Hlášku i chybu píše server.
+     */
+    if (kind === 'mazani-navrh' || kind === 'mazani-potvrdit' || kind === 'mazani-zrusit' || kind === 'mazani-spolecne') {
+      if (!naServeru) { this.toast('Pravidlo mazání se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
+      // Když „každý sám" už navrhl druhý, je i „Navrhnout" potvrzením — a to chce kód.
+      const navrh = ((window.GalerieData || {}).MAZANI || {}).navrhRezimu;
+      const cekaNaMe = !!(navrh && navrh.rezim === 'kazdy' && !navrh.ja);
+      if (kind === 'mazani-potvrdit' || (kind === 'mazani-navrh' && cekaNaMe)) { this.setState({ acDlg: { mode: 'mazani', a: '' } }); return true; }
+      const zadost = kind === 'mazani-zrusit'
+        ? api.post('mazani/rezim/zrusit', {})
+        : api.post('mazani/rezim', { rezim: kind === 'mazani-navrh' ? 'kazdy' : 'spolecne' });
+      zadost.then(res => {
+        if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+        this.toast((res && res.zprava) || 'Pravidlo mazání uloženo', { icon: kind === 'mazani-navrh' ? 'ph-users' : kind === 'mazani-zrusit' ? 'ph-x' : 'ph-shield-check' });
+      }).catch(e => {
+        const b = (e && e.body) || {};
+        this.toast(b.chyba || b.zprava || b.message || 'Pravidlo mazání se nepodařilo změnit', { icon: 'ph-warning' });
+      });
+      return true;
+    }
     if (kind === 'ucet-profil') {
       if (!naServeru) { this.toast('Účet se mění jen s připojeným serverem', { icon: 'ph-info' }); return true; }
       const L = this.lockData(), kdo = this.state.lockWho || 'A';
@@ -10221,22 +10321,74 @@ class Component extends DCLogic {
    *
    * Vrací `false` bez serveru nebo u ukázkových položek — pak zůstává původní
    * chování prototypu.
+   *
+   * Ve dvojici „Do koše" fotku jen **navrhne** („Mazat fotky mohou jen po
+   * společném schválení…"). V `ids` jsou jen fotky, které opravdu odešly do
+   * koše — jen ty zmizí z knihovny; navržené v ní zůstávají se značkou
+   * a čekají na souhlas druhého. Hlášku píše server (`zprava`), telefon si
+   * „30 dní na vrácení" nevymýšlí. Vzít zpět: vyhozené z koše vrátit, vlastní
+   * návrh stáhnout.
    */
   doKoseNaServeru(ids, hotovo) {
     const api = window.GalerieApi;
     if (!api || !api.post || api.mode !== 'http' || !ids.length || !ids.every(id => /^[0-9a-f-]{36}$/.test(id))) return false;
     api.post('media/do-kose', { ids }).then(res => {
-      const presunute = (res && res.ids) || [];
+      const r = res || {};
+      const presunute = Array.isArray(r.ids) ? r.ids : [];
+      const navrzene = Array.isArray(r.navrzeno) ? r.navrzeno : [];
+      const cekaji = navrzene.concat(Array.isArray(r.uzNavrzeno) ? r.uzNavrzeno : []);
       // Z knihovny telefonu hned — nové načtení skupiny doběhne až za chvíli.
-      const zbytek = PHOTOS.filter(p => presunute.indexOf(p.id) < 0);
+      // Navržené dostanou značku hned taky (nové objekty, načtení je přepíše pravdou ze serveru).
+      const zbytek = PHOTOS.filter(p => presunute.indexOf(p.id) < 0)
+        .map(p => cekaji.indexOf(p.id) >= 0 && !p.navrhSmazat ? Object.assign({}, p, { navrhSmazat: { kdo: null, ja: true, kdy: null } }) : p);
       PHOTOS.length = 0;
       Array.prototype.push.apply(PHOTOS, zbytek);
       if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); }
       if (hotovo) hotovo(presunute);
-      if (!presunute.length) { this.toast('Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
-      this.toast(this.pl(presunute.length, 'položka', 'položky', 'položek') + ' v koši · 30 dní na vrácení', { icon: 'ph-trash', undo: () => this.zKoseNaServeru(presunute) });
-    }).catch(() => this.toast('Přesun do koše se nepodařil', { icon: 'ph-warning' }));
+      if (!presunute.length && !cekaji.length) { this.toast('Nic z výběru už v knihovně není', { icon: 'ph-info' }); return; }
+      const zpet = () => {
+        if (presunute.length) this.zKoseNaServeru(presunute);
+        if (navrzene.length) this.navrhVyrid('ponechat', navrzene);
+      };
+      const hlaska = r.zprava || (presunute.length ? 'Přesunuto do koše' : 'Navrženo ke smazání');
+      this.toast(hlaska, { icon: presunute.length ? 'ph-trash' : 'ph-hourglass', undo: presunute.length || navrzene.length ? zpet : null });
+    }).catch(e => this.chybaServeru(e, 'Přesun do koše se nepodařil'));
     return true;
+  }
+  /*
+   * Návrh ke smazání: souhlas (`schvalit`), nebo „nechat" (`ponechat`).
+   *
+   * „Ponechat" u vlastního návrhu je jeho stažení, u cizího odmítnutí — obojí
+   * fotku nechá v knihovně a hlášku rozliší server. Souhlas posílá fotky do
+   * koše na třicet dní; vzít ho zpět znamená vrátit je z koše.
+   */
+  navrhVyrid(akce, ids, hotovo) {
+    const api = window.GalerieApi;
+    const seznam = (ids || []).filter(id => /^[0-9a-f-]{36}$/.test(String(id)));
+    if (!api || !api.post || api.mode !== 'http' || !seznam.length) { this.toast('Návrhy ke smazání vyřizuje jen server', { icon: 'ph-info' }); return; }
+    const schvalit = akce === 'schvalit';
+    api.post(schvalit ? 'kos/schvalit' : 'kos/ponechat', { ids: seznam }).then(res => {
+      const smazane = schvalit && res && Array.isArray(res.ids) ? res.ids : [];
+      if (smazane.length) {
+        const zbytek = PHOTOS.filter(p => smazane.indexOf(p.id) < 0);
+        PHOTOS.length = 0;
+        Array.prototype.push.apply(PHOTOS, zbytek);
+      }
+      if (res && window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      if (window.GalerieObnovit) window.GalerieObnovit('knihovna');
+      if (hotovo) hotovo(res || {});
+      const hlaska = (res && res.zprava) || (schvalit ? 'Smazáno po společném schválení' : 'Ponecháno v knihovně');
+      this.toast(hlaska, { icon: smazane.length ? 'ph-trash' : 'ph-check-circle', undo: smazane.length ? () => this.zKoseNaServeru(smazane) : null });
+    }).catch(e => this.chybaServeru(e, schvalit ? 'Schválit se nepodařilo' : 'Ponechat se nepodařilo'));
+  }
+  /*
+   * Maže „Do koše" rovnou? Ve dvojici se společným schvalováním ne — jen navrhuje.
+   * Než `MAZANI` dorazí, platí výchozí pravidlo serveru: ve dvojici společně.
+   */
+  muzuMazatSam() {
+    const GD = window.GalerieData || {}, m = GD.MAZANI;
+    if (!m || typeof m !== 'object') return (GD.DVOJICE || []).length < 2;
+    return m.muzuSam !== false;
   }
   /*
    * Galerie telefonu na serveru: sdílení a alba.
@@ -10873,21 +11025,37 @@ class Component extends DCLogic {
             return;
           }
           /*
-           * Duplicity sloučí server (UklidVeStavu): nechá největší kopii,
-           * ostatní pošle do koše a nález uzavře. Řádek je ve stejném pořadí
+           * Duplicity sloučí server (UklidVeStavu): nechá vítěze, ostatní
+           * pošle přes `doKose()` a nález uzavře. Řádek je ve stejném pořadí
            * jako `DUP_GROUPS` — oba seznamy skládá server z týchž nálezů.
            * Ptá se dvojím klepnutím, protože kopie odcházejí do koše.
+           *
+           * Vítěz (uuid kopie, kterou server označil `best`) jde **v témže
+           * zápisu** jako `dupDone`: prázdné `dupKeep` server bere jako
+           * „nevím, co chtěli" a nesloučí nic. Ve dvojici se společným
+           * schvalováním jsou ostatní kopie jen návrh ke smazání.
            */
           if (naServeru && key === 'dupes' && !done) {
             const m = /^dupes-(\d+)$/.exec(String(id));
             const g = m ? ((window.GalerieData || {}).DUP_GROUPS || [])[+m[1]] : null;
-            if (!g || !g.id) { this.toast('Tenhle nález se sloučit nedá — obnovte seznam', { icon: 'ph-info' }); return; }
-            if (s.mDupPotvrd !== g.id) { this.setState({ mDupPotvrd: g.id }); this.toast('Klepněte znovu — zůstane největší kopie, ostatní půjdou do koše na 30 dní', { icon: 'ph-warning' }); return; }
+            const nejlepsi = g ? (g.items || []).find(i => i.best) : null;
+            const vitez = nejlepsi && nejlepsi.id ? String(nejlepsi.id) : '';
+            if (!g || !g.id || !vitez) { this.toast('Tenhle nález se sloučit nedá — obnovte seznam', { icon: 'ph-info' }); return; }
+            const sam = this.muzuMazatSam();
+            const kdo = ((window.GalerieData || {}).MAZANI || {}).partner;
+            if (s.mDupPotvrd !== g.id) {
+              this.setState({ mDupPotvrd: g.id });
+              this.toast(sam ? 'Klepněte znovu — zůstane největší kopie, ostatní půjdou do koše na 30 dní' : 'Klepněte znovu — zůstane největší kopie, ostatní navrhnete ke smazání', { icon: 'ph-warning' });
+              return;
+            }
             // Bez `rowDone`: klíč je pořadí řádku a po obnovení by patřil jinému nálezu.
             this.setState({ mDupPotvrd: null });
-            window.GalerieApi.save({ dupDone: [g.id], dupKeep: {} });
+            const sd = (window.GalerieApi.loadSync && window.GalerieApi.loadSync()) || {};
+            const hotove = Array.isArray(sd.dupDone) ? sd.dupDone.filter(x => x !== g.id) : [];
+            const keep = sd.dupKeep && typeof sd.dupKeep === 'object' && !Array.isArray(sd.dupKeep) ? sd.dupKeep : {};
+            window.GalerieApi.save({ dupDone: hotove.concat([g.id]), dupKeep: { ...keep, [g.id]: vitez } });
             setTimeout(() => { if (window.GalerieObnovit) { window.GalerieObnovit('knihovna'); window.GalerieObnovit('system'); } }, 3000);
-            this.toast('Sloučeno — ostatní kopie jsou v koši', { icon: 'ph-broom' });
+            this.toast(sam ? 'Sloučeno — ostatní kopie jsou v koši' : 'Sloučeno — ostatní kopie čekají, až smazání potvrdí ' + (kdo || 'druhý z vás'), { icon: sam ? 'ph-broom' : 'ph-hourglass' });
             return;
           }
           if (naServeru && key === 'archive') {
@@ -12524,7 +12692,7 @@ class Component extends DCLogic {
     const tile = p => {
       const on = s.sel.indexOf(p.id) >= 0;
       return {
-        bg: this.tlo(p), video: p.video, dur: p.dur, fav: this.isFav(p),
+        bg: this.tlo(p), video: p.video, dur: p.dur, fav: this.isFav(p), navrhSmazat: !!p.navrhSmazat,
         selectMode: s.selectMode, on: on,
         ring: on ? '3px solid var(--g-acc)' : 'none',
         checkBg: on ? 'var(--g-acc)' : 'rgba(20,19,18,.32)',
@@ -13413,7 +13581,7 @@ class Component extends DCLogic {
         lineMeta: this.pl(dLine.length, 'událost', 'události', 'událostí'),
         line: dLine,
         photoMeta: this.pl(dPhotos.length, 'položka', 'položky', 'položek'),
-        photos: dPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, tap: () => this.setState({ lb: p.id }) })),
+        photos: dPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), navrhSmazat: !!p.navrhSmazat, video: p.video, dur: p.dur, tap: () => this.setState({ lb: p.id }) })),
         addCta: dDiary ? 'Otevřít zápis v deníku' : 'Napsat zápis k tomuto dni',
         /*
          * Zápis k tomuto dni — u dvojice s datem dne (`DAYS[…][3]`). Obecný
@@ -13467,7 +13635,7 @@ class Component extends DCLogic {
         ].filter(Boolean),
         photoMeta: this.pl(pPhotos.length, 'fotka', 'fotky', 'fotek')
           + (pSpots ? ' · ' + pSpots + ' přiřazeno z návrhu' : ''),
-        photos: pPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
+        photos: pPhotos.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), navrhSmazat: !!p.navrhSmazat, tap: () => this.setState({ lb: p.id }) })),
         txs: pTxs.map(t => ({
           name: t.name, date: t.date, cat: t.cat, icon: t.icon,
           amount: (t.amount > 0 ? '+ ' : '− ') + this.kc(Math.abs(t.amount)),
@@ -13743,7 +13911,7 @@ class Component extends DCLogic {
         };
       })(),
       goMemories: () => this.goTab('memories'),
-      homeTiles: lib.slice(0, 9).map(p => ({ bg: this.tlo(p), fav: this.isFav(p), video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
+      homeTiles: lib.slice(0, 9).map(p => ({ bg: this.tlo(p), fav: this.isFav(p), navrhSmazat: !!p.navrhSmazat, video: p.video, dur: p.dur, open: () => this.setState({ lb: p.id }) })),
       homePlaces: DAYS.slice(0, 4).map((d, i) => ({ name: d[1], meta: d[0].split(' 20')[0] + ' · ' + this.pl(d[2], 'fotka', 'fotky', 'fotek'), bg: this.bg(4 + i * 5), go: () => this.setState({ dayId: d[0], tab: 'home', stack: ['day'], sheet: null }) })),
 
       // vzpomínky
@@ -13976,7 +14144,7 @@ class Component extends DCLogic {
         const prejmenovava = s.mAlbRename === a.id;
         return {
           meta: this.pl(items.length, 'položka', 'položky', 'položek') + ' · sdílíte oba',
-          items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), tap: () => this.setState({ lb: p.id }) })),
+          items: items.map(p => ({ bg: this.tlo(p), fav: this.isFav(p), navrhSmazat: !!p.navrhSmazat, tap: () => this.setState({ lb: p.id }) })),
           canEdit: albumZeServeru,
           renameOpen: prejmenovava,
           renameVal: s.mAlbName || '',
@@ -14033,6 +14201,8 @@ class Component extends DCLogic {
       }),
       trashMeta: this.pl(Object.keys(s.trashed).filter(id => s.trashed[id] === true).length, 'položka v koši', 'položky v koši', 'položek v koši'),
       trashEmpty: Object.keys(s.trashed).filter(id => s.trashed[id] === true).length === 0,
+      // Ukázka nemá dvojici, a tak ani nic, co by čekalo na souhlas druhého.
+      ksch: [], kschHas: false, kschMeta: '',
       /*
        * Koš dvojice je koš na serveru — přepisuje tři klíče nad sebou.
        *
@@ -14043,6 +14213,14 @@ class Component extends DCLogic {
        */
       ...(((window.GalerieData || {}).DVOJICE || []).length ? (() => {
         const kos = (window.GalerieData || {}).TRASH || [];
+        /*
+         * „Čeká na schválení" — návrhy ke smazání nad košem.
+         *
+         * Fotky v knihovně zůstávají, dokud návrh druhý nepotvrdí. Cizí návrh
+         * jde schválit, nebo ponechat; vlastní jen stáhnout (`ja`).
+         */
+        const ceka = Array.isArray((window.GalerieData || {}).KE_SCHVALENI) ? (window.GalerieData || {}).KE_SCHVALENI : [];
+        const naMe = ceka.filter(k => !k.ja).length;
         return {
           trashRows: kos.map(r => ({
             name: r.name, meta: r.from + ' · ' + r.by + ' · ' + r.when + ' · trvale za ' + r.left,
@@ -14051,7 +14229,18 @@ class Component extends DCLogic {
             ...this.kosSmazatTlacitko(r.id, r.name, () => this.kosOdstranNaServeru(r.id))
           })),
           trashMeta: this.pl(kos.length, 'položka v koši', 'položky v koši', 'položek v koši'),
-          trashEmpty: kos.length === 0
+          trashEmpty: kos.length === 0 && ceka.length === 0,
+          ksch: ceka.map(k => ({
+            name: k.name || '', bg: k.bg || 'var(--g-panel)',
+            meta: (k.from || 'Fotka') + ' · ' + (k.ja ? 'navrhli jste vy' : 'navrhuje ' + (k.by || 'druhý z vás')) + (k.when ? ' · ' + k.when : ''),
+            cizi: !k.ja, moje: !!k.ja,
+            schvalit: () => this.navrhVyrid('schvalit', [k.id]),
+            ponechat: () => this.navrhVyrid('ponechat', [k.id])
+          })),
+          kschHas: ceka.length > 0,
+          kschMeta: naMe
+            ? this.pl(naMe, 'návrh čeká na vás', 'návrhy čekají na vás', 'návrhů čeká na vás') + ' — smaže se až s vaším souhlasem'
+            : 'Čeká, až to potvrdí ' + (((window.GalerieData || {}).MAZANI || {}).partner || 'druhý z vás')
         };
       })() : {}),
       shareRows: this.sharesList().map(r => ({
@@ -15234,8 +15423,25 @@ class Component extends DCLogic {
           this.toast('Přidáno do albumu ' + target.name, { icon: 'ph-folder-plus', undo: () => this.setState({ albums: prev }) });
         } },
         { label: 'Detail', icon: 'ph-info', color: '#fff', go: () => this.setState({ lbPanel: !s.lbPanel }) },
-        { label: 'Do koše', icon: 'ph-trash', color: '#fff', go: () => { if (this.doKoseNaServeru([lbP.id], () => this.setState({ lb: null }))) return; const prev = s.trashed; this.setState({ trashed: Object.assign({}, s.trashed, { [lbP.id]: true }), lb: null }); this.toast('Přesunuto do koše', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }
+        /*
+         * Navržená fotka: „Do koše" by nic nepřidalo. Druhý z dvojice návrh
+         * schválí, nebo fotku ponechá; kdo navrhl, může návrh stáhnout.
+         */
+        ...(lbP.navrhSmazat ? (lbP.navrhSmazat.ja
+          ? [{ label: 'Stáhnout návrh', icon: 'ph-arrow-u-up-left', color: '#fff', go: () => this.navrhVyrid('ponechat', [lbP.id]) }]
+          : [
+            { label: 'Schválit smazání', icon: 'ph-trash', color: '#fff', go: () => this.navrhVyrid('schvalit', [lbP.id]) },
+            { label: 'Ponechat', icon: 'ph-hand-heart', color: '#fff', go: () => this.navrhVyrid('ponechat', [lbP.id]) }
+          ])
+          // Zavřít jen tehdy, když fotka opravdu odešla do koše — návrh zůstává vidět v pruhu nahoře.
+          : [{ label: 'Do koše', icon: 'ph-trash', color: '#fff', go: () => { if (this.doKoseNaServeru([lbP.id], presunute => { if (presunute.length) this.setState({ lb: null }); })) return; const prev = s.trashed; this.setState({ trashed: Object.assign({}, s.trashed, { [lbP.id]: true }), lb: null }); this.toast('Přesunuto do koše', { icon: 'ph-trash', undo: () => this.setState({ trashed: prev }) }); } }])
       ] : [],
+      lbNavrhOn: !!(lbP && lbP.navrhSmazat),
+      lbNavrhText: lbP && lbP.navrhSmazat
+        ? (lbP.navrhSmazat.ja
+          ? 'Navrhli jste smazat · čeká, až to potvrdí ' + (((window.GalerieData || {}).MAZANI || {}).partner || 'druhý z vás')
+          : (lbP.navrhSmazat.kdo || 'Druhý z vás') + ' navrhuje smazat' + (lbP.navrhSmazat.kdy ? ' · ' + lbP.navrhSmazat.kdy : '') + ' · smaže se až s vaším souhlasem')
+        : '',
 
       // toast
       toastOn: !!s.toast,
