@@ -238,6 +238,105 @@ class DarkyVeStavuTest extends TestCase
         $this->assertSame(12000, (int) DB::table('gift_ideas')->where('uuid', $moje)->value('budget'));
     }
 
+    /**
+     * Chystaný dárek je soukromý i pro kalendář, rozpočty a koordinaci.
+     *
+     * Převodník psal jen `private_to_user_id`; sloupec `visibility` zůstal
+     * na výchozím „shared" a čtení v `/api/v1/calendar/gifts` (a rozpočty
+     * dárků, koordinace dvojice) filtruje právě podle něj — Makinka tam
+     * „Hodinky pro Makinku" viděla.
+     */
+    public function test_chystany_darek_neni_videt_ani_v_kalendari(): void
+    {
+        $this->stav(['buys' => [[
+            'id' => 'b1757000000001',
+            'owner' => 'Adrian',
+            'what' => 'Hodinky pro Makinku',
+            'price' => 5400,
+            'status' => 'reserved',
+        ]]])->assertOk();
+
+        $this->assertSame('private', DB::table('gift_ideas')->value('visibility'));
+
+        Sanctum::actingAs($this->maki);
+        $tituly = collect($this->getJson('/api/v1/calendar/gifts')->assertOk()->json())->pluck('title')->all();
+
+        $this->assertNotContains('Hodinky pro Makinku', $tituly);
+    }
+
+    /** Přání zůstává veřejné i v kalendáři dárků. */
+    public function test_prani_je_v_kalendari_videt(): void
+    {
+        $this->stav(['wishes' => [['id' => 'w1757000000002', 'who' => 'Adrian', 'title' => 'Kurz keramiky', 'price' => 2400]]])->assertOk();
+
+        $this->assertSame('shared', DB::table('gift_ideas')->value('visibility'));
+
+        Sanctum::actingAs($this->maki);
+        $this->assertContains('Kurz keramiky', collect($this->getJson('/api/v1/calendar/gifts')->assertOk()->json())->pluck('title')->all());
+    }
+
+    /**
+     * Soukromý nápad z kalendáře se úpravou v prototypu neprozradí.
+     *
+     * Převodník u nápadu vynuloval `private_to_user_id` — nápad, který si
+     * Adrian schoval, tak po přejmenování uviděla Makinka.
+     */
+    public function test_soukromy_napad_uprava_neprozradi(): void
+    {
+        $uuid = (string) Str::uuid();
+        $this->darek(['uuid' => $uuid, 'title' => 'Náušnice', 'status' => 'idea', 'visibility' => 'private', 'private_to_user_id' => $this->adri->id]);
+
+        $this->stav(['ideas' => [['id' => $uuid, 'title' => 'Náušnice se safírem', 'price' => 900]]])->assertOk();
+
+        $radek = DB::table('gift_ideas')->where('uuid', $uuid)->first();
+        $this->assertSame('Náušnice se safírem', $radek->title);
+        $this->assertSame('private', $radek->visibility);
+        $this->assertSame($this->adri->id, (int) $radek->private_to_user_id);
+    }
+
+    /**
+     * Přání, které ten druhý mezitím smazal, starší opis nevzkřísí.
+     *
+     * Uuid vydal server — když řádek v tabulce není, někdo ho smazal. Dřív
+     * nezměněné přání propadlo do vložení a změněné taky.
+     */
+    public function test_smazane_prani_starsi_opis_nevzkrisi(): void
+    {
+        $smazane = (string) Str::uuid();
+
+        // Nezměněné (není v `__zmenene`) i změněné.
+        $this->stav([
+            'wishes' => [
+                ['id' => $smazane, 'who' => 'Adrian', 'title' => 'Smazané přání', 'price' => 100],
+                ['id' => (string) Str::uuid(), 'who' => 'Adrian', 'title' => 'Taky smazané', 'price' => 100],
+            ],
+            '__odebrane' => ['wishes' => []],
+            '__zmenene' => ['wishes' => [$smazane]],
+        ])->assertOk();
+
+        $this->assertSame(0, DB::table('gift_ideas')->count());
+    }
+
+    /**
+     * Host prostoru není „ten druhý" — jméno se hledá jen ve dvojici.
+     *
+     * Mapa jméno → člověk se brala ze všech členů: přání podepsané jménem
+     * hosta se připsalo hostovi a nákup „pro" něj dostal jeho soukromí.
+     */
+    public function test_jmeno_hosta_se_nepripise(): void
+    {
+        $host = User::factory()->create(['name' => 'Host Honza']);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        $this->stav(['buys' => [[
+            'id' => 'b1757000000003', 'owner' => 'Host Honza', 'what' => 'Tajný dárek', 'price' => 100, 'status' => 'reserved',
+        ]]])->assertOk();
+
+        $radek = DB::table('gift_ideas')->first();
+        $this->assertSame($this->adri->id, (int) $radek->created_by);
+        $this->assertSame($this->adri->id, (int) $radek->private_to_user_id);
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Darky;
 use App\Support\Tabulky;
 use App\Support\Vejde;
@@ -57,7 +58,16 @@ class DarkyVeStavu
             return [];
         }
 
-        $jmena = $prostor->members()->pluck('users.id', 'users.name')->all();
+        /*
+         * Jméno → člověk jen ze dvojice.
+         *
+         * Ze všech členů se do mapy dostal i host: přání podepsané jeho
+         * jménem se mu připsalo a nákup „jeho" dostal jeho soukromí — host
+         * by pak viděl, co se v prostoru chystá.
+         */
+        $jmena = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn (User $clen) => [(string) $clen->name => (int) $clen->id])
+            ->all();
         $zustavaji = [];
         $tykaSe = [];
 
@@ -121,14 +131,38 @@ class DarkyVeStavu
             return null;
         }
 
+        $idKlienta = is_scalar($p['id'] ?? null) ? (string) $p['id'] : '';
+        $maSoukromi = Tabulky::sloupec('gift_ideas', 'private_to_user_id');
+
+        /*
+         * Jen řádek, který ten člověk smí vidět (stejně jako `Darky::polozky()`).
+         *
+         * Uuid cizího schovaného dárku poslané v seznamu by jinak řádek našlo
+         * a přepsalo mu vlastníka — dárek by se prozradil.
+         */
+        $existujici = $idKlienta === '' ? null : DB::table('gift_ideas')
+            ->where('gallery_space_id', $prostor->id)
+            ->where('uuid', $idKlienta)
+            ->when($maSoukromi, fn ($q) => $q->where(
+                fn ($v) => $v->whereNull('private_to_user_id')->orWhere('private_to_user_id', $uzivatel->id),
+            ))
+            ->first();
+
+        /*
+         * Uuid vydal server — když řádek není, někdo ho mezitím smazal.
+         *
+         * Starší opis seznamu (karta otevřená od rána, druhé zařízení) ho
+         * posílá dál a dřív se tu založil znovu: smazané přání vstalo.
+         * Nový řádek z obrazovky má vlastní identifikátor (`w1757…`).
+         */
+        if ($existujici === null && Str::isUuid($idKlienta)) {
+            return null;
+        }
+
         // Nezměněná položka se nepřepisuje — v prohlížeči může být starší opis
         // toho, co mezitím upravil ten druhý (viz OdebraneVStavu::zmenene()).
-        if (! OdebraneVStavu::zmeneno($zmenene, $p['id'] ?? null)) {
-            $beze = DB::table('gift_ideas')->where('gallery_space_id', $prostor->id)->where('uuid', (string) ($p['id'] ?? ''))->value('id');
-
-            if ($beze) {
-                return (int) $beze;
-            }
+        if ($existujici !== null && ! OdebraneVStavu::zmeneno($zmenene, $idKlienta)) {
+            return (int) $existujici->id;
         }
 
         $radek = [
@@ -148,9 +182,7 @@ class DarkyVeStavu
         $pojmenovany = $jmena[(string) ($p['who'] ?? $p['owner'] ?? '')] ?? null;
         $autor = $pojmenovany ?? $uzivatel->id;
 
-        if (Tabulky::sloupec('gift_ideas', 'private_to_user_id')) {
-            $radek['private_to_user_id'] = $druh === 'nakup' ? $autor : null;
-        }
+        $radek += $this->soukromi($druh, $autor, $existujici, $maSoukromi);
 
         // Přání i nákup svého člověka jmenují — a ten se může změnit, když se
         // nápad povýší na přání toho druhého. Nápad nikoho nejmenuje, tam
@@ -159,15 +191,10 @@ class DarkyVeStavu
             $radek['created_by'] = $pojmenovany;
         }
 
-        $existujici = DB::table('gift_ideas')
-            ->where('gallery_space_id', $prostor->id)
-            ->where('uuid', (string) ($p['id'] ?? ''))
-            ->value('id');
+        if ($existujici !== null) {
+            DB::table('gift_ideas')->where('id', $existujici->id)->update($radek);
 
-        if ($existujici) {
-            DB::table('gift_ideas')->where('id', $existujici)->update($radek);
-
-            return (int) $existujici;
+            return (int) $existujici->id;
         }
 
         return (int) DB::table('gift_ideas')->insertGetId($radek + [
@@ -177,6 +204,36 @@ class DarkyVeStavu
             'currency' => 'CZK',
             'created_at' => now(),
         ]);
+    }
+
+    /**
+     * Soukromí řádku — oba sloupce najednou.
+     *
+     * Čtení se dělí: `Darky` a úklid se ptají na `private_to_user_id`,
+     * kalendář dárků, rozpočty a koordinace dvojice na `visibility`. Když
+     * se psal jen první, nákup měl `visibility = shared` (výchozí hodnota)
+     * a v `/api/v1/calendar/gifts` ho druhý viděl.
+     *
+     * Nákup je soukromý toho, kdo ho pořizuje; přání je veřejné (o to jde).
+     * Nápad se nepřepisuje: může to být soukromý nápad z kalendáře a jeho
+     * přejmenování v prototypu ho nesmí zveřejnit. Nový nápad je společný.
+     *
+     * @return array<string, mixed>
+     */
+    private function soukromi(string $druh, int $autor, ?object $existujici, bool $maSoukromi): array
+    {
+        if (! $maSoukromi || ($druh === 'napad' && $existujici !== null)) {
+            return [];
+        }
+
+        $soukromy = $druh === 'nakup';
+        $radek = ['private_to_user_id' => $soukromy ? $autor : null];
+
+        if (Tabulky::sloupec('gift_ideas', 'visibility')) {
+            $radek['visibility'] = $soukromy ? 'private' : 'shared';
+        }
+
+        return $radek;
     }
 
     /**

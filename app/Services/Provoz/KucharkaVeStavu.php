@@ -52,9 +52,28 @@ class KucharkaVeStavu
 
         DB::transaction(function () use ($menu, $recepty, $prostor, $kdo) {
             foreach (self::DNY as $poradi => $den) {
+                /*
+                 * Jen dny, které prohlížeč poslal.
+                 *
+                 * Chybějící den se bral jako „uvolnit" a naplánovaná večeře se
+                 * smazala: `{"ckMenu":{}}` vyprázdnilo týden a karta, ve které
+                 * ještě nebyla středa od toho druhého, ji úpravou pondělí
+                 * zahodila. Mapa v prohlížeči je kopie z doby načtení — co v ní
+                 * chybí, se od „nic jsem neměnil" nepozná. Uvolnit den se dá
+                 * jen výslovně: `''` nebo `null`.
+                 */
+                if (! array_key_exists($den, $menu)) {
+                    continue;
+                }
+
                 // Nejbližší takový den od dneška — ne pondělí téhož týdne (viz `Kucharka::datumDne`).
                 $datum = Kucharka::datumDne($poradi);
-                $klic = is_string($menu[$den] ?? null) ? $menu[$den] : '';
+                $klic = is_string($menu[$den]) ? $menu[$den] : '';
+
+                // Jiný typ než text nebo `null` (číslo, pole) není „uvolnit" — den se nechá být.
+                if ($menu[$den] !== null && ! is_string($menu[$den])) {
+                    continue;
+                }
                 $recept = $recepty[$klic] ?? null;
 
                 // Neznámý klíč (recept mezitím smazaný) den neruší — jen se nezapíše.

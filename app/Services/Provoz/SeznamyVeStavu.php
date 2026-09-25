@@ -111,7 +111,7 @@ class SeznamyVeStavu
 
             $nazev = trim(mb_substr($nazev, mb_strlen('Nápad: ')));
 
-            if ($nazev === '' || in_array(mb_strtolower($nazev), $znamé, true)) {
+            if ($nazev === '' || in_array(mb_strtolower($nazev), $znamé, true) || $this->zeServeru($r, 'gifts')) {
                 continue;
             }
 
@@ -150,7 +150,8 @@ class SeznamyVeStavu
         foreach ($radky as $r) {
             $nazev = $this->nazev($r);
 
-            if ($nazev === '' || in_array(mb_strtolower($nazev), $znamé, true)) {
+            // Smazané randíčko ze staršího opisu (viz zeServeru()) se nevrací.
+            if ($nazev === '' || in_array(mb_strtolower($nazev), $znamé, true) || $this->zeServeru($r, 'datesSaved')) {
                 continue;
             }
 
@@ -202,7 +203,7 @@ class SeznamyVeStavu
 
             // Řádek s klíčem ze serveru už v databázi byl — chybí, protože ho
             // někdo smazal. Stará místní kopie ho nesmí vzkřísit.
-            if (preg_match('/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i', (string) (((array) $r)['id'] ?? ''))) {
+            if ($this->zeServeru($r, 'ticket')) {
                 continue;
             }
 
@@ -264,6 +265,26 @@ class SeznamyVeStavu
             ->whereIn('title', $zarazene)
             ->whereNotIn('state', ['assigned', 'filed', 'archived'])
             ->update(['state' => 'assigned', 'updated_at' => now()]);
+    }
+
+    /**
+     * Řádek, který obrazovka dostala ze serveru — nový to není.
+     *
+     * Počítač řádkům z `AL` dává identifikátor podle pořadí (`datesSaved-0`,
+     * `gifts-2`), když server vlastní nepošle; uuid posílá server sám. Nový
+     * řádek z obrazovky má `…-n3` a z telefonu přijde bez identifikátoru.
+     * Když takový řádek podle názvu v tabulce není, ten druhý ho mezitím
+     * smazal — starší opis seznamu ho nesmí založit znovu.
+     */
+    private function zeServeru(mixed $radek, string $seznam): bool
+    {
+        $id = ((array) $radek)['id'] ?? null;
+
+        if (! is_scalar($id) || (string) $id === '') {
+            return false;
+        }
+
+        return Str::isUuid((string) $id) || preg_match('/^'.preg_quote($seznam, '/').'-\d+$/', (string) $id) === 1;
     }
 
     /** Název řádku — obrazovka posílá objekty `{ t, m, g, id }`. */

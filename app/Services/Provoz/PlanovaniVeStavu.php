@@ -6,11 +6,13 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Planovani;
 use App\Support\Cas;
 use App\Support\Tabulky;
 use App\Support\Vejde;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -116,7 +118,9 @@ class PlanovaniVeStavu
     private function zapisUdalosti(array $radky, ?array $odskrtnute, GallerySpace $prostor, User $kdo, ?array $zmenene, array $obnovene): void
     {
         foreach ($radky as $e) {
-            if (! is_array($e) || ! isset($e['id'], $e['t'])) {
+            $e = $this->radek($e, 't', ['who', 'time', 'note', 'kind', 'remind', 'act', 'album']);
+
+            if ($e === null) {
                 continue;
             }
 
@@ -207,7 +211,7 @@ class PlanovaniVeStavu
         ]);
 
         $this->ucastnici($u, $e, $prostor);
-        $this->pripominka($u, (string) ($e['remind'] ?? ''));
+        $this->pripominka($u, (string) ($e['remind'] ?? ''), $prostor);
     }
 
     /** @param  array<string, mixed>  $e */
@@ -239,7 +243,7 @@ class PlanovaniVeStavu
         ]);
 
         $this->ucastnici($u, $e, $prostor);
-        $this->pripominka($u, (string) ($e['remind'] ?? ''));
+        $this->pripominka($u, (string) ($e['remind'] ?? ''), $prostor);
     }
 
     /**
@@ -257,7 +261,14 @@ class PlanovaniVeStavu
         }
 
         $kdo = (string) ($e['who'] ?? 'spolu');
-        $lide = $prostor->members()->pluck('users.id', 'users.name');
+        /*
+         * „Spolu" je dvojice, ne každý člen prostoru.
+         *
+         * Účastníky se stávali všichni členové včetně hostů — a připomínka
+         * (komuPripomenout()) pak hostovi poslala název akce, ke které nemá
+         * přístup. Totéž platí pro jméno: host se jmenovat dá, akci mít ne.
+         */
+        $lide = $this->jmenaDvojice($prostor);
 
         $vybrani = $kdo === 'spolu'
             ? $lide->values()->all()
@@ -287,7 +298,7 @@ class PlanovaniVeStavu
      * Prototyp nabízí čtyři možnosti; databáze drží okamžik. Nastavené
      * připomenutí se přepíše, zrušené smaže — jinak by chodilo dál.
      */
-    private function pripominka(CalendarEvent $u, string $volba): void
+    private function pripominka(CalendarEvent $u, string $volba, GallerySpace $prostor): void
     {
         if (! Tabulky::je('event_reminders')) {
             return;
@@ -345,7 +356,7 @@ class PlanovaniVeStavu
          * se ptá „koho se to týká" a odpověď leží v `event_participants`.
          * U společné akce jsou to oba.
          */
-        foreach ($this->komuPripomenout($u) as $komu) {
+        foreach ($this->komuPripomenout($u, $prostor) as $komu) {
             DB::table('event_reminders')->insert([
                 'event_id' => $u->id,
                 'user_id' => $komu,
@@ -363,13 +374,23 @@ class PlanovaniVeStavu
      *
      * @return list<int>
      */
-    private function komuPripomenout(CalendarEvent $u): array
+    private function komuPripomenout(CalendarEvent $u, GallerySpace $prostor): array
     {
         $ucastnici = Tabulky::je('event_participants')
             ? DB::table('event_participants')->where('event_id', $u->id)->pluck('user_id')->all()
             : [];
 
-        $ucastnici = array_values(array_unique(array_map('intval', array_filter($ucastnici))));
+        /*
+         * Jen dvojice — i u účastníků zapsaných dřív.
+         *
+         * Starší zápis „spolu" dal mezi účastníky i hosty a ti by při další
+         * úpravě akce dostali připomínku s jejím názvem.
+         */
+        $dvojice = $this->jmenaDvojice($prostor)->values()->all();
+        $ucastnici = array_values(array_intersect(
+            array_unique(array_map('intval', array_filter($ucastnici))),
+            array_map('intval', $dvojice),
+        ));
 
         return $ucastnici !== [] ? $ucastnici : array_values(array_filter([(int) $u->created_by]));
     }
@@ -449,9 +470,15 @@ class PlanovaniVeStavu
                 continue;
             }
 
+            $popisek = is_scalar($sloupec['label'] ?? null) ? (string) $sloupec['label'] : '';
+
             foreach ((array) ($sloupec['items'] ?? []) as $u) {
-                if (is_array($u) && isset($u['id'], $u['t'])) {
-                    $radky[] = [$u, (string) ($sloupec['label'] ?? ''), (bool) ($sloupec['done'] ?? false)];
+                $u = $this->radek($u, 't', ['note', 'w', 'd', 'rep', 'pr', 'on', 'due']);
+
+                // Nečitelný termín ze serveru (`due`) je poškozený řádek — přeskočí se celý,
+                // hádat z něj termín by přesunulo kartu, kam ji nikdo nedal.
+                if ($u !== null && $this->terminZeServeru($u) !== false) {
+                    $radky[] = [$u, $popisek, (bool) ($sloupec['done'] ?? false)];
                 }
             }
         }
@@ -530,6 +557,55 @@ class PlanovaniVeStavu
             ->where('created_at', '>=', now()->subDays(self::DNU_KLIENT))
             ->latest('id')
             ->first();
+    }
+
+    /**
+     * Řádek z prohlížeče, jen když se dá přečíst.
+     *
+     * Stav je text od klienta a přijde v něm cokoli. `(string)` na poli
+     * („Array to string conversion") i `parse('abc')` hodily výjimku a celý
+     * PATCH skončil 500 — i se všemi ostatními změnami v tomtéž odeslání.
+     * Řádek bez čitelného `id` a názvu se přeskočí; nepovinné pole, které
+     * není text ani číslo, se zahodí a platí pro něj výchozí hodnota.
+     *
+     * @param  list<string>  $volitelne
+     * @return array<string, mixed>|null
+     */
+    private function radek(mixed $r, string $nazev, array $volitelne): ?array
+    {
+        if (! is_array($r) || ! isset($r['id'], $r[$nazev]) || ! is_scalar($r['id']) || ! is_scalar($r[$nazev])) {
+            return null;
+        }
+
+        foreach ($volitelne as $klic) {
+            if (array_key_exists($klic, $r) && $r[$klic] !== null && ! is_scalar($r[$klic])) {
+                unset($r[$klic]);
+            }
+        }
+
+        return $r;
+    }
+
+    /**
+     * Termín, který k úkolu poslal server (`due`), nebo `false`, když se nedá přečíst.
+     *
+     * @param  array<string, mixed>  $r
+     */
+    private function terminZeServeru(array $r): CarbonImmutable|false|null
+    {
+        if (! isset($r['due']) || $r['due'] === '' || $r['due'] === false) {
+            return null;
+        }
+
+        if (! is_string($r['due']) || preg_match('/^\d{4}-\d{2}-\d{2}([ T][\d:.]+)?/', $r['due']) !== 1) {
+            return false;
+        }
+
+        try {
+            return CarbonImmutable::parse($r['due']);
+        } catch (\Throwable) {
+            return false;
+        }
     }
 
     /**
@@ -616,9 +692,8 @@ class PlanovaniVeStavu
         $popisek = trim((string) ($r['d'] ?? ''));
 
         // Popisek, který server sám vyrobil → termín se nemění.
-        $zeServeru = isset($r['due']) && $r['due']
-            ? CarbonImmutable::parse((string) $r['due'])
-            : $puvodni;
+        // Nečitelné `due` sem nedojde (viz zapisSloupce()); pro jistotu platí jako chybějící.
+        $zeServeru = $this->terminZeServeru($r) ?: $puvodni;
 
         $bezeZmeny = $zeServeru !== null && $popisek === $this->popisek($zeServeru);
 
@@ -737,7 +812,24 @@ class PlanovaniVeStavu
             return null;
         }
 
-        return $prostor->members()->where('users.name', $kdo)->value('users.id');
+        // Jen ze dvojice: úkol se jménem hosta by host dostal přidělený (a s ním upozornění).
+        $id = $this->jmenaDvojice($prostor)[$kdo] ?? null;
+
+        return $id === null ? null : (int) $id;
+    }
+
+    /**
+     * Jméno → člověk jen pro dvojici, bez hostů a odebraných účtů.
+     *
+     * Dřív se bralo ze všech členů prostoru (`members()`), takže host se dal
+     * označit za účastníka akce i za toho, kdo má úkol.
+     *
+     * @return Collection<string, int>
+     */
+    private function jmenaDvojice(GallerySpace $prostor): Collection
+    {
+        return app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn (User $clen) => [(string) $clen->name => (int) $clen->id]);
     }
 
     /** @param  array<string, mixed>  $r */
@@ -826,16 +918,16 @@ class PlanovaniVeStavu
 
         // Ukázkový seznam (`w1`…) se nezapisuje. Dřív se místo toho čekalo na
         // první věc v databázi — a první věc dvojice se tak nezapsala nikdy.
+        // Jen čitelné řádky (viz radek()) — pole místo textu shodilo celý zápis.
+        $radky = array_values(array_filter(array_map(fn ($r) => $this->radek($r, 'text', ['state']), $radky)));
+
         foreach ($radky as $r) {
-            if (is_array($r) && preg_match('/^w\d{1,5}$/', (string) ($r['id'] ?? ''))) {
+            if (preg_match('/^w\d{1,5}$/', (string) $r['id'])) {
                 return;
             }
         }
 
         foreach ($radky as $r) {
-            if (! is_array($r) || ! isset($r['id'], $r['text'])) {
-                continue;
-            }
 
             $stav = (string) ($r['state'] ?? 'open');
             $u = $vDatabazi[$r['id']] ?? null;

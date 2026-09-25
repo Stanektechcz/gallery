@@ -75,8 +75,9 @@ class ZapisyDoKnihyTest extends TestCase
         $this->assertArrayNotHasKey('ckMenu', (array) $this->getJson('/api/state')->json('data'));
         $this->assertEquals(['Pondělí' => $klice['Guláš'], 'Středa' => $klice['Polévka']], $this->getJson('/api/data/kucharka')->json('data.CKMENU'));
 
-        // Uvolnit středu, pondělí přehodit.
-        $this->patchJson('/api/state', ['data' => ['ckMenu' => ['Pondělí' => $klice['Polévka']]]])->assertOk();
+        // Uvolnit středu, pondělí přehodit. Uvolnění je výslovné (`''`): den,
+        // který v mapě jen chybí, je starší opis, ne „uvolnit" (KucharkaVeStavu).
+        $this->patchJson('/api/state', ['data' => ['ckMenu' => ['Pondělí' => $klice['Polévka'], 'Středa' => '']]])->assertOk();
 
         $jidla = DB::table('planned_meals')->get();
         $this->assertCount(1, $jidla);

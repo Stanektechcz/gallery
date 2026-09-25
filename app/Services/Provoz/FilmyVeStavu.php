@@ -142,6 +142,12 @@ class FilmyVeStavu
         return null;
     }
 
+    /** Ve kterém seznamu obrazovky titul je — stejně jako `Pribeh` při čtení. */
+    private function seznamTitulu(object $t): string
+    {
+        return $t->status === 'chceme' ? 'watchlist' : ($t->kind === 'seriál' ? 'series' : 'films');
+    }
+
     /**
      * Identifikátor z obrazovky na řádek v tabulce.
      *
@@ -159,15 +165,27 @@ class FilmyVeStavu
         $podle = [];
 
         foreach ($tituly as $t) {
-            $seznam = $t->status === 'chceme' ? 'watchlist' : ($t->kind === 'seriál' ? 'series' : 'films');
-            $podle[$seznam.'-'.$poradi[$seznam]++] = $t;
+            $seznam = $this->seznamTitulu($t);
+            $misto = $seznam.'-'.$poradi[$seznam]++;
+
+            /*
+             * Pořadí (`films-3`) jen u titulu bez uuid.
+             *
+             * Server i obě obrazovky řádek pojmenují podle uuid (`Pribeh`,
+             * `r[7]`). Pořadí zbylo jen jako cesta, kterou starší opis trefí
+             * jiný titul: ten druhý jeden smazal, `films-3` se posunulo a
+             * známka, pásmo nebo „viděli jsme" dopadly na vedlejší film.
+             */
+            if (empty($t->uuid)) {
+                $podle[$misto] = $t;
+
+                continue;
+            }
 
             // Podle titulu pod kterýmkoli seznamem — zhlédnutý titul přechází
             // z watchlistu do filmů a obrazovka ho může mít ještě pod starým.
-            if (! empty($t->uuid)) {
-                foreach (self::SEZNAMY as $s) {
-                    $podle[$s.'-'.$t->uuid] = $t;
-                }
+            foreach (self::SEZNAMY as $s) {
+                $podle[$s.'-'.$t->uuid] = $t;
             }
         }
 
@@ -256,13 +274,17 @@ class FilmyVeStavu
              * Titul, který mezitím přidal ten druhý, ve starší kopii seznamu
              * chybí taky. Z odebraných se berou jen identifikátory podle
              * titulu — pořadí ze starší kopie by mířilo na jiný řádek.
-             * Starší klient bez rozdílu: jako dřív, co v seznamu chybí.
+             *
+             * Bez rozdílu se nemaže nic. Dřív se u něj mazalo, co v seznamu
+             * chybělo — jenže `xRows.films` posílá jen počítač a ten
+             * `__odebrane` posílá vždycky; seznam bez něj je jen opis, ve
+             * kterém chybí, co přidal ten druhý.
              */
-            $odebrane = OdebraneVStavu::pro($patch, 'xRows.'.$seznam);
+            $odebrane = OdebraneVStavu::pro($patch, 'xRows.'.$seznam) ?? [];
             $smazat = [];
 
             // Nový titul vrácený tlačítkem Zpět dřív, než obrazovka dostala jeho uuid.
-            foreach ($odebrane ?? [] as $odebrany) {
+            foreach ($odebrane as $odebrany) {
                 $titul = preg_match('/^(films|series|watchlist)-n\d+$/', $odebrany) ? $this->zKlienta($prostor, $odebrany) : null;
 
                 if ($titul && ! in_array((int) $titul->id, $zustavaji, true)) {
@@ -270,13 +292,19 @@ class FilmyVeStavu
                 }
             }
 
-            foreach ($podle as $id => $titul) {
-                if (! preg_match('/^'.$seznam.'-\d+$/', $id) || in_array((int) $titul->id, $zustavaji, true)) {
+            $tituly = [];
+
+            foreach ($podle as $titul) {
+                $tituly[(int) $titul->id] = $titul;
+            }
+
+            foreach ($tituly as $titul) {
+                if ($this->seznamTitulu($titul) !== $seznam || empty($titul->uuid) || in_array((int) $titul->id, $zustavaji, true)) {
                     continue;
                 }
 
-                if ($odebrane === null || in_array($seznam.'-'.$titul->uuid, $odebrane, true)
-                    || array_intersect(array_map(fn ($s) => $s.'-'.$titul->uuid, self::SEZNAMY), $odebrane) !== []) {
+                // Pod kterýmkoli seznamem — zhlédnutý titul obrazovka mohla mít ještě ve watchlistu.
+                if (array_intersect(array_map(fn ($s) => $s.'-'.$titul->uuid, self::SEZNAMY), $odebrane) !== []) {
                     $smazat[] = (int) $titul->id;
                 }
             }

@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Obsah\Pravidla;
 use App\Services\Obsah\SlovnikPravidel;
 use App\Support\Tabulky;
@@ -86,7 +87,10 @@ class PravidlaVeStavu
             ->get(['id', 'uuid'])
             ->keyBy('uuid');
 
-        $jmena = $prostor->members()->pluck('users.id', 'users.name')->all();
+        // Autor jen ze dvojice: pravidlo podepsané jménem hosta by běželo jeho jménem.
+        $jmena = app(PristupDoGalerie::class)->dvojice($prostor)
+            ->mapWithKeys(fn (User $clen) => [(string) $clen->name => (int) $clen->id])
+            ->all();
         $zustavaji = [];
 
         foreach ($pravidla as $p) {
@@ -122,6 +126,15 @@ class PravidlaVeStavu
                 }
                 $zustavaji[] = $znamy->id;
 
+                continue;
+            }
+
+            /*
+             * Uuid vydal server — pravidlo s ním v tabulce není, protože ho
+             * někdo smazal. Starší opis seznamu ho dřív založil znovu a smazané
+             * pravidlo zase začalo běžet.
+             */
+            if (Str::isUuid($uuid)) {
                 continue;
             }
 

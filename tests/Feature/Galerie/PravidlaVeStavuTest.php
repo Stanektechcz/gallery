@@ -313,6 +313,44 @@ class PravidlaVeStavuTest extends TestCase
 
     // ——— pomůcky ———
 
+    /**
+     * Pravidlo, které druhý mezitím smazal, starší opis nevzkřísí.
+     *
+     * Uuid vydal server — když pravidlo v tabulce není, někdo ho smazal.
+     * Dřív se založilo znovu a začalo zase běžet.
+     */
+    public function test_smazane_pravidlo_starsi_opis_nevzkrisi(): void
+    {
+        $this->stav([
+            'rules' => [[
+                'id' => (string) Str::uuid(), 'name' => 'Smazané', 'trig' => 'task', 'targ' => '',
+                'act' => 'task', 'aarg' => 'Něco', 'on' => true, 'who' => 'oba',
+            ]],
+            '__odebrane' => ['rules' => []],
+        ])->assertOk();
+
+        $this->assertSame(0, DB::table('automation_rules')->where('gallery_space_id', $this->prostor->id)->count());
+    }
+
+    /**
+     * Host není autor pravidla.
+     *
+     * Jméno → člověk se bralo ze všech členů; pravidlo podepsané jménem
+     * hosta běželo jeho jménem (a motor mu posílal výsledky).
+     */
+    public function test_jmeno_hosta_autorem_neni(): void
+    {
+        $host = User::factory()->create(['name' => 'Host Honza']);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        $this->stav(['rules' => [[
+            'id' => 'r1757000000009', 'name' => 'Od hosta', 'trig' => 'task', 'targ' => '',
+            'act' => 'task', 'aarg' => 'Něco', 'on' => true, 'who' => 'Host Honza',
+        ]]])->assertOk();
+
+        $this->assertSame($this->adri->id, (int) DB::table('automation_rules')->where('name', 'Od hosta')->value('created_by'));
+    }
+
     private function stav(array $patch)
     {
         return $this->patchJson('/api/state', ['data' => $patch]);

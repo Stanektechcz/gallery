@@ -796,6 +796,65 @@ class PlanovaniVeStavuTest extends TestCase
         $this->assertSame(8, $stav['calMonth']);
     }
 
+    /**
+     * „Spolu" znamená dvojici, ne každého člena prostoru.
+     *
+     * Účastníky se stali všichni členové včetně hostů — a připomínka pak
+     * hostovi prozradila název akce („Zubař", „Terapie").
+     */
+    public function test_spolecna_akce_hosta_nezahrne(): void
+    {
+        $this->travelTo('2026-09-10 09:00:00');
+        $host = User::factory()->create(['name' => 'Host Honza']);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        $this->patchJson('/api/state', ['data' => ['evList' => [[
+            'id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 'time' => '11:00',
+            't' => 'Terapie', 'kind' => 'jine', 'who' => 'spolu', 'remind' => 'den předem',
+        ]]]])->assertOk();
+
+        $this->assertSame(0, DB::table('event_participants')->where('user_id', $host->id)->count());
+        $this->assertSame(0, DB::table('event_reminders')->where('user_id', $host->id)->count());
+        $this->assertSame(2, DB::table('event_participants')->count());
+    }
+
+    /** Úkol pojmenovaný jménem hosta se hostovi nepřidělí. */
+    public function test_ukol_se_hostovi_neprideli(): void
+    {
+        $host = User::factory()->create(['name' => 'Host Honza']);
+        $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
+
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [['label' => 'Tento týden', 'items' => [
+            ['id' => 'all-n1', 't' => 'Pro hosta', 'w' => 'Host Honza', 'd' => 'zítra'],
+        ]]]]]])->assertOk();
+
+        $this->assertNull(SharedTodo::where('title', 'Pro hosta')->sole()->assigned_to);
+    }
+
+    /**
+     * Nečitelný termín z prohlížeče neshodí celý zápis.
+     *
+     * `CarbonImmutable::parse('abc')` hodilo výjimku a PATCH skončil 500 —
+     * se všemi ostatními změnami v tomtéž odeslání. A pole místo textu
+     * (`(string)` na poli) taky.
+     */
+    public function test_necitelny_termin_zapis_neshodi(): void
+    {
+        $u = $this->ukol(['title' => 'Nákup', 'due_at' => now()->addDays(2)]);
+
+        $this->patchJson('/api/state', ['data' => ['xBoard' => ['all' => [['label' => 'Tento týden', 'items' => [
+            ['id' => $u->uuid, 't' => 'Nákup', 'w' => 'spolu', 'd' => 'zítra', 'due' => 'abc'],
+            ['id' => 'all-n1', 't' => ['pole'], 'w' => 'spolu', 'd' => 'zítra'],
+            ['id' => ['pole'], 't' => 'Divné id', 'w' => 'spolu', 'd' => 'zítra'],
+        ]]]], 'evList' => [
+            ['id' => ['x'], 'y' => 2026, 'm' => 8, 'd' => 19, 't' => 'Divná akce'],
+            ['id' => 'ev-n1', 'y' => 2026, 'm' => 8, 'd' => 19, 't' => ['pole'], 'who' => ['pole'], 'time' => ['x']],
+        ]]])->assertSuccessful();
+
+        $this->assertSame(1, SharedTodo::count());
+        $this->assertSame(0, CalendarEvent::count());
+    }
+
     // ——— pomůcky ———
 
     private function udalost(array $navic = []): CalendarEvent

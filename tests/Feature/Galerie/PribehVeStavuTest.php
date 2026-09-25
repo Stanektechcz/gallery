@@ -314,6 +314,34 @@ class PribehVeStavuTest extends TestCase
         $this->assertSame(1, DB::table('couple_story_chapters')->count());
     }
 
+    /**
+     * Smazanou kapitolu, milník, nouzovou položku ani řádek papíru starší
+     * opis nevzkřísí.
+     *
+     * Uuid vydal server; když řádek v tabulce není, ten druhý ho mezitím
+     * smazal. Dřív se takový řádek založil znovu pod novým uuid.
+     */
+    public function test_smazane_radky_starsi_opis_nevzkrisi(): void
+    {
+        $this->stav(['storyList' => [['id' => 'k-n1', 'title' => 'Kapitola', 'year' => '2016', 'status' => 'hotovo']]])->assertOk();
+        $kapitola = DB::table('couple_story_chapters')->value('uuid');
+        $this->stav(['storyList' => [], '__odebrane' => ['storyList' => [$kapitola]]])->assertOk();
+        $this->assertSame(0, DB::table('couple_story_chapters')->count());
+
+        $this->stav([
+            'storyList' => [['id' => $kapitola, 'title' => 'x']],
+            'msList' => [['id' => (string) Str::uuid(), 'title' => 'Smazaný milník', 'iso' => '2026-04-04']],
+            'emItems' => [['id' => (string) Str::uuid(), 'label' => 'Smazaná položka', 'on' => true]],
+            'paper' => [['id' => (string) Str::uuid(), 'label' => 'Smazaný řádek', 'value' => 'x']],
+            '__odebrane' => ['storyList' => [], 'msList' => [], 'emItems' => [], 'paper' => []],
+        ])->assertOk();
+
+        $this->assertSame(0, DB::table('couple_story_chapters')->count());
+        $this->assertSame(0, DB::table('couple_story_milestones')->count());
+        $this->assertSame(0, DB::table('emergency_access_items')->count());
+        $this->assertSame(0, DB::table('paper_backup_rows')->count());
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

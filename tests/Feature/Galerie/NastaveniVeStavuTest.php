@@ -172,6 +172,31 @@ class NastaveniVeStavuTest extends TestCase
 
     // ——— pomůcky ———
 
+    /**
+     * Se seznamem změn (`__zmenene.sw`) se přepne jen to, na co se klikalo.
+     *
+     * Prohlížeč posílá celou mapu přepínačů; karta otevřená od rána v ní
+     * má polohu z doby načtení a jedno kliknutí by vrátilo i přepínače, které
+     * mezitím přepnul ten druhý.
+     */
+    public function test_starsi_mapa_neprepise_prepinac_druheho(): void
+    {
+        $this->napojeni('ČSOB', true);
+        $this->financniNastaveni();
+
+        // Makinka mezitím vypnula upozornění na duplicity (revolut1-0).
+        DB::table('finance_settings')->update(['warn_duplicates' => false]);
+
+        // Adrian ve starší kartě přepne jen sync; mapa ale nese i starou polohu duplicit.
+        $this->stav([
+            'sw' => ['revolut0-0' => false, 'revolut1-0' => true, 'revolut1-1' => true],
+            '__zmenene' => ['sw' => ['revolut0-0']],
+        ])->assertOk();
+
+        $this->assertFalse((bool) DB::table('bank_connections')->value('sync_enabled'));
+        $this->assertFalse((bool) DB::table('finance_settings')->value('warn_duplicates'));
+    }
+
     private function stav(array $patch)
     {
         return $this->patchJson('/api/state', ['data' => $patch]);

@@ -48,6 +48,19 @@ class PribehVeStavu
         return OdebraneVStavu::zmeneno(OdebraneVStavu::zmenene($this->patch, $klic), $id);
     }
 
+    /**
+     * Řádek s uuid, které v tabulce není — ten druhý ho mezitím smazal.
+     *
+     * Uuid vydává jen server; obrazovka nový řádek pojmenuje po svém
+     * (`k-n1`, `a1`…). Starší opis seznamu (karta od rána, druhé zařízení)
+     * ale smazaný řádek posílá dál, a dřív se založil znovu pod novým uuid —
+     * smazaná kapitola, milník nebo nouzově sdílená položka vstaly.
+     */
+    private function smazanyNaServeru(string $id): bool
+    {
+        return Str::isUuid($id);
+    }
+
     public function tykaSe(array $patch): bool
     {
         foreach (self::SERVEROVE as $klic) {
@@ -154,6 +167,10 @@ class PribehVeStavu
                 continue;
             }
 
+            if ($this->smazanyNaServeru($uuid)) {
+                continue;
+            }
+
             $zustavaji[] = DB::table('couple_story_chapters')->insertGetId($radek + [
                 'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $prostor->id,
@@ -235,6 +252,10 @@ class PribehVeStavu
                 }
                 $zustavaji[] = $znamé[$uuid];
 
+                continue;
+            }
+
+            if ($this->smazanyNaServeru($uuid)) {
                 continue;
             }
 
@@ -413,6 +434,10 @@ class PribehVeStavu
                 continue;
             }
 
+            if ($this->smazanyNaServeru($uuid)) {
+                continue;
+            }
+
             $zustavaji[] = DB::table('emergency_access_items')->insertGetId($radek + [
                 'uuid' => (string) Str::uuid(),
                 'gallery_space_id' => $prostor->id,
@@ -478,6 +503,10 @@ class PribehVeStavu
                 }
                 $zustavaji[] = $znamé[$uuid];
 
+                continue;
+            }
+
+            if ($this->smazanyNaServeru($uuid)) {
                 continue;
             }
 

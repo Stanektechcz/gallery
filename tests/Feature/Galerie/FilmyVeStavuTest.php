@@ -83,15 +83,18 @@ class FilmyVeStavuTest extends TestCase
         $this->assertSame('chceme', DB::table('watch_titles')->where('title', 'Poor Things')->value('status'));
     }
 
-    /** Odebraný titul z tabulky zmizí. */
+    /** Odebraný titul z tabulky zmizí — obrazovka ho posílá v `__odebrane`. */
     public function test_odebrany_titul_zmizi(): void
     {
-        $this->titul('Zůstává');
-        $this->titul('Mizí');
+        $zustava = $this->titul('Zůstává');
+        $mizi = $this->titul('Mizí');
 
-        $this->stav(['xRows' => ['films' => [
-            ['t' => 'Zůstává', 'm' => '', 'g' => 'hotovo', 'id' => 'films-0'],
-        ]]])->assertOk();
+        $this->stav([
+            'xRows' => ['films' => [
+                ['t' => 'Zůstává', 'm' => '', 'g' => 'hotovo', 'id' => $this->id('films', $zustava)],
+            ]],
+            '__odebrane' => ['xRows.films' => [$this->id('films', $mizi)]],
+        ])->assertOk();
 
         $this->assertSame(['Zůstává'], DB::table('watch_titles')->pluck('title')->all());
     }
@@ -167,7 +170,7 @@ class FilmyVeStavuTest extends TestCase
         $titul = $this->titul('Anatomie pádu');
 
         // Adrian pošle i hodnotu za Makinku — zapsat se smí jen jeho vlastní.
-        $this->stav(['fmRate' => ['films-0' => ['a' => 5, 'm' => 1]]])->assertOk();
+        $this->stav(['fmRate' => [$this->id('films', $titul) => ['a' => 5, 'm' => 1]]])->assertOk();
 
         $znamky = DB::table('watch_title_ratings')->where('watch_title_id', $titul)->pluck('rating', 'user_id');
 
@@ -176,7 +179,7 @@ class FilmyVeStavuTest extends TestCase
 
         // Makinka hodnotí sama, ze svého účtu — u ní je `a` ona.
         Sanctum::actingAs($this->maki);
-        $this->stav(['fmRate' => ['films-0' => ['a' => 4, 'm' => 5]]])->assertOk();
+        $this->stav(['fmRate' => [$this->id('films', $titul) => ['a' => 4, 'm' => 5]]])->assertOk();
         Sanctum::actingAs($this->adri);
 
         $znamky = DB::table('watch_title_ratings')->where('watch_title_id', $titul)->pluck('rating', 'user_id');
@@ -192,9 +195,9 @@ class FilmyVeStavuTest extends TestCase
     /** Pásmo v žebříčku se uloží a vrátí. */
     public function test_pasmo_v_zebricku_se_ulozi(): void
     {
-        $this->titul('Perfect Days');
+        $titul = $this->titul('Perfect Days');
 
-        $this->stav(['tierMap' => ['films-0' => 'S']])->assertOk();
+        $this->stav(['tierMap' => [$this->id('films', $titul) => 'S']])->assertOk();
 
         $this->assertSame('S', DB::table('watch_titles')->value('tier'));
         $this->assertSame('S', $this->getJson('/api/data/pribeh')->assertOk()->json('data.AL.films.0.3'));
@@ -206,9 +209,9 @@ class FilmyVeStavuTest extends TestCase
     /** Zrušené zařazení pásmo smaže, ne přepíše na nesmysl. */
     public function test_zrusene_zarazeni_pasmo_smaze(): void
     {
-        $this->titul('Perfect Days', ['tier' => 'S']);
+        $titul = $this->titul('Perfect Days', ['tier' => 'S']);
 
-        $this->stav(['tierMap' => ['films-0' => '']])->assertOk();
+        $this->stav(['tierMap' => [$this->id('films', $titul) => '']])->assertOk();
 
         $this->assertNull(DB::table('watch_titles')->value('tier'));
     }
@@ -216,9 +219,9 @@ class FilmyVeStavuTest extends TestCase
     /** Rozkoukaný díl se uloží. */
     public function test_rozkoukany_dil_se_ulozi(): void
     {
-        $this->titul('Shogun', ['kind' => 'seriál', 'status' => 'probíhá', 'episodes_total' => 10]);
+        $titul = $this->titul('Shogun', ['kind' => 'seriál', 'status' => 'probíhá', 'episodes_total' => 10]);
 
-        $this->stav(['fmEp' => ['series-0' => 7]])->assertOk();
+        $this->stav(['fmEp' => [$this->id('series', $titul) => 7]])->assertOk();
 
         $this->assertSame(7, (int) DB::table('watch_titles')->value('episodes_done'));
         // Sérii aplikace nikde neeviduje, takže popisek počítá díly. Dřív
@@ -229,9 +232,9 @@ class FilmyVeStavuTest extends TestCase
     /** „Viděli jsme" změní stav titulu. */
     public function test_videli_jsme_zmeni_stav(): void
     {
-        $this->titul('Poor Things', ['status' => 'chceme']);
+        $titul = $this->titul('Poor Things', ['status' => 'chceme']);
 
-        $this->stav(['rowDone' => ['watchlist-0' => true]])->assertOk();
+        $this->stav(['rowDone' => [$this->id('watchlist', $titul) => true]])->assertOk();
 
         $this->assertSame('hotovo', DB::table('watch_titles')->value('status'));
     }
@@ -249,13 +252,13 @@ class FilmyVeStavuTest extends TestCase
      */
     public function test_cizi_klice_zustavaji_ve_stavu(): void
     {
-        $this->titul('Dune: Part Two');
+        $titul = $this->titul('Dune: Part Two');
 
         $this->stav([
             'xRows' => [
-                'films' => [['t' => 'Dune: Part Two', 'm' => '', 'g' => 'hotovo', 'id' => 'films-0']],
+                'films' => [['t' => 'Dune: Part Two', 'm' => '', 'g' => 'hotovo', 'id' => $this->id('films', $titul)]],
             ],
-            'rowDone' => ['films-0' => true, 'poznamky-0' => true],
+            'rowDone' => [$this->id('films', $titul) => true, 'poznamky-0' => true],
         ])->assertOk();
 
         $stav = (array) $this->getJson('/api/state')->assertOk()->json('data');
@@ -281,7 +284,57 @@ class FilmyVeStavuTest extends TestCase
         $this->assertSame(1, DB::table('watch_titles')->count());
     }
 
+    /**
+     * Pořadí (`films-0`) už na titul nemíří.
+     *
+     * Server i obě obrazovky titul pojmenují podle uuid (`films-<uuid>`).
+     * Pořadí zbylo jen jako cesta, jak starší opis trefí jiný film: ten
+     * druhý smazal první titul, `films-0` se posunulo na druhý — a známka,
+     * pásmo i „viděli jsme" dopadly na něj.
+     */
+    public function test_poradi_ze_starsiho_opisu_netrefi_jiny_titul(): void
+    {
+        $prvni = $this->titul('Anatomie pádu');
+        $druhy = $this->titul('Dune: Part Two', ['status' => 'chceme']);
+        DB::table('watch_titles')->where('id', $prvni)->delete();
+
+        $this->stav([
+            'tierMap' => ['films-0' => 'F', 'watchlist-0' => 'F'],
+            'fmRate' => ['films-0' => ['a' => 1], 'watchlist-0' => ['a' => 1]],
+            'rowDone' => ['watchlist-0' => true],
+        ])->assertOk();
+
+        $radek = DB::table('watch_titles')->where('id', $druhy)->first();
+        $this->assertNull($radek->tier);
+        $this->assertSame('chceme', $radek->status);
+        $this->assertSame(0, DB::table('watch_title_ratings')->count());
+    }
+
+    /**
+     * Bez `__odebrane` se nemaže nic.
+     *
+     * Titul, který v seznamu chybí, mohl mezitím přidat ten druhý. Obrazovka
+     * odebrání posílá výslovně; seznam bez rozdílu je jen starší opis.
+     */
+    public function test_chybejici_titul_bez_odebranych_nezmizi(): void
+    {
+        $zustava = $this->titul('Zůstává');
+        $this->titul('Mezitím od Makinky');
+
+        $this->stav(['xRows' => ['films' => [
+            ['t' => 'Zůstává', 'm' => '', 'g' => 'hotovo', 'id' => $this->id('films', $zustava)],
+        ]]])->assertOk();
+
+        $this->assertSame(2, DB::table('watch_titles')->count());
+    }
+
     // ——— pomůcky ———
+
+    /** Identifikátor řádku tak, jak ho posílá server (`films-<uuid>`). */
+    private function id(string $seznam, int $titul): string
+    {
+        return $seznam.'-'.DB::table('watch_titles')->where('id', $titul)->value('uuid');
+    }
 
     private function titul(string $nazev, array $navic = []): int
     {

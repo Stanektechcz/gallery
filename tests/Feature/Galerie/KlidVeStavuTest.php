@@ -266,6 +266,29 @@ class KlidVeStavuTest extends TestCase
         $this->assertSame(2, (int) DB::table('wellbeing_tasks')->value('needs_people'));
     }
 
+    /**
+     * Hotová věc se ze staršího opisu nevrátí jako nová.
+     *
+     * Číslo řádku vydal server; když mezi čekajícími není, je hotová (nebo
+     * patří jinam). Dřív se pod ním založil nový úkol — odškrtnuté „Zavolat
+     * na úřad" se po úpravě jiného řádku v kartě od rána vrátilo.
+     */
+    public function test_hotova_vec_se_starsim_opisem_nevrati(): void
+    {
+        $this->stav(['klTasks' => [['id' => 0, 'name' => 'Zavolat na úřad', 'need' => 1]]])->assertOk();
+        $id = (int) DB::table('wellbeing_tasks')->value('id');
+        $this->stav(['klTasks' => [], '__odebrane' => ['klTasks' => [(string) $id]]])->assertOk();
+        $this->assertNotNull(DB::table('wellbeing_tasks')->where('id', $id)->value('done_at'));
+
+        $this->stav([
+            'klTasks' => [['id' => $id, 'name' => 'Zavolat na úřad', 'need' => 1]],
+            '__odebrane' => ['klTasks' => []],
+        ])->assertOk();
+
+        $this->assertSame(1, DB::table('wellbeing_tasks')->count());
+        $this->assertSame(0, DB::table('wellbeing_tasks')->whereNull('done_at')->count());
+    }
+
     // ——— pomůcky ———
 
     private function stav(array $patch)

@@ -51,7 +51,21 @@ class NastaveniVeStavu
             $sekce[$klic] = $this->formulare->sekce($klic, $prostor, $uzivatel);
         }
 
+        /*
+         * Jen přepínače, na které se klikalo — když to prohlížeč řekne.
+         *
+         * `sw` chodí celé: mapa v kartě otevřené od rána nese polohu z doby
+         * načtení a jedno kliknutí by vrátilo i sync banky nebo upozornění,
+         * které mezitím přepnul ten druhý. S `__zmenene.sw` se přepne jen
+         * vyjmenované; starší klient ho neposílá a platí pro něj celá mapa.
+         */
+        $zmenene = OdebraneVStavu::zmenene($patch, 'sw');
+
         foreach ((array) ($patch['sw'] ?? []) as $klic => $zapnuto) {
+            if (! OdebraneVStavu::zmeneno($zmenene, (string) $klic)) {
+                continue;
+            }
+
             $cil = $this->cil((string) $klic, $sekce);
 
             if ($cil !== null) {

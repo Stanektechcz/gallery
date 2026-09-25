@@ -144,6 +144,15 @@ class KlidVeStavu
                 continue;
             }
 
+            /*
+             * Číslo vydal server a mezi čekajícími není: věc je hotová (nebo
+             * patří jinému páru). Starší opis seznamu ji dřív založil znovu
+             * jako novou — odškrtnuté se vrátilo. Nová věc z obrazovky má `0`.
+             */
+            if ($id > 0) {
+                continue;
+            }
+
             $zustavaji[] = DB::table('wellbeing_tasks')->insertGetId($radek + [
                 'gallery_space_id' => $prostor->id,
                 'created_at' => now(),
