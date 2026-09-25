@@ -199,16 +199,52 @@ class TripReservationImportService
     /** @return array{?float,string} */
     private function amount(string $text, string $fallbackCurrency): array
     {
-        if (! preg_match('/(?:(CZK|EUR|USD|GBP|Kč|€|\$)\s*(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)|(\d{1,7}(?:[ .]\d{3})*(?:[,.]\d{1,2})?)\s*(CZK|EUR|USD|GBP|Kč|€|\$))/u', $text, $match)) {
+        // Tisíce odděluje mezera, tečka i čárka — kterým z nich, pozná až
+        // normalizedAmount() podle posledního oddělovače v čísle.
+        if (! preg_match('/(?:(CZK|EUR|USD|GBP|Kč|€|\$)\s*(\d{1,7}(?:[ ,.]\d{3})*(?:[,.]\d{1,2})?)|(\d{1,7}(?:[ ,.]\d{3})*(?:[,.]\d{1,2})?)\s*(CZK|EUR|USD|GBP|Kč|€|\$))/u', $text, $match)) {
             return [null, $fallbackCurrency];
         }
         $symbol = strtoupper((string) (($match[1] ?? '') ?: ($match[4] ?? '') ?: $fallbackCurrency));
         $currency = match ($symbol) {
             'KČ' => 'CZK', '€' => 'EUR', '$' => 'USD', default => $symbol
         };
-        $normalized = str_replace([' ', '.'], ['', ''], (string) (($match[2] ?? '') ?: ($match[3] ?? '')));
-        $normalized = str_replace(',', '.', $normalized);
+        $normalized = $this->normalizedAmount((string) (($match[2] ?? '') ?: ($match[3] ?? '')));
 
         return [round((float) $normalized, 2), in_array($currency, ['CZK', 'EUR', 'USD', 'GBP'], true) ? $currency : $fallbackCurrency];
+    }
+
+    /**
+     * Převede zapsané číslo (mezery, tečky i čárky jako oddělovače) na tvar pro `(float)`.
+     *
+     * O tom, co je desetinný oddělovač a co tisíce, rozhoduje poslední čárka nebo
+     * tečka v čísle a kolik číslic je za ní — ne pevné pořadí. Dřív se každá tečka
+     * smazala hned na začátku, takže „EUR 12.50" vyšlo jako 1250: desetiny zmizely
+     * dřív, než na ně přišla řada.
+     */
+    private function normalizedAmount(string $castka): string
+    {
+        $bezMezer = str_replace(' ', '', $castka);
+        // strrpos vrací i false pro „nenalezeno" — nejde ho tedy jen tak přetypovat na
+        // int, protože pozice 0 by se od „nenalezeno" nerozlišila.
+        $posledniCarka = strrpos($bezMezer, ',');
+        $posledniTecka = strrpos($bezMezer, '.');
+        $posledni = max($posledniCarka === false ? -1 : $posledniCarka, $posledniTecka === false ? -1 : $posledniTecka);
+
+        if ($posledni === -1) {
+            return $bezMezer;
+        }
+
+        $pocetZaOddelovacem = strlen($bezMezer) - $posledni - 1;
+
+        if ($pocetZaOddelovacem === 1 || $pocetZaOddelovacem === 2) {
+            // Poslední oddělovač je desetinný, všechny předchozí čárky i tečky jsou tisíce.
+            $cela = str_replace([',', '.'], '', substr($bezMezer, 0, $posledni));
+            $desetiny = substr($bezMezer, $posledni + 1);
+
+            return $cela.'.'.$desetiny;
+        }
+
+        // Tři číslice za posledním oddělovačem znamenají tisíce, ne desetiny.
+        return str_replace([',', '.'], '', $bezMezer);
     }
 }

@@ -18,6 +18,7 @@ use App\Services\Finance\FinanceFilter;
 use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
 use App\Services\Finance\SlucovaniService;
+use App\Support\Meny;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -339,22 +340,28 @@ class FinanceSetupController extends Controller
     {
         $space = $this->space($request);
 
+        // Měna se uppercasuje ještě před validací — „eur" musí projít pravidlem `in:`
+        // stejně jako „EUR", jinak by menu s malými písmeny spadlo na chybu, kterou
+        // člověk nečekal.
+        foreach (['home_currency', 'travel_currency'] as $mena) {
+            if ($request->filled($mena)) {
+                $request->merge([$mena => strtoupper((string) $request->input($mena))]);
+            }
+        }
+
         $data = $request->validate([
-            'home_currency' => 'sometimes|string|size:3',
-            'travel_currency' => 'sometimes|string|size:3',
+            'home_currency' => ['sometimes', Rule::in(Meny::NABIZENE)],
+            'travel_currency' => ['sometimes', Rule::in(Meny::NABIZENE)],
             'default_period' => 'sometimes|in:dnes,tyden,mesic,minuly-mesic,cesta,vse',
             'default_tab' => 'sometimes|in:prehled,transakce,rozpocty,smeny,cesty,statistiky,ucty,nastaveni',
             'list_density' => 'sometimes|in:pohodlne,husté',
             'default_reserve' => 'sometimes|numeric|min:0|max:999999999.99',
             'alert_thresholds' => 'sometimes|string|max:40',
             'show_partner_balance' => 'sometimes|boolean',
+        ], [
+            'home_currency.in' => 'Hlavní měna je jen CZK, EUR nebo USD.',
+            'travel_currency.in' => 'Měna cesty je jen CZK, EUR nebo USD.',
         ]);
-
-        foreach (['home_currency', 'travel_currency'] as $mena) {
-            if (isset($data[$mena])) {
-                $data[$mena] = strtoupper($data[$mena]);
-            }
-        }
 
         $nastaveni = FinanceSettings::proProstor($space->id);
         $nastaveni->update($data);

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\Meny;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -72,6 +73,9 @@ class FinanceSettings extends Model
         return [
             'home_currency' => $this->home_currency ?? 'CZK',
             'travel_currency' => $this->travel_currency ?? 'EUR',
+            // Nabízené měny jdou s předvolbami rovnou — formulář je potřebuje při
+            // otevření, ne až po dalším požadavku.
+            'currency_options' => Meny::NABIZENE,
             'default_period' => $this->default_period ?? 'mesic',
             'default_tab' => $this->default_tab ?? 'prehled',
             'list_density' => $this->list_density ?? 'pohodlne',

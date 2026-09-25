@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class TripReservationImportTest extends TestCase
@@ -95,5 +96,34 @@ class TripReservationImportTest extends TestCase
         $this->postJson("/api/v1/trips/{$this->tripId}/reservation-imports", ['source_text' => 'Rezervace ABCD1234'])->assertCreated();
         $outsider = User::factory()->create();
         $this->actingAs($outsider)->getJson("/api/v1/trips/{$this->tripId}/reservation-imports")->assertNotFound();
+    }
+
+    /**
+     * Desetinná čárka i tečka musí dát stejnou částku, ať je v textu kdekoli.
+     *
+     * Parser dřív smazal každou tečku ještě před tím, než čárku změnil na tečku —
+     * „EUR 12.50" tak vyšlo jako 1250 místo 12,50. O odděleni desetin i tisíců
+     * rozhoduje poslední oddělovač v čísle a počet číslic za ním, ne pevné pořadí.
+     */
+    #[DataProvider('castky')]
+    public function test_parser_castky_rozliší_desetinnou_carku_od_tecky(string $text, float $ocekavano): void
+    {
+        $trip = (object) ['currency' => 'CZK', 'timezone' => 'Europe/Prague'];
+        $data = app(TripReservationImportService::class)->parse("Rezervace ABCD1234, cena {$text}", 'doklad.pdf', $trip);
+
+        $this->assertSame($ocekavano, $data['amount']);
+    }
+
+    /** @return array<string, array{0: string, 1: float}> */
+    public static function castky(): array
+    {
+        return [
+            'tečka jako desetinný oddělovač' => ['EUR 12.50', 12.5],
+            'čárka jako desetinný oddělovač' => ['EUR 12,50', 12.5],
+            'mezera jako tisíce, čárka desetiny' => ['EUR 1 234,50', 1234.5],
+            'tečka jako tisíce, čárka desetiny' => ['EUR 1.234,50', 1234.5],
+            'čárka jako tisíce, tečka desetiny' => ['EUR 1,234.50', 1234.5],
+            'celé číslo bez oddělovače' => ['EUR 1234', 1234.0],
+        ];
     }
 }
