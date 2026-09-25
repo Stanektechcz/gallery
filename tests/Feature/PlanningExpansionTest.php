@@ -126,6 +126,8 @@ class PlanningExpansionTest extends TestCase
         $settlement = DB::table('trip_settlements')->where('trip_id', $tripId)->first();
         $this->postJson("/api/v1/trips/{$tripId}/settlements/{$settlement->id}/settle")->assertOk()->assertJsonPath('status', 'settled');
         $this->getJson("/api/v1/trips/{$tripId}/offline-package")->assertOk()->assertJsonPath('trip.name', 'Vídeň');
+        // Kurzy jsou společné celé instalaci — zapisuje je jen provozovatel (User::isOperator()).
+        config(['gallery.operator_emails' => $this->owner->email]);
         $this->postJson('/api/v1/currency-rates', ['base_currency' => 'EUR', 'quote_currency' => 'CZK', 'rate' => 25.1, 'effective_on' => now()->toDateString()])->assertOk();
         $this->getJson("/api/v1/trips/{$tripId}/readiness")->assertOk()->assertJsonPath('budget.0.status', 'warning')->assertJsonPath('documents.0.title', 'Cestovní pojištění');
     }

@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,7 +19,7 @@ class ItineraryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         // Wishlist places — cast lat/lng to float (MySQL DECIMAL comes back as string via PDO)
         $wishlist = DB::table('itinerary_places')
@@ -36,6 +38,7 @@ class ItineraryController extends Controller
         // Visited places from GPS data (cluster by ~1° grid)
         $visitedFromPhotos = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->selectRaw('
@@ -62,6 +65,7 @@ class ItineraryController extends Controller
         $countryCount = DB::table('media_items')
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->selectRaw('ROUND(latitude, 0) as lat_grid, ROUND(longitude, 0) as lng_grid')
@@ -88,7 +92,7 @@ class ItineraryController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $validated = $request->validate([
             'name' => 'required|string|max:255',
@@ -123,7 +127,7 @@ class ItineraryController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $validated = $request->validate([
             'visited' => 'nullable|boolean',
@@ -146,7 +150,14 @@ class ItineraryController extends Controller
             ->where('gallery_space_id', $space->id)
             ->update(array_merge($validated, ['updated_at' => now()]));
 
-        return response()->json(DB::table('itinerary_places')->find($id));
+        // Odpověď jen z vlastního prostoru — dřív `find($id)` vrátil i místo
+        // z cizí galerie (název, poznámky, souřadnice).
+        $place = DB::table('itinerary_places')->where('id', $id)->where('gallery_space_id', $space->id)->first();
+        if (! $place) {
+            return response()->json(['error' => 'not found'], 404);
+        }
+
+        return response()->json($place);
     }
 
     /**
@@ -155,7 +166,7 @@ class ItineraryController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         DB::table('itinerary_places')
             ->where('id', $id)
@@ -172,7 +183,7 @@ class ItineraryController extends Controller
     public function checkVisited(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $wishlist = DB::table('itinerary_places')
             ->where('gallery_space_id', $space->id)
@@ -189,6 +200,7 @@ class ItineraryController extends Controller
             // Check if any photo is within ~50km (≈0.45 degrees)
             $nearby = MediaItem::where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereNotNull('latitude')
                 ->whereRaw('ABS(latitude - ?) < 0.45 AND ABS(longitude - ?) < 0.45', [$place->latitude, $place->longitude])
                 ->first(['taken_at']);
@@ -326,7 +338,7 @@ class ItineraryController extends Controller
     public function placePhotos(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $place = DB::table('itinerary_places')
             ->where('id', $id)
@@ -342,6 +354,7 @@ class ItineraryController extends Controller
         $photos = MediaItem::with('variants')
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereRaw('ABS(latitude - ?) < ? AND ABS(longitude - ?) < ?', [
                 $place->latitude,
@@ -358,6 +371,18 @@ class ItineraryController extends Controller
             'taken_at' => $m->taken_at,
             'thumbnail_url' => $m->thumbnail_url,
         ]));
+    }
+
+    /**
+     * První prostor účtu — týž, který posoudila brána `dvojice:klic`.
+     * Účet, který si galerii ještě nezaložil, dostane 403, ne chybu serveru.
+     *
+     * Fotky se v itineráři filtrují i podle `is_hidden`: místo „navštívené"
+     * jen podle fotky z trezoru by prozradilo, kde ta fotka vznikla.
+     */
+    private function prostor(User $user): GallerySpace
+    {
+        return $user->gallerySpaces()->first() ?? abort(403, 'Nejdřív si založte galerii nebo přijměte pozvánku.');
     }
 
     private function nominatimCurl(string $url): array

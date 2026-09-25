@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripPreparationTimelineService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -39,7 +40,7 @@ class TripTravelController extends Controller
         }
         $variantId = DB::table('trip_route_variants')->insertGetId(['trip_id' => $tripId, 'created_by' => $request->user()->id, 'title' => $data['title'], 'strategy' => 'custom', 'transport_modes' => json_encode($data['transport_modes'] ?? []), 'estimated_minutes' => $data['estimated_minutes'] ?? null, 'estimated_cost' => $data['amount'] ?? null, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'is_selected' => $selected, 'data' => json_encode($data['details'] ?? []), 'created_at' => now(), 'updated_at' => now()]);
         $expenseId = array_key_exists('amount', $data) && $data['amount'] !== null ? DB::table('trip_expenses')->insertGetId(['trip_id' => $tripId, 'created_by' => $request->user()->id, 'title' => $data['title'], 'category' => 'transport', 'amount' => $data['amount'], 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'state' => 'planned', 'created_at' => now(), 'updated_at' => now()]) : null;
-        $choice = $this->choice($tripId, $request->user()->id, 'transport', $data, $variantId, null, $expenseId, $selected);
+        $choice = $this->choice($trip, $request->user()->id, 'transport', $data, $variantId, null, $expenseId, $selected);
         if ($preparation->canSync()) {
             $preparation->sync($trip);
         }
@@ -62,7 +63,7 @@ class TripTravelController extends Controller
         if (! empty($data['reference'])) {
             DB::table('trip_document_checks')->updateOrInsert(['trip_id' => $tripId, 'title' => $data['title'], 'reference' => $data['reference']], ['created_by' => $request->user()->id, 'type' => 'booking', 'status' => 'ready', 'updated_at' => now(), 'created_at' => now()]);
         }
-        $choice = $this->choice($tripId, $request->user()->id, 'accommodation', $data, null, $activityId, $expenseId, $selected);
+        $choice = $this->choice($trip, $request->user()->id, 'accommodation', $data, null, $activityId, $expenseId, $selected);
         if ($preparation->canSync()) {
             $preparation->sync($trip);
         }
@@ -70,16 +71,25 @@ class TripTravelController extends Controller
         return response()->json($choice, 201);
     }
 
-    private function choice(int $tripId, int $userId, string $kind, array $data, ?int $variantId, ?int $activityId, ?int $expenseId, bool $selected): object
+    /**
+     * Bez zadané měny nese volba měnu cesty — stejně jako výdaj, který k ní
+     * vznikl. Dřív tu bylo pevné CZK, takže u cesty v eurech ukazovala volba
+     * „39 CZK" a výdaj „39 EUR".
+     */
+    private function choice(object $trip, int $userId, string $kind, array $data, ?int $variantId, ?int $activityId, ?int $expenseId, bool $selected): object
     {
-        $id = DB::table('trip_travel_choices')->insertGetId(['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $userId, 'trip_route_variant_id' => $variantId, 'trip_activity_id' => $activityId, 'trip_expense_id' => $expenseId, 'kind' => $kind, 'provider' => $data['provider'] ?? null, 'title' => $data['title'], 'source_url' => $data['source_url'] ?? null, 'amount' => $data['amount'] ?? null, 'currency' => strtoupper($data['currency'] ?? 'CZK'), 'is_selected' => $selected, 'details' => json_encode($data['details'] ?? array_filter(['reference' => $data['reference'] ?? null, 'checkin' => $data['checkin'] ?? null, 'checkout' => $data['checkout'] ?? null])), 'created_at' => now(), 'updated_at' => now()]);
+        $id = DB::table('trip_travel_choices')->insertGetId(['uuid' => (string) Str::uuid(), 'trip_id' => $trip->id, 'created_by' => $userId, 'trip_route_variant_id' => $variantId, 'trip_activity_id' => $activityId, 'trip_expense_id' => $expenseId, 'kind' => $kind, 'provider' => $data['provider'] ?? null, 'title' => $data['title'], 'source_url' => $data['source_url'] ?? null, 'amount' => $data['amount'] ?? null, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'is_selected' => $selected, 'details' => json_encode($data['details'] ?? array_filter(['reference' => $data['reference'] ?? null, 'checkin' => $data['checkin'] ?? null, 'checkout' => $data['checkout'] ?? null])), 'created_at' => now(), 'updated_at' => now()]);
 
         return DB::table('trip_travel_choices')->find($id);
     }
 
+    /**
+     * Cesta z prostoru, kde účet patří do dvojice — ne z galerie, kam je jen
+     * pozvaný jako host (viz `PristupDoGalerie::prostoryDvojice()`).
+     */
     private function trip(Request $request, int $tripId): object
     {
-        return DB::table('trips')->where('id', $tripId)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+        return DB::table('trips')->where('id', $tripId)->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))->firstOrFail();
     }
 
     private function secureUrl(?string $url): void

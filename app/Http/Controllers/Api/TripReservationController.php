@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Travel\TripReservationImportService;
 use Illuminate\Http\JsonResponse;
@@ -217,11 +219,15 @@ class TripReservationController extends Controller
         } else {
             $eventId = DB::table('calendar_events')->insertGetId($values + ['uuid' => (string) Str::uuid(), 'created_at' => now()]);
         }
-        $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id');
+        // Účastníci a připomínky jen pro dvojici — host prostoru k rezervaci nesmí.
+        $memberIds = app(PristupDoGalerie::class)->dvojice(GallerySpace::findOrFail($trip->gallery_space_id))->pluck('id');
         foreach ($memberIds as $memberId) {
             DB::table('event_participants')->insertOrIgnore(['event_id' => $eventId, 'user_id' => $memberId, 'role' => (int) $memberId === (int) $request->user()->id ? 'organizer' : 'guest', 'response' => (int) $memberId === (int) $request->user()->id ? 'accepted' : 'pending', 'created_at' => now(), 'updated_at' => now()]);
             foreach ($reminderHours as $hours) {
-                $remindAt = $startsAt->copy()->subHours((int) $hours);
+                // `starts_at` se tu ukládá podle hodin v pásmu cesty, `remind_at` ale
+                // porovnává doručování s `now()` v UTC — proto okamžik v UTC.
+                // Bez převodu chodila připomínka v létě o dvě hodiny později.
+                $remindAt = $startsAt->copy()->subHours((int) $hours)->utc();
                 if ($remindAt->isPast()) {
                     continue;
                 }
@@ -259,8 +265,13 @@ class TripReservationController extends Controller
         abort_unless(Schema::hasTable('trip_reservation_imports'), 503, 'Pro import cestovních rezervací dokončete migrace aplikace.');
     }
 
+    /**
+     * Cesta z prostoru, kde účet patří do dvojice. Brána `dvojice:klic`
+     * posuzuje jen první prostor účtu — host cizí galerie by jinak stáhl
+     * její letenky a rezervace.
+     */
     private function trip(Request $request, int $id): object
     {
-        return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+        return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))->firstOrFail();
     }
 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\TripBudgetAdvisorService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Planning\TripPreparationTimelineService;
@@ -191,9 +192,14 @@ class TripIntelligenceController extends Controller
         return response()->json(DB::table('trip_savings_goals')->where('trip_id', $tripId)->first());
     }
 
+    /**
+     * Kurzy (`currency_rates`) jsou společné celé instalaci — přepočítávají
+     * rozpočty všech galerií. `isAdmin()` tu nestačí: `users.role = owner`
+     * má každý zaregistrovaný účet. Zapisovat smí jen provozovatel.
+     */
     public function storeCurrencyRate(Request $request): JsonResponse
     {
-        abort_unless($request->user()->isAdmin(), 403);
+        abort_unless($request->user()->isOperator(), 403);
         $data = $request->validate(['base_currency' => 'required|string|size:3', 'quote_currency' => 'required|string|size:3|different:base_currency', 'rate' => 'required|numeric|gt:0|max:999999999', 'effective_on' => 'required|date']);
         $row = ['base_currency' => strtoupper($data['base_currency']), 'quote_currency' => strtoupper($data['quote_currency']), 'effective_on' => $data['effective_on']];
         DB::table('currency_rates')->updateOrInsert($row, ['rate' => $data['rate'], 'source' => 'manual', 'created_at' => now(), 'updated_at' => now()]);
@@ -203,7 +209,7 @@ class TripIntelligenceController extends Controller
 
     public function savedTransportRoutes(Request $request): JsonResponse
     {
-        return response()->json(DB::table('saved_transport_routes')->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->latest()->get());
+        return response()->json(DB::table('saved_transport_routes')->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($request->user()))->latest()->get());
     }
 
     public function offlinePackage(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
@@ -237,7 +243,7 @@ class TripIntelligenceController extends Controller
     public function saveTransportRoute(Request $request): JsonResponse
     {
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'name' => 'required|string|max:160', 'origin' => 'required|string|max:255', 'destination' => 'required|string|max:255', 'preferences' => 'nullable|array']);
-        abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
+        abort_unless(in_array((int) $data['gallery_space_id'], app(PristupDoGalerie::class)->idProstoruDvojice($request->user()), true), 404);
         $id = DB::table('saved_transport_routes')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'name' => $data['name'], 'origin' => $data['origin'], 'destination' => $data['destination'], 'preferences' => json_encode($data['preferences'] ?? []), 'created_at' => now(), 'updated_at' => now()]);
 
         return response()->json(DB::table('saved_transport_routes')->find($id), 201);
@@ -273,7 +279,7 @@ class TripIntelligenceController extends Controller
     {
         $trip = $this->trip($request->user(), $tripId);
 
-        return response()->json(DB::table('gallery_space_user as membership')->join('users', 'users.id', '=', 'membership.user_id')->where('membership.gallery_space_id', $trip->gallery_space_id)->orderBy('users.name')->get(['users.id', 'users.name']));
+        return response()->json(DB::table('users')->whereIn('id', $this->coupleIds((int) $trip->gallery_space_id))->orderBy('name')->get(['id', 'name']));
     }
 
     public function storePackingItem(Request $request, int $tripId): JsonResponse
@@ -438,14 +444,29 @@ class TripIntelligenceController extends Controller
             ->get(['item.*', 'title.uuid as entertainment_uuid', 'title.title', 'title.media_type', 'title.runtime_minutes', 'title.poster_url', 'author.name as added_by_name']);
     }
 
+    /**
+     * Cesta z prostoru, kde účet patří do dvojice. Brána `dvojice:klic`
+     * posuzuje jen první prostor účtu — host cizí galerie by jinak otevřel
+     * její offline balíček, doklady i výdaje.
+     */
     private function trip(User $user, int $id): object
     {
-        return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+        return DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($user))->firstOrFail();
     }
 
+    /**
+     * Patří účet do dvojice prostoru? Vyrovnání, balení, doklady i sdílení
+     * polohy jsou věc dvojice — host prostoru (`viewer`) sem nepatří.
+     */
     private function member(int $spaceId, int $userId): bool
     {
-        return DB::table('gallery_space_user')->where('gallery_space_id', $spaceId)->where('user_id', $userId)->exists();
+        return in_array($userId, $this->coupleIds($spaceId), true);
+    }
+
+    /** @return list<int> */
+    private function coupleIds(int $spaceId): array
+    {
+        return app(TripPartnerFinanceService::class)->coupleIds($spaceId);
     }
 
     private function packingRows(int $tripId): Collection

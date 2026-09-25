@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -14,7 +16,7 @@ class JourneyController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $events = DB::table('journey_events')
             ->where('gallery_space_id', $space->id)
@@ -25,6 +27,7 @@ class JourneyController extends Controller
         $enriched = $events->map(function ($event) use ($space) {
             $q = MediaItem::where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereDate('taken_at', $event->event_date)
                 ->with('variants');
 
@@ -48,7 +51,7 @@ class JourneyController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $v = $request->validate([
             'title' => 'required|string|max:255',
@@ -88,7 +91,7 @@ class JourneyController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $v = $request->validate([
             'title' => 'nullable|string|max:255',
@@ -113,13 +116,20 @@ class JourneyController extends Controller
             ->where('gallery_space_id', $space->id)
             ->update($toUpdate);
 
-        return response()->json(DB::table('journey_events')->find($id));
+        // Odpověď jen z vlastního prostoru — dřív `find($id)` vrátil i záznam
+        // cizí galerie, stačilo zkoušet čísla.
+        $event = DB::table('journey_events')->where('id', $id)->where('gallery_space_id', $space->id)->first();
+        if (! $event) {
+            return response()->json(['error' => 'not found'], 404);
+        }
+
+        return response()->json($event);
     }
 
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         DB::table('journey_events')
             ->where('id', $id)
@@ -137,11 +147,12 @@ class JourneyController extends Controller
     public function autoSuggest(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         // Cluster by date + 1° grid cell
         $clusters = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNotNull('latitude')
             ->whereNotNull('longitude')
             ->whereNotNull('taken_at')
@@ -201,6 +212,7 @@ class JourneyController extends Controller
             $samplePhotos = MediaItem::with('variants')
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereDate('taken_at', $cluster->visit_date)
                 ->whereRaw('ABS(latitude - ?) < 0.2 AND ABS(longitude - ?) < 0.2', [$lat, $lng])
                 ->orderBy('taken_at')
@@ -234,7 +246,7 @@ class JourneyController extends Controller
     public function autoImport(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $v = $request->validate([
             'events' => 'required|array|max:50',
@@ -292,7 +304,7 @@ class JourneyController extends Controller
     public function photos(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $event = DB::table('journey_events')
             ->where('id', $id)
@@ -305,6 +317,7 @@ class JourneyController extends Controller
 
         $q = MediaItem::where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereDate('taken_at', $event->event_date)
             ->with('variants');
 
@@ -325,6 +338,18 @@ class JourneyController extends Controller
             'latitude' => $p->latitude,
             'longitude' => $p->longitude,
         ]));
+    }
+
+    /**
+     * První prostor účtu — týž, který posoudila brána `dvojice:klic`.
+     * Účet, který si galerii ještě nezaložil, dostane 403, ne chybu serveru.
+     *
+     * Fotky se v deníku filtrují i podle `is_hidden`: je to sdílený pohled
+     * dvojice, fotka z trezoru do něj nepatří ani jako náhled či počet.
+     */
+    private function prostor(User $user): GallerySpace
+    {
+        return $user->gallerySpaces()->first() ?? abort(403, 'Nejdřív si založte galerii nebo přijměte pozvánku.');
     }
 
     // ─── Nominatim helpers ──────────────────────────────────────────────────

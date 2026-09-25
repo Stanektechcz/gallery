@@ -2,6 +2,8 @@
 
 namespace App\Services\Planning;
 
+use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cestina;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -211,7 +213,9 @@ class TripPreparationTimelineService
         $completed = $obsolete->update(['completed_at' => now(), 'updated_at' => now()]);
 
         $reminderSpecs = $this->reminderSpecs($snapshot);
-        $members = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->pluck('user_id');
+        // Připomínky přípravy jen dvojici — host prostoru k cestě nepatří.
+        $space = GallerySpace::find($trip->gallery_space_id);
+        $members = $space ? app(PristupDoGalerie::class)->dvojice($space)->pluck('id') : collect();
         $reminderKeys = [];
         $remindersCreated = 0;
         $remindersUpdated = 0;
@@ -219,7 +223,11 @@ class TripPreparationTimelineService
         foreach ($members as $memberId) {
             foreach ($reminderSpecs as $spec) {
                 $reminderKeys[] = $spec['key'];
-                $remindAt = Carbon::parse($spec['remind_at']);
+                // Časová osa počítá `starts_at` karty jako hodiny v pásmu cesty
+                // (`+02:00`). Doručování porovnává `remind_at` s `now()` v UTC,
+                // takže se ukládá okamžik v UTC — bez převodu by databáze dostala
+                // místní hodiny a připomínka by přišla o hodinu či dvě později.
+                $remindAt = Carbon::parse($spec['remind_at'])->utc();
                 if ($remindAt->lte(now())) {
                     continue;
                 }
@@ -245,6 +253,9 @@ class TripPreparationTimelineService
             $obsoleteReminders->whereNotIn('automation_key', array_unique($reminderKeys));
         }
         $obsoleteReminders->delete();
+        // Automatické připomínky, které dřív dostal i host, se při další synchronizaci uklidí.
+        DB::table('event_reminders')->where('event_id', $event->id)->where('automation_source', self::SOURCE)->where('status', 'pending')
+            ->whereNotIn('user_id', $members->all())->delete();
 
         return ['event_uuid' => $event->uuid, 'tasks_created' => $created, 'tasks_updated' => $updated, 'tasks_completed' => $completed, 'reminders_created' => $remindersCreated, 'reminders_updated' => $remindersUpdated, 'reminders_skipped' => $remindersSkipped];
     }

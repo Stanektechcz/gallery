@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Services\Auth\PristupDoGalerie;
+use App\Services\Planning\TripPartnerFinanceService;
 use App\Services\Travel\TravelJournalStoryService;
+use App\Support\Cas;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -17,11 +21,12 @@ class TripPlanController extends Controller
     {
         $trip = $this->trip($request, $id);
         $this->ensureDays($trip);
-        $today = now()->toDateString();
+        $ted = $this->tedNaCeste($trip);
+        $today = $ted->toDateString();
         $day = DB::table('trip_days')->where('trip_id', $id)->where('date', $today)->first()
             ?? DB::table('trip_days')->where('trip_id', $id)->orderBy('date')->first();
         $activities = $day ? DB::table('trip_activities')->where('trip_day_id', $day->id)->orderByRaw('starts_at is null, starts_at')->orderBy('sort_order')->get() : collect();
-        $currentTime = now()->format('H:i:s');
+        $currentTime = $ted->format('H:i:s');
         $current = $activities->first(fn ($item) => $item->starts_at && $item->starts_at <= $currentTime && (! $item->ends_at || $item->ends_at >= $currentTime));
         $next = $activities->first(fn ($item) => $item->status !== 'done' && (! $item->starts_at || $item->starts_at > $currentTime));
         $done = $activities->where('status', 'done')->count();
@@ -86,7 +91,8 @@ class TripPlanController extends Controller
             $metadata = [];
             if ($data['type'] === 'expense') {
                 $amount = round((float) $data['amount'], 2);
-                $memberIds = DB::table('gallery_space_user')->where('gallery_space_id', $trip->gallery_space_id)->orderBy('user_id')->pluck('user_id')->all();
+                // Společný výdaj se dělí jen mezi dvojici, ne s hostem prostoru.
+                $memberIds = app(TripPartnerFinanceService::class)->coupleIds((int) $trip->gallery_space_id);
                 $share = $data['expense_share'] ?? 'shared';
                 $splitIds = $share === 'personal' ? [$request->user()->id] : $memberIds;
                 $parts = [];
@@ -114,7 +120,7 @@ class TripPlanController extends Controller
             $journal = array_intersect_key($data, array_flip(['type', 'content', 'latitude', 'longitude', 'amount', 'currency', 'mood']));
             $journal['currency'] = isset($journal['currency']) ? strtoupper($journal['currency']) : ($data['type'] === 'expense' ? strtoupper($trip->currency ?? 'CZK') : null);
             $journal['metadata'] = $metadata ? json_encode($metadata) : null;
-            $journal['trip_day_id'] = DB::table('trip_days')->where('trip_id', $id)->where('date', now()->toDateString())->value('id');
+            $journal['trip_day_id'] = DB::table('trip_days')->where('trip_id', $id)->where('date', $this->tedNaCeste($trip)->toDateString())->value('id');
             $journal['visibility'] = $visibility;
             $journal['is_story_worthy'] = $visibility === 'shared' && in_array($data['type'], ['note', 'voice', 'location'], true) && ($data['is_story_worthy'] ?? true);
 
@@ -347,13 +353,31 @@ class TripPlanController extends Controller
         return response()->json(['reordered' => count($requested)]);
     }
 
+    /**
+     * Cesta z prostoru, kde účet patří do dvojice — ne z galerie, kam je jen
+     * pozvaný jako host (viz `PristupDoGalerie::prostoryDvojice()`).
+     */
     private function trip(Request $request, int $id): object
     {
-        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
+        $spaceIds = app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
         $trip = DB::table('trips')->where('id', $id)->whereIn('gallery_space_id', $spaceIds)->first();
         abort_unless($trip, 404);
 
         return $trip;
+    }
+
+    /**
+     * „Teď" na cestě — v pásmu cesty, jinak dvojice. Dny cesty (`trip_days.date`)
+     * i časy aktivit jsou místní hodiny; `now()` v UTC by po 22:00 ukazoval
+     * ještě včerejší den a program o dvě hodiny posunutý.
+     */
+    private function tedNaCeste(object $trip): CarbonImmutable
+    {
+        try {
+            return CarbonImmutable::now($trip->timezone ?: Cas::pasmo());
+        } catch (\Throwable) {
+            return Cas::ted();
+        }
     }
 
     private function activity(int $tripId, int $activityId): object
@@ -376,7 +400,9 @@ class TripPlanController extends Controller
         $end = Carbon::parse($trip->end_date);
         $rows = [];
         $order = 0;
-        for ($date = $start->copy(); $date->lte($end); $date->addDay()) {
+        // Strop jako v `CalendarEventTripService::createDays()` — i cesta uložená
+        // před omezením délky nezaloží tisíce dní najednou.
+        for ($date = $start->copy(); $date->lte($end) && $order < TripController::MAX_DNI; $date->addDay()) {
             $rows[] = ['trip_id' => $trip->id, 'date' => $date->toDateString(), 'title' => 'Den '.($order + 1), 'sort_order' => $order++, 'created_at' => now(), 'updated_at' => now()];
         }
         DB::table('trip_days')->insert($rows);

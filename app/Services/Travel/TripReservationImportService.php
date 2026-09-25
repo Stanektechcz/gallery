@@ -4,12 +4,16 @@ namespace App\Services\Travel;
 
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\Process\Process;
 use Throwable;
 
 class TripReservationImportService
 {
+    /** Hláška pro klienta, když soubor nejde přečíst — bez podrobností ze serveru. */
+    public const NECITELNE = 'Soubor se nepodařilo přečíst automaticky. Údaje doplňte v následné kontrole.';
+
     /** @return array{text:string,method:string,error:?string,data:array<string,mixed>} */
     public function analyse(?UploadedFile $file, ?string $pastedText, object $trip): array
     {
@@ -90,7 +94,10 @@ class TripReservationImportService
                 return $this->process([(string) config('services.travel_documents.tesseract_path', 'tesseract'), $path, 'stdout', '-l', (string) config('services.travel_documents.tesseract_languages', 'ces+eng')], 'tesseract');
             }
         } catch (Throwable $exception) {
-            return ['', 'manual', 'Automatické čtení souboru není na serveru dostupné: '.Str::limit($exception->getMessage(), 300)];
+            // Text výjimky nese cesty a nastavení serveru — patří do logu, ne klientovi.
+            Log::warning('TripReservationImportService: čtení souboru selhalo', ['mime' => $mime, 'error' => $exception->getMessage()]);
+
+            return ['', 'manual', self::NECITELNE];
         }
 
         return ['', 'manual', 'Tento typ souboru nelze číst automaticky. Údaje doplňte v následné kontrole.'];
@@ -103,9 +110,13 @@ class TripReservationImportService
         $process->setTimeout(25);
         $process->run();
         if (! $process->isSuccessful()) {
-            $message = trim($process->getErrorOutput()) ?: 'Nástroj skončil bez čitelného výstupu.';
+            // Výpis nástroje (cesty, verze, parametry) jen do logu; klient dostane obecnou hlášku.
+            Log::warning('TripReservationImportService: nástroj pro čtení skončil chybou', [
+                'method' => $method, 'exit_code' => $process->getExitCode(),
+                'error' => Str::limit(trim($process->getErrorOutput()), 1000),
+            ]);
 
-            return ['', 'manual', Str::limit($message, 400)];
+            return ['', 'manual', self::NECITELNE];
         }
         $text = $this->cleanText($process->getOutput());
 

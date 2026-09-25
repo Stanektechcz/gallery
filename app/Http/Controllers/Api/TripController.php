@@ -6,11 +6,15 @@ use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\CalendarEvent;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Media\AlbumCurationAssistantService;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\TripPreparationTimelineService;
 use App\Services\Travel\TransportSearchService;
+use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -19,9 +23,20 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class TripController extends Controller
 {
+    /**
+     * Nejdelší cesta ve dnech. Každý den je řádek v `trip_days`
+     * (`TripPlanController::ensureDays()`) — stejný strop jako
+     * `CalendarEventTripService::createDays()`.
+     */
+    public const MAX_DNI = 366;
+
+    /** Horní mez rozpočtu — sloupec `trips.budget` je `decimal(12,2)`. */
+    private const MAX_ROZPOCET = '9999999999.99';
+
     public function __construct(
         private readonly TransportSearchService $transportSearch,
         private readonly TripPreparationTimelineService $tripPreparation,
@@ -37,7 +52,7 @@ class TripController extends Controller
     public function index(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $trips = DB::table('trips')
             ->where('gallery_space_id', $space->id)
@@ -53,7 +68,7 @@ class TripController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $v = $request->validate([
             'name' => 'required|string|max:255',
@@ -63,9 +78,10 @@ class TripController extends Controller
             'notes' => 'nullable|string|max:10000',
             'status' => 'nullable|in:draft,planned,active,completed,archived',
             'timezone' => 'nullable|timezone',
-            'budget' => 'nullable|numeric|min:0',
+            'budget' => 'nullable|numeric|min:0|max:'.self::MAX_ROZPOCET,
             'currency' => 'nullable|string|size:3',
         ]);
+        $this->overDelku($v['start_date'], $v['end_date']);
 
         $id = DB::table('trips')->insertGetId([
             'gallery_space_id' => $space->id,
@@ -92,7 +108,7 @@ class TripController extends Controller
     public function show(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
         if (! $trip) {
@@ -108,20 +124,28 @@ class TripController extends Controller
     public function update(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
+
+        $before = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
+        if (! $before) {
+            return response()->json(['error' => 'not found'], 404);
+        }
 
         $v = $request->validate([
             'name' => 'nullable|string|max:255',
             'description' => 'nullable|string|max:5000',
-            'start_date' => 'nullable|date',
-            'end_date' => 'nullable|date',
+            // `required` u poslaného klíče: `null` by v NOT NULL sloupci skončil chybou serveru.
+            'start_date' => 'sometimes|required|date',
+            'end_date' => 'sometimes|required|date',
             'notes' => 'nullable|string|max:10000',
             'status' => 'nullable|in:draft,planned,active,completed,archived',
             'timezone' => 'nullable|timezone',
-            'budget' => 'nullable|numeric|min:0',
+            'budget' => 'nullable|numeric|min:0|max:'.self::MAX_ROZPOCET,
             'currency' => 'nullable|string|size:3',
             'is_offline_available' => 'nullable|boolean',
         ]);
+        // Přijde-li jen jedno datum, porovnává se s tím druhým uloženým.
+        $this->overDelku($v['start_date'] ?? $before->start_date, $v['end_date'] ?? $before->end_date);
 
         // The validated array is already only what the caller sent, so filtering nulls
         // added nothing except the inability to clear a trip's notes, description or
@@ -139,16 +163,7 @@ class TripController extends Controller
             return response()->json(['error' => 'not found'], 404);
         }
 
-        if (array_key_exists('start_date', $v) || array_key_exists('end_date', $v)) {
-            foreach (DB::table('calendar_events')->where('trip_id', $trip->id)->get() as $event) {
-                $startsAt = Carbon::parse($event->starts_at)->setDateFrom(Carbon::parse($trip->start_date));
-                $updateEvent = ['starts_at' => $startsAt, 'updated_at' => now()];
-                if ($event->ends_at) {
-                    $updateEvent['ends_at'] = Carbon::parse($event->ends_at)->setDateFrom(Carbon::parse($trip->end_date));
-                }
-                DB::table('calendar_events')->where('id', $event->id)->update($updateEvent);
-            }
-        }
+        $this->posunUdalostiCesty($before, $trip);
         if ($this->tripPreparation->canSync()) {
             $this->tripPreparation->sync($trip);
         }
@@ -162,7 +177,7 @@ class TripController extends Controller
     public function destroy(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         DB::table('trips')
             ->where('id', $id)
@@ -181,7 +196,7 @@ class TripController extends Controller
     {
         try {
             $user = $request->user();
-            $space = $user->gallerySpaces()->first();
+            $space = $this->prostor($user);
 
             if (! $this->tripBelongsToSpace($id, $space->id)) {
                 return response()->json(['error' => 'not found'], 404);
@@ -189,9 +204,11 @@ class TripController extends Controller
 
             $mediaIds = DB::table('trip_media')->where('trip_id', $id)->pluck('media_item_id');
 
+            // Sdílený seznam cesty — fotka z trezoru do něj nepatří, i když je přiřazená.
             $items = MediaItem::with('variants')
                 ->whereIn('id', $mediaIds)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->orderBy('taken_at')
                 ->get()
                 ->map(fn ($p) => [
@@ -221,7 +238,7 @@ class TripController extends Controller
     {
         try {
             $user = $request->user();
-            $space = $user->gallerySpaces()->first();
+            $space = $this->prostor($user);
 
             $trip = DB::table('trips')->where('id', $id)->where('gallery_space_id', $space->id)->first();
             if (! $trip) {
@@ -233,6 +250,7 @@ class TripController extends Controller
             $suggested = MediaItem::with('variants')
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereDate('taken_at', '>=', $trip->start_date)
                 ->whereDate('taken_at', '<=', $trip->end_date)
                 ->whereNotIn('id', $alreadyLinked)
@@ -264,7 +282,7 @@ class TripController extends Controller
     public function addMedia(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -274,8 +292,11 @@ class TripController extends Controller
             'media_ids.*' => 'integer',
         ]);
 
+        // Fotku z trezoru přiřadí jen ten, kdo má trezor právě odemčený; jinak
+        // by šlo zkoušet čísla a podle `added` poznat, co v trezoru je.
         $validIds = MediaItem::where('gallery_space_id', $space->id)
             ->whereIn('id', $v['media_ids'])
+            ->when(! Trezor::odemcen($request), fn ($query) => $query->where('is_hidden', false))
             ->pluck('id');
 
         $now = now();
@@ -296,7 +317,7 @@ class TripController extends Controller
     public function removeMedia(Request $request, int $id, int $mediaId): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -329,6 +350,8 @@ class TripController extends Controller
             ->where('trip_media.trip_id', $trip->id)
             ->where('media_items.gallery_space_id', $space->id)
             ->whereNull('media_items.trashed_at')
+            // Sdílená vzpomínka se ukazuje oběma — fotka z trezoru do ní nesmí.
+            ->where('media_items.is_hidden', false)
             ->whereIn('media_items.id', $mediaIds)
             ->count();
         abort_unless($linkedMediaCount === count($mediaIds), 422, 'Pro vzpomínku lze vybrat jen média přiřazená k této cestě.');
@@ -438,7 +461,9 @@ class TripController extends Controller
             $album->media()->sync($sync);
             $album->update(['media_count' => count($sync), 'total_size_bytes' => $orderedMedia->sum('size_bytes')]);
 
-            $permissionRows = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
+            // Editor alba jen dvojice. Host prostoru (`viewer`) by jinak dostal
+            // výslovné právo upravovat album, které mu `AlbumPolicy` jinak nedá.
+            $permissionRows = app(PristupDoGalerie::class)->dvojice($space)->pluck('id')->map(fn ($userId) => [
                 'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now(),
             ])->all();
             if ($permissionRows) {
@@ -474,7 +499,8 @@ class TripController extends Controller
         $completion = [
             'activities_total' => DB::table('trip_activities')->join('trip_days', 'trip_days.id', '=', 'trip_activities.trip_day_id')->where('trip_days.trip_id', $trip->id)->count(),
             'activities_done' => DB::table('trip_activities')->join('trip_days', 'trip_days.id', '=', 'trip_activities.trip_day_id')->where('trip_days.trip_id', $trip->id)->where('trip_activities.status', 'done')->count(),
-            'media_count' => DB::table('trip_media')->where('trip_id', $trip->id)->count(),
+            'media_count' => DB::table('trip_media')->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
+                ->where('trip_media.trip_id', $trip->id)->whereNull('media_items.trashed_at')->where('media_items.is_hidden', false)->count(),
             'has_shared_memory' => DB::table('shared_memory_moments')->where('trip_id', $trip->id)->exists(),
             'has_recap_album' => Schema::hasColumn('albums', 'trip_id') && DB::table('albums')->where('trip_id', $trip->id)->whereNull('deleted_at')->exists(),
             'actual_expenses' => (float) DB::table('trip_expenses')->where('trip_id', $trip->id)->where('state', 'actual')->sum('amount'),
@@ -591,7 +617,7 @@ class TripController extends Controller
         }
 
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -661,7 +687,7 @@ class TripController extends Controller
     public function updateWaypoint(Request $request, int $id, int $wpId): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -703,7 +729,7 @@ class TripController extends Controller
     public function reorderWaypoints(Request $request, int $id): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -1056,7 +1082,7 @@ class TripController extends Controller
     public function removeWaypoint(Request $request, int $id, int $wpId): JsonResponse
     {
         $user = $request->user();
-        $space = $user->gallerySpaces()->first();
+        $space = $this->prostor($user);
 
         if (! $this->tripBelongsToSpace($id, $space->id)) {
             return response()->json(['error' => 'not found'], 404);
@@ -1271,6 +1297,85 @@ class TripController extends Controller
         ];
     }
 
+    /**
+     * První prostor účtu — týž, který posoudila brána `dvojice:klic`.
+     * Účet, který si galerii ještě nezaložil, dostane 403, ne chybu serveru.
+     */
+    private function prostor(User $user): GallerySpace
+    {
+        return $user->gallerySpaces()->first() ?? abort(403, 'Nejdřív si založte galerii nebo přijměte pozvánku.');
+    }
+
+    /**
+     * Konec cesty nesmí být před začátkem a cesta nesmí být delší než
+     * `MAX_DNI`. U úpravy se porovnává i s uloženým datem, když přijde jen
+     * jedno z nich.
+     */
+    private function overDelku(string $start, string $end): void
+    {
+        $od = Carbon::parse($start)->startOfDay();
+        $do = Carbon::parse($end)->startOfDay();
+        if ($do->lt($od)) {
+            throw ValidationException::withMessages(['end_date' => 'Konec cesty nemůže být před jejím začátkem.']);
+        }
+        if ((int) round($od->diffInDays($do)) + 1 > self::MAX_DNI) {
+            throw ValidationException::withMessages(['end_date' => 'Cesta může trvat nejvýš '.self::MAX_DNI.' dní.']);
+        }
+    }
+
+    /**
+     * Posune události kalendáře navázané na cestu, když se změnil její termín.
+     *
+     * Dřív každé uložení s datem (i beze změny) přepsalo datum **všech**
+     * událostí s `trip_id` na začátek a konec cesty — večerní vlak z
+     * posledního dne tak skončil na prvním dni a úkoly přišly o své termíny.
+     *
+     * - Hlavní karta cesty dostane nový termín; časy dne zůstanou. Hlavní je
+     *   karta `type = trip`, nebo ta, která pokrývá právě celý dosavadní
+     *   termín — kalendář ji umí založit s jiným typem a termín cesty podle
+     *   ní řídí (`CalendarPlanningController::syncTripSchedule()`).
+     * - Ostatní navázané události (rezervace, úkoly…) se posunou o tolik dní,
+     *   o kolik se posunul začátek cesty. Samotné prodloužení nebo zkrácení
+     *   konce je nechá na místě.
+     *
+     * S událostí se posunou i její čekající připomínky, o stejný rozdíl.
+     */
+    private function posunUdalostiCesty(object $before, object $trip): void
+    {
+        $oldStart = Carbon::parse($before->start_date)->startOfDay();
+        $oldEnd = Carbon::parse($before->end_date)->startOfDay();
+        $newStart = Carbon::parse($trip->start_date)->startOfDay();
+        $newEnd = Carbon::parse($trip->end_date)->startOfDay();
+        if ($oldStart->equalTo($newStart) && $oldEnd->equalTo($newEnd)) {
+            return;
+        }
+        $shiftDays = (int) round($oldStart->diffInDays($newStart, false));
+
+        $events = DB::table('calendar_events')->where('trip_id', $trip->id)->where('gallery_space_id', $trip->gallery_space_id)->get();
+        foreach ($events as $event) {
+            $startsAt = Carbon::parse($event->starts_at);
+            $endsAt = $event->ends_at ? Carbon::parse($event->ends_at) : null;
+            $isMain = $event->type === 'trip'
+                || ($startsAt->isSameDay($oldStart) && ($endsAt ?? $startsAt)->isSameDay($oldEnd));
+            if (! $isMain && $shiftDays === 0) {
+                continue;
+            }
+            $newStartsAt = $isMain ? $startsAt->copy()->setDateFrom($newStart) : $startsAt->copy()->addDays($shiftDays);
+            $update = ['starts_at' => $newStartsAt, 'updated_at' => now()];
+            if ($endsAt) {
+                $update['ends_at'] = $isMain ? $endsAt->copy()->setDateFrom($newEnd) : $endsAt->copy()->addDays($shiftDays);
+            }
+            DB::table('calendar_events')->where('id', $event->id)->update($update);
+
+            $seconds = $newStartsAt->getTimestamp() - $startsAt->getTimestamp();
+            if ($seconds !== 0) {
+                foreach (DB::table('event_reminders')->where('event_id', $event->id)->where('status', 'pending')->get(['id', 'remind_at']) as $reminder) {
+                    DB::table('event_reminders')->where('id', $reminder->id)->update(['remind_at' => Carbon::parse($reminder->remind_at)->addSeconds($seconds), 'updated_at' => now()]);
+                }
+            }
+        }
+    }
+
     private function tripBelongsToSpace(int $tripId, int $spaceId): bool
     {
         return DB::table('trips')->where('id', $tripId)->where('gallery_space_id', $spaceId)->exists();
@@ -1284,14 +1389,16 @@ class TripController extends Controller
                 ->orderBy('sort_order')
                 ->get()
                 ->map(fn ($wp) => $this->castWaypoint($wp));
+            // Počet i obálka jen z fotek mimo koš a trezor — seznam cest vidí oba.
             $mediaCount = DB::table('trip_media')
                 ->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
                 ->where('trip_media.trip_id', $trip->id)
                 ->whereNull('media_items.trashed_at')
+                ->where('media_items.is_hidden', false)
                 ->count();
             $coverThumb = null;
             if (! empty($trip->cover_media_id)) {
-                $cover = MediaItem::with('variants')->find($trip->cover_media_id);
+                $cover = MediaItem::with('variants')->whereNull('trashed_at')->where('is_hidden', false)->find($trip->cover_media_id);
                 $coverThumb = $cover?->thumbnail_url;
             }
             if (! $coverThumb && $mediaCount > 0) {
@@ -1299,6 +1406,7 @@ class TripController extends Controller
                     ->join('media_items', 'media_items.id', '=', 'trip_media.media_item_id')
                     ->where('trip_media.trip_id', $trip->id)
                     ->whereNull('media_items.trashed_at')
+                    ->where('media_items.is_hidden', false)
                     ->orderBy('media_items.taken_at')
                     ->value('media_items.id');
 

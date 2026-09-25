@@ -2,17 +2,29 @@
 
 namespace App\Services\Planning;
 
+use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 class TripPartnerFinanceService
 {
+    public function __construct(private readonly PristupDoGalerie $pristup) {}
+
+    /**
+     * Saldo cesty mezi dvojicí.
+     *
+     * Dřív se výdaje dělily mezi všechny členy prostoru — host s rolí
+     * `viewer` tak „dlužil" třetinu hotelu a návrh vyrovnání chtěl po něm
+     * peníze. Počítá se jen s `PristupDoGalerie::dvojice()`.
+     */
     public function snapshot(object $trip): array
     {
         $members = DB::table('gallery_space_user as membership')
             ->join('users', 'users.id', '=', 'membership.user_id')
             ->where('membership.gallery_space_id', $trip->gallery_space_id)
+            ->whereIn('users.id', $this->coupleIds((int) $trip->gallery_space_id))
             ->orderBy('membership.joined_at')->orderBy('users.id')
             ->get(['users.id', 'users.name']);
         $memberIds = $members->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -113,6 +125,20 @@ class TripPartnerFinanceService
             'currencies' => $snapshots->all(),
             'settlements' => $settlementRows,
         ];
+    }
+
+    /**
+     * Id členů dvojice prostoru (seřazená) — s kým se výdaje cesty dělí.
+     *
+     * @return list<int>
+     */
+    public function coupleIds(int $spaceId): array
+    {
+        $space = GallerySpace::find($spaceId);
+
+        return $space
+            ? $this->pristup->dvojice($space)->pluck('id')->map(fn ($id) => (int) $id)->sort()->values()->all()
+            : [];
     }
 
     public function equalShares(float $amount, array $memberIds): array
