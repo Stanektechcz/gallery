@@ -67,6 +67,9 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
     /** A která videa mají soubor, který jde přehrát. */
     private array $prehratelne = [];
 
+    /** Kolik fotek album ukáže; `gallery_space_id => [album_id => počet]`. Viz `viditelneVAlbech()`. */
+    private array $poctyAlb = [];
+
     public function skupina(): string
     {
         return 'knihovna';
@@ -604,17 +607,19 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             return [];
         }
 
+        $pocty = $this->viditelneVAlbech($prostor);
+
         return DB::table('albums')
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('deleted_at')
             ->whereNotNull('archived_at')
             ->orderByDesc('archived_at')
             ->limit(50)
-            ->get(['uuid', 'title', 'media_count', 'archived_at'])
+            ->get(['id', 'uuid', 'title', 'archived_at'])
             ->map(fn (object $a) => [
                 'id' => (string) $a->uuid,
                 'name' => (string) $a->title,
-                'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
+                'count' => $this->pocet($pocty[$a->id] ?? 0, 'položka', 'položky', 'položek'),
                 'when' => 'archivováno '.Cas::mistni($a->archived_at)?->format('j. n. Y'),
             ])
             ->values()
@@ -628,10 +633,23 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->whereNull('deleted_at')
             // Archivovaná alba mezi Alby nepatří (počítač ani telefon) — viz `archivovanaAlba()`.
             ->when($this->archivAlb(), fn ($q) => $q->whereNull('archived_at'))
-            ->with('cover:id,uuid')
+            ->with('cover:id,uuid,is_hidden,trashed_at')
             ->orderByDesc('updated_at')
             ->limit(200)
             ->get();
+
+        /*
+         * Obálka jen z fotky, kterou mřížka ukáže.
+         *
+         * Obálkou mohla zůstat fotka, která mezitím odešla do trezoru nebo do
+         * koše. Náhled takové fotky server nevydá (404), takže dlaždice alba
+         * ukázala rozbitý obrázek — a tím prozradila, že v albu je něco
+         * schovaného. Bez obálky si prototyp dokreslí barevný přechod.
+         */
+        $obalka = fn (?MediaItem $m): ?string => $m && ! $m->is_hidden && $m->trashed_at === null
+            ? $this->nahled($m)
+            : null;
+        $pocty = $this->viditelneVAlbech($prostor);
 
         // Rodič podle uuid a hloubka z řetězu rodičů — i když rodič sám mezi
         // posledními upravenými není. Sloupec `depth` se přepočítává jen při
@@ -640,7 +658,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('deleted_at')
             ->orderBy('title')
-            ->get(array_merge(['id', 'parent_id', 'uuid', 'title', 'media_count'], $this->archivAlb() ? ['archived_at'] : []))
+            ->get(array_merge(['id', 'parent_id', 'uuid', 'title'], $this->archivAlb() ? ['archived_at'] : []))
             ->keyBy('id');
         $rodice = $vsechna->map(fn (object $r) => $r->uuid);
         $hloubka = function (int $id) use ($vsechna): int {
@@ -678,13 +696,13 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             'parent' => $a->parent_id ? ($rodice[$a->parent_id] ?? null) : null,
             'depth' => $hloubka((int) $a->id),
             // Obálka alba; bez ní si prototyp dokreslí barevný přechod z `n`.
-            'bg' => $a->cover ? $this->nahled($a->cover) : null,
+            'bg' => $obalka($a->cover),
             // Celá cesta, ne jen jméno: prototyp ji kreslí jako „Chorvatsko → Zadar".
             // Oddělovač, jaký prototyp čte (drobečková navigace dělí podle „ → "); v databázi je „ / ".
             'path' => str_replace(' / ', ' → ', $a->full_display_path ?: $a->title),
             'date' => $this->rozsah($a),
             'place' => $a->location_name ?: ($a->event_place_name ?: ''),
-            'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
+            'count' => $this->pocet($pocty[$a->id] ?? 0, 'položka', 'položky', 'položek'),
             'subs' => (int) ($a->descendant_count ?? 0),
             // Album se v aplikaci neoznačuje jako oblíbené; sdílené je to,
             // co není soukromé.
@@ -714,14 +732,55 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             $rodic['children'][] = [
                 'id' => $a->uuid,
                 'name' => $a->title,
-                'count' => $this->pocet((int) $a->media_count, 'položka', 'položky', 'položek'),
-                'bg' => $model && $model->cover ? $this->nahled($model->cover) : null,
+                'count' => $this->pocet($pocty[$a->id] ?? 0, 'položka', 'položky', 'položek'),
+                'bg' => $obalka($model?->cover),
                 'n' => (int) $a->id,
             ];
             $radky[$a->parent_id] = $rodic;
         }
 
         return $radky->values()->all();
+    }
+
+    /**
+     * Kolik položek album ukáže: bez trezoru, bez koše, každá fotka jednou.
+     *
+     * Sloupec `albums.media_count` přepočítává jen zařazení a vyjmutí
+     * (`AlbaController::prepocitej`); fotka poslaná do koše nebo do trezoru
+     * jinudy v něm zůstala a u alba stálo víc, než se otevřelo — o kolik,
+     * tolik schovává trezor. Členství je totéž jako u archivu a sdílené
+     * stránky: spojovací tabulka i `primary_album_id`. `UNION` dvojice
+     * (album, fotka) sloučí, takže fotka zařazená oběma cestami se nepočítá
+     * dvakrát. Jeden dotaz na celý prostor, ne jeden na album.
+     *
+     * @return array<int, int>
+     */
+    private function viditelneVAlbech(GallerySpace $prostor): array
+    {
+        if (isset($this->poctyAlb[$prostor->id])) {
+            return $this->poctyAlb[$prostor->id];
+        }
+
+        $viditelne = fn (Builder $q, string $m) => $q
+            ->where($m.'.gallery_space_id', $prostor->id)
+            ->where($m.'.is_hidden', false)
+            ->whereNull($m.'.trashed_at')
+            ->whereNull($m.'.deleted_at');
+
+        $hlavni = $viditelne(DB::table('media_items as m'), 'm')
+            ->whereNotNull('m.primary_album_id')
+            ->select(['m.primary_album_id as album_id', 'm.id as media_id']);
+
+        $vazby = $viditelne(DB::table('album_media as am')->join('media_items as m', 'm.id', '=', 'am.media_item_id'), 'm')
+            ->select(['am.album_id as album_id', 'm.id as media_id']);
+
+        return $this->poctyAlb[$prostor->id] = DB::query()
+            ->fromSub($hlavni->union($vazby), 'clenstvi')
+            ->groupBy('album_id')
+            ->selectRaw('album_id, COUNT(*) as pocet')
+            ->pluck('pocet', 'album_id')
+            ->map(fn ($n) => (int) $n)
+            ->all();
     }
 
     /**

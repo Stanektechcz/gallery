@@ -329,6 +329,59 @@ class AlbaTest extends TestCase
         $this->assertSame(['Pustevny'], array_column($alba[$rodic]['children'], 'name'));
     }
 
+    /**
+     * Počet u alba je počet fotek, které album ukáže.
+     *
+     * Sloupec `media_count` přepočítávalo jen zařazení a vyjmutí. Fotka poslaná
+     * do koše nebo do trezoru jinudy (mřížka, hromadná akce) v počtu zůstala:
+     * u alba stálo „3 položky" a otevřelo se s jednou — a rozdíl řekl přesně
+     * to, co má trezor schovat. Pravidlo je stejné jako u pruhu let.
+     */
+    public function test_pocet_alba_nepocita_trezor_ani_kos(): void
+    {
+        [$a, $b, $c] = [$this->fotka(), $this->fotka(), $this->fotka()];
+        $rodic = $this->postJson('/api/alba', ['nazev' => 'Beskydy'])->assertOk()->json('album');
+        $album = $this->postJson('/api/alba', ['nazev' => 'Pustevny', 'rodic' => $rodic, 'media' => [$a->uuid, $b->uuid, $c->uuid]])
+            ->assertOk()->json('album');
+
+        $b->update(['is_hidden' => true]);
+        $c->update(['trashed_at' => now(), 'purge_after' => now()->addDays(30)]);
+
+        $alba = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.ALBUMS'))->keyBy('id');
+
+        $this->assertSame('1 položka', $alba[$album]['count']);
+        $this->assertSame(['1 položka'], array_column($alba[$rodic]['children'], 'count'));
+    }
+
+    /**
+     * Obálka z trezoru nebo z koše se na dlaždici alba nedává.
+     *
+     * Náhled takové fotky server odmítne (404), takže dlaždice alba ukázala
+     * rozbitý obrázek — a tím i to, že v albu leží něco schovaného. Bez obálky
+     * si prototyp dokreslí barevný přechod.
+     */
+    public function test_obalka_z_trezoru_ani_z_kose_se_nepodepise(): void
+    {
+        $skryta = $this->fotka(['is_hidden' => true]);
+        $vyhozena = $this->fotka(['trashed_at' => now()]);
+        // Se zmenšeninou, jakou má každá nahraná fotka — bez ní knihovna kreslí přechod tak jako tak.
+        foreach ([$skryta, $vyhozena] as $m) {
+            DB::table('media_variants')->insert([
+                'media_item_id' => $m->id, 'type' => 'thumbnail', 'disk' => 'local',
+                'path' => 'nahledy/'.$m->uuid.'.jpg', 'created_at' => now(), 'updated_at' => now(),
+            ]);
+        }
+        $trezor = $this->postJson('/api/alba', ['nazev' => 'Trezor'])->assertOk()->json('album');
+        $kos = $this->postJson('/api/alba', ['nazev' => 'Koš'])->assertOk()->json('album');
+        Album::where('uuid', $trezor)->update(['cover_media_id' => $skryta->id]);
+        Album::where('uuid', $kos)->update(['cover_media_id' => $vyhozena->id]);
+
+        $alba = collect($this->getJson('/api/data/knihovna')->assertOk()->json('data.ALBUMS'))->keyBy('id');
+
+        $this->assertNull($alba[$trezor]['bg']);
+        $this->assertNull($alba[$kos]['bg']);
+    }
+
     private function fotka(array $navic = []): MediaItem
     {
         static $poradi = 0;
