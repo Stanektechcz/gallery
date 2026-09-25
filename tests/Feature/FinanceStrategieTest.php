@@ -85,6 +85,18 @@ class FinanceStrategieTest extends TestCase
      */
     public function test_pri_rychlem_tempu_varuje_ze_penize_nedojdou(): void
     {
+        /*
+         * Pevně desátého, ne „kdy se testy spustí".
+         *
+         * Rozpočet začíná prvním dnem běžícího měsíce a `uteklo()` (StrategieService)
+         * počítá, kolik dní od začátku doopravdy uplynulo — dřív než třetí den
+         * v měsíci je to míň než tři dny a rada se schválně nevydá (moc málo dat na
+         * odhad tempa). Test ale zapisuje výdaje na prvních osm dní bez ohledu na
+         * to, kdy se spouští — první a druhý den v měsíci by tak sám narazil na
+         * tutéž pojistku, kterou zkouší, a padal by nezávisle na kódu.
+         */
+        $this->travelTo(Carbon::parse('2026-09-10 12:00:00', 'UTC'));
+
         // Delší období, ať je co nevydržet: v běžícím měsíci zbývá pár dní a na ty
         // peníze stačí skoro vždycky.
         $this->rozpocetNaCestu(1000);

@@ -57,16 +57,22 @@ class ObsahPlanovaniTest extends TestCase
      *
      * Prototyp ho tak čte i zapisuje (`m: +p[1] - 1`); poslat lidský měsíc by
      * znamenalo, že se celý kalendář posune o jeden dopředu.
+     *
+     * Datum je od dnešku dvojice, ne napsané natvrdo — kalendář posílá jen
+     * devadesát dní zpátky (`Planovani::DNU_ZPET`), takže pevné datum by
+     * s postupujícím časem z okna vypadlo a test by přestal fungovat kolem
+     * poloviny prosince, ne kvůli chybě v kódu.
      */
     public function test_udalost_ma_mesic_od_nuly(): void
     {
-        $this->udalost(['starts_at' => '2026-09-19 11:00:00', 'title' => 'Plavba na Ugljan']);
+        $kdy = $this->dnes()->addDays(5)->setTime(11, 0);
+        $this->udalost(['starts_at' => $kdy, 'title' => 'Plavba na Ugljan']);
 
         $ev = $this->getJson('/api/data/planovani')->assertOk()->json('data.CALEV.0');
 
-        $this->assertSame(2026, $ev['y']);
-        $this->assertSame(8, $ev['m']);
-        $this->assertSame(19, $ev['d']);
+        $this->assertSame($kdy->year, $ev['y']);
+        $this->assertSame($kdy->month - 1, $ev['m']);
+        $this->assertSame($kdy->day, $ev['d']);
         $this->assertSame('11:00', $ev['time']);
         $this->assertSame('Plavba na Ugljan', $ev['t']);
     }
@@ -107,8 +113,8 @@ class ObsahPlanovaniTest extends TestCase
     public function test_typ_udalosti_se_prelozi_na_druh(): void
     {
         $this->udalost(['type' => 'trip', 'title' => 'Chorvatsko']);
-        $this->udalost(['type' => 'birthday', 'title' => 'Narozeniny', 'starts_at' => '2026-09-20 09:00:00']);
-        $this->udalost(['type' => 'event', 'title' => 'Něco', 'starts_at' => '2026-09-21 09:00:00']);
+        $this->udalost(['type' => 'birthday', 'title' => 'Narozeniny', 'starts_at' => $this->dnes()->addDays(6)->setTime(9, 0)]);
+        $this->udalost(['type' => 'event', 'title' => 'Něco', 'starts_at' => $this->dnes()->addDays(7)->setTime(9, 0)]);
 
         $druhy = collect($this->getJson('/api/data/planovani')->assertOk()->json('data.CALEV'))
             ->pluck('kind', 't');
@@ -122,7 +128,7 @@ class ObsahPlanovaniTest extends TestCase
     public function test_kdo_ma_udalost_se_pozna_z_ucastniku(): void
     {
         $spolecna = $this->udalost(['title' => 'Spolu']);
-        $sama = $this->udalost(['title' => 'Sama', 'starts_at' => '2026-09-20 09:00:00']);
+        $sama = $this->udalost(['title' => 'Sama', 'starts_at' => $this->dnes()->addDays(6)->setTime(9, 0)]);
 
         foreach ([$this->adri, $this->maki] as $kdo) {
             DB::table('event_participants')->insert([
@@ -153,11 +159,12 @@ class ObsahPlanovaniTest extends TestCase
      */
     public function test_pripominka_se_prelozi_do_slov_dialogu(): void
     {
-        $ev = $this->udalost(['starts_at' => '2026-09-19 11:00:00']);
+        $kdy = $this->dnes()->addDays(5)->setTime(11, 0);
+        $ev = $this->udalost(['starts_at' => $kdy]);
 
         DB::table('event_reminders')->insert([
             'event_id' => $ev->id, 'user_id' => $this->adri->id,
-            'channel' => 'database', 'remind_at' => '2026-09-18 09:00:00',
+            'channel' => 'database', 'remind_at' => $kdy->subDay()->setTime(9, 0),
             'status' => 'pending', 'created_at' => now(), 'updated_at' => now(),
         ]);
 
