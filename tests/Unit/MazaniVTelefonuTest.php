@@ -105,6 +105,45 @@ class MazaniVTelefonuTest extends TestCase
         $this->assertStringContainsString('onClick="{{ k.ponechat }}"', $telefon);
     }
 
+    /**
+     * Přepínače formulářů (`sw`) jdou s tím, na co se klepnulo.
+     *
+     * Server přepne jen id z `__zmenene.sw`; bez něj bere celou mapu — a stará
+     * kopie v telefonu by vrátila přepínače, které mezitím změnil druhý.
+     */
+    public function test_prepinace_posilaji_jen_zmenene(): void
+    {
+        $ulozeni = self::metoda(self::dokument(), 'persistSave(');
+
+        $this->assertStringContainsString("if ('sw' in patch)", $ulozeni);
+        // Připojit k tomu, co sestavil `odebraneRozdil`, ne to přepsat.
+        $this->assertStringContainsString('patch.__zmenene = Object.assign({}, patch.__zmenene || {}, { sw: prepnute });', $ulozeni);
+        // Klíč za klíčem proti předchozímu stavu — i „Vrátit" pošle jen jeden přepínač.
+        $this->assertStringContainsString('Object.keys(Object.assign({}, pred, ted)).filter(id => pred[id] !== ted[id])', $ulozeni);
+    }
+
+    /** Den z menu se na serveru maže jen výslovným `''`, ne vynecháním klíče. */
+    public function test_menu_nemaze_den_vynechanim_klice(): void
+    {
+        $telefon = self::dokument();
+
+        preg_match_all('/save\(\{ ckMenu: ([^\n]*)/', $telefon, $zapisy);
+        $this->assertNotEmpty($zapisy[1]);
+
+        foreach ($zapisy[1] as $zapis) {
+            if (str_starts_with($zapis, 'menu }')) {
+                // Kuchařka skládá menu o řádek výš — týmž sloučením přes CKMENU.
+                $this->assertStringContainsString('const menu = Object.assign({}, (window.GalerieData || {}).CKMENU || {}, { [den]: rk });', $telefon);
+
+                continue;
+            }
+
+            $this->assertStringContainsString('CKMENU || {}, { [den]: rk }', $zapis, 'ckMenu se má skládat přes CKMENU: '.$zapis);
+        }
+
+        $this->assertDoesNotMatchRegularExpression('/delete [A-Za-z_.]*(?:menu|Menu|CKMENU)\[/', $telefon);
+    }
+
     public function test_pravidlo_mazani_se_meni_v_nastaveni(): void
     {
         $telefon = self::dokument();

@@ -7369,6 +7369,20 @@ class Component extends DCLogic {
       patch[k] = this.state[k];
     });
     this.odebraneRozdil(prev, patch);
+    /*
+     * Přepínače formulářů: jen ty, na které se klepnulo.
+     *
+     * `sw` odchází celé a server (`NastaveniVeStavu`) přepne jen id
+     * z `__zmenene.sw` — bez něj by celá mapa z telefonu, načtená třeba ráno,
+     * vrátila přepínače, které mezitím změnil druhý. Porovnává se klíč za
+     * klíčem s předchozím stavem, takže i „Vrátit" pošle jen jeden přepínač.
+     * Připojuje se k tomu, co sestavil `odebraneRozdil`, nepřepisuje to.
+     */
+    if ('sw' in patch) {
+      const pred = prev.sw || {}, ted = this.state.sw || {};
+      const prepnute = Object.keys(Object.assign({}, pred, ted)).filter(id => pred[id] !== ted[id]);
+      patch.__zmenene = Object.assign({}, patch.__zmenene || {}, { sw: prepnute });
+    }
     this.zarizeniUloz(prev);
     this._pPrev = Object.assign({}, this.state);
     if (this._pQuiet) return;
