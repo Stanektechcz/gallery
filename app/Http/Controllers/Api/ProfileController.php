@@ -3,9 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Models\AuditLog;
+use App\Notifications\ZmenaEmailuNotification;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
@@ -53,11 +56,26 @@ class ProfileController extends Controller
             'current_password' => 'nullable|string',
         ]);
 
-        if ($data['email'] !== $user->email) {
+        $stary = $user->email;
+        $zmenaAdresy = $data['email'] !== $stary;
+
+        if ($zmenaAdresy) {
             $this->confirmPassword($request, $data['current_password'] ?? null);
         }
 
         $user->update(['name' => $data['name'], 'email' => $data['email']]);
+
+        if ($zmenaAdresy) {
+            AuditLog::record('profile.email_changed', $user, ['z' => $stary, 'na' => $data['email']]);
+
+            // Na starou adresu: kdo ji přepsal na svou, dostal by varování sám.
+            // Výpadek pošty změnu neshodí — adresa už je uložená.
+            try {
+                Notification::route('mail', $stary)->notify(new ZmenaEmailuNotification($user->name, $data['email']));
+            } catch (\Throwable $e) {
+                report($e);
+            }
+        }
 
         return $this->show($request);
     }
