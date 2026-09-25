@@ -4,6 +4,7 @@ namespace App\Services\Billing;
 
 use App\Models\Invoice;
 use App\Models\Payment;
+use App\Support\Cas;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -21,7 +22,13 @@ use Illuminate\Support\Str;
  */
 class InvoiceService
 {
-    /** One per payment, ever. Settling a payment twice must not produce two documents. */
+    /**
+     * One per payment, ever. Settling a payment twice must not produce two documents.
+     *
+     * Kontrola „je už faktura?" běží v transakci se zamčeným řádkem platby.
+     * Mimo zámek by ji dvě souběžná potvrzení prošla obě a vystavila dva
+     * doklady; unikátní `invoices.payment_id` (je-li v databázi) je druhá pojistka.
+     */
     public function forPayment(Payment $payment): Invoice
     {
         $existing = Invoice::where('payment_id', $payment->id)->first();
@@ -32,6 +39,13 @@ class InvoiceService
         $buyer = $payment->buyer;
 
         return DB::transaction(function () use ($payment, $buyer) {
+            Payment::whereKey($payment->getKey())->lockForUpdate()->first();
+
+            $existing = Invoice::where('payment_id', $payment->id)->first();
+            if ($existing) {
+                return $existing;
+            }
+
             return Invoice::create([
                 'uuid' => (string) Str::uuid(),
                 'number' => $this->nextNumber(),
@@ -57,10 +71,13 @@ class InvoiceService
      *
      * lockForUpdate, not max()+1 on its own: two settlements a millisecond apart would
      * otherwise both read the same last number.
+     *
+     * Rok podle Prahy (`Cas::ted()`), ne podle UTC: platba ve 00:30 prvního
+     * ledna by jinak dostala číslo z loňské řady.
      */
     private function nextNumber(): string
     {
-        $year = now()->year;
+        $year = Cas::ted()->year;
         $prefix = (string) $year;
 
         $last = Invoice::where('number', 'like', $prefix.'%')

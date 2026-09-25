@@ -9,6 +9,7 @@ use App\Models\GallerySpace;
 use App\Models\Payment;
 use App\Services\Billing\CheckoutService;
 use App\Services\Billing\ComgateGateway;
+use App\Services\Billing\EntitlementService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,9 +21,16 @@ class CheckoutController extends Controller
     public function __construct(
         private readonly CheckoutService $checkout,
         private readonly ComgateGateway $gateway,
+        private readonly EntitlementService $entitlements,
     ) {}
 
-    /** Starts a purchase and hands the caller the gateway URL to redirect to. */
+    /**
+     * Starts a purchase and hands the caller the gateway URL to redirect to.
+     *
+     * Nákup zahájí správce **tohoto prostoru** (`EntitlementService::spravujePredplatne`),
+     * ne kdokoli s `users.role = owner` — tu má každý zaregistrovaný zákazník,
+     * i když je v galerii jen partner nebo host.
+     */
     public function start(Request $request): JsonResponse
     {
         $data = $request->validate([
@@ -33,7 +41,8 @@ class CheckoutController extends Controller
 
         $user = $request->user();
         $space = $this->space($request);
-        abort_unless(in_array($user->role, ['owner', 'admin'], true), 403, 'Předplatné může měnit jen správce prostoru.');
+        abort_unless($this->entitlements->spravujePredplatne($user, $space), 403,
+            'Předplatné může měnit jen vlastník nebo správce prostoru.');
 
         $period = $data['period'] ?? 'monthly';
 
@@ -88,7 +97,13 @@ class CheckoutController extends Controller
         return redirect('/settings/predplatne')->with($message[0], $message[1]);
     }
 
-    /** Lets the subscription screen poll after the payer returns. */
+    /**
+     * Lets the subscription screen poll after the payer returns.
+     *
+     * Stav platby smí číst kterýkoli člen prostoru, kterého pustí brána
+     * `JenDvojice` — nic nemění, jen se znovu zeptá brány. Důležité je, že
+     * prostor je týž jako při nákupu (viz `space()`).
+     */
     public function status(Request $request, string $reference): JsonResponse
     {
         $space = $this->space($request);
@@ -114,9 +129,19 @@ class CheckoutController extends Controller
         ]);
     }
 
+    /**
+     * Prostor volajícího ve stejném pořadí jako `PristupDoGalerie::proc` a
+     * `BillingController` — `gallerySpaces()` řadí výchozí napřed a pak podle id.
+     *
+     * Dřív tu bylo jen `orderByDesc('is_default')` bez dalšího klíče, a výchozí
+     * je každý prostor založený registrací: přístup se mohl posoudit v jednom
+     * prostoru a nákup založit pro druhý.
+     */
     private function space(Request $request): GallerySpace
     {
-        return GallerySpace::whereHas('members', fn ($members) => $members->whereKey($request->user()->id))
-            ->orderByDesc('is_default')->firstOrFail();
+        $space = $request->user()->gallerySpaces()->first();
+        abort_if($space === null, 404, 'Prostor nebyl nalezen.');
+
+        return $space;
     }
 }

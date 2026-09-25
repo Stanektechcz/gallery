@@ -37,9 +37,10 @@
     <header>
         <div>
             <h1>Faktura {{ $invoice->number }}</h1>
+            {{-- Data podle Prahy, ne UTC: platba ve 00:30 prvního ledna nesmí nést 31. prosinec. --}}
             <p class="muted">
-                Vystaveno {{ $invoice->issued_at?->format('j. n. Y') }}
-                @if ($invoice->paid_at) · Uhrazeno {{ $invoice->paid_at->format('j. n. Y') }} @endif
+                Vystaveno {{ \App\Support\Cas::mistni($invoice->issued_at)?->format('j. n. Y') }}
+                @if ($invoice->paid_at) · Uhrazeno {{ \App\Support\Cas::mistni($invoice->paid_at)->format('j. n. Y') }} @endif
             </p>
         </div>
         <div class="muted" style="text-align: right">

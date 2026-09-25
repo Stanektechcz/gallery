@@ -52,9 +52,16 @@ class SaasModulesTest extends TestCase
         $this->getJson('/api/v1/burps')->assertOk()->assertJsonPath('burps', []);
     }
 
-    public function test_only_an_administrator_may_switch_a_module_on(): void
+    /**
+     * Placený modul bez platby zapne jen provozovatel.
+     *
+     * Dřív stačilo `users.role = owner` — a to má každý, kdo se sám
+     * zaregistruje. Vlastník prostoru teď dostane 422 s odkazem na platbu.
+     */
+    public function test_only_the_operator_may_switch_a_paid_module_on_without_paying(): void
     {
         [$owner, $partner, $space] = $this->couple();
+        config(['gallery.operator_emails' => $owner->email]);
 
         $this->actingAs($partner)->putJson('/api/v1/billing/modules/burps', ['enabled' => true])->assertForbidden();
         $this->actingAs($owner)->putJson('/api/v1/billing/modules/burps', ['enabled' => true])->assertOk();
@@ -64,6 +71,11 @@ class SaasModulesTest extends TestCase
         // Turning it off closes the gate again.
         $this->putJson('/api/v1/billing/modules/burps', ['enabled' => false])->assertOk();
         $this->actingAs($partner)->getJson('/api/v1/burps')->assertStatus(402);
+
+        // Obyčejný vlastník — tedy každý zaregistrovaný zákazník — ho musí koupit.
+        config(['gallery.operator_emails' => 'provoz@jinde.test']);
+        $this->actingAs($owner)->putJson('/api/v1/billing/modules/burps', ['enabled' => true])->assertStatus(422);
+        $this->assertFalse(app(EntitlementService::class)->hasModule($space->fresh(), 'burps'));
     }
 
     public function test_voice_notes_are_included_in_every_plan(): void
@@ -124,17 +136,33 @@ class SaasModulesTest extends TestCase
         $this->assertEquals(4, $index['champion']['score']);
     }
 
+    /**
+     * Placený tarif přidělí provozovatel; vlastník prostoru si vybere jen ten
+     * zdarma, placený kupuje přes platební bránu.
+     */
     public function test_a_plan_can_be_assigned_and_is_reflected_in_the_overview(): void
     {
         [$owner] = $this->couple();
+        $operator = User::factory()->create(['email' => 'provoz@vzpominky.test', 'role' => 'owner', 'is_active' => true]);
+        config(['gallery.operator_emails' => $operator->email]);
+        $space = GallerySpace::where('owner_id', $owner->id)->firstOrFail();
+        $space->members()->attach($operator->id, ['role' => 'admin', 'joined_at' => now()]);
 
         $this->actingAs($owner)->getJson('/api/v1/billing/overview')
             ->assertOk()
             // Falls back to the plan flagged as default.
             ->assertJsonPath('plan.code', 'duo');
 
-        $this->putJson('/api/v1/billing/plan', ['plan_code' => 'rodina'])->assertOk();
-        $this->getJson('/api/v1/billing/overview')->assertOk()->assertJsonPath('plan.code', 'rodina');
+        // Placený tarif si zákazník nepřidělí, kupuje ho.
+        $this->putJson('/api/v1/billing/plan', ['plan_code' => 'rodina'])->assertStatus(422);
+        $this->getJson('/api/v1/billing/overview')->assertOk()->assertJsonPath('plan.code', 'duo');
+
+        $this->actingAs($operator)->putJson('/api/v1/billing/plan', ['plan_code' => 'rodina'])->assertOk();
+        $this->actingAs($owner)->getJson('/api/v1/billing/overview')->assertOk()->assertJsonPath('plan.code', 'rodina');
+
+        // Návrat na tarif zdarma zvládne vlastník sám.
+        $this->putJson('/api/v1/billing/plan', ['plan_code' => 'duo'])->assertOk();
+        $this->getJson('/api/v1/billing/overview')->assertOk()->assertJsonPath('plan.code', 'duo');
     }
 
     /** @return array{0:User,1:User,2:GallerySpace} */

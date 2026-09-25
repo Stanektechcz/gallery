@@ -12,6 +12,7 @@ use App\Models\SpaceFeature;
 use App\Models\SpaceModule;
 use App\Models\SpaceSubscription;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Support\SpaceContext;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Schema;
@@ -225,6 +226,14 @@ class EntitlementService
         return BillingModule::with('grantedFeatures')->whereIn('id', $ids)->get();
     }
 
+    /**
+     * Zapne modul — do `$until`, nebo natrvalo, když konec nikdo neurčil.
+     *
+     * `ends_at` je jediné, podle čeho `activeModules()` rozhoduje. Dřív sem
+     * šlo vždy `null` a zaplacený konec jen do `current_period_ends_at`, takže
+     * jedna měsíční platba odemkla modul navždy. `null` zůstává pro přidělení
+     * provozovatelem a moduly zdarma.
+     */
     public function enableModule(GallerySpace $space, BillingModule $module, ?User $actor = null, string $period = 'monthly', ?\DateTimeInterface $until = null): SpaceModule
     {
         $this->forget($space);
@@ -232,22 +241,44 @@ class EntitlementService
         return SpaceModule::updateOrCreate(
             ['gallery_space_id' => $space->id, 'billing_module_id' => $module->id],
             [
-                'status' => 'active', 'activated_at' => now(), 'ends_at' => null,
+                'status' => 'active', 'activated_at' => now(), 'ends_at' => $until,
                 'billing_period' => $period, 'current_period_ends_at' => $until,
                 'granted_by' => $actor?->id,
             ]
         );
     }
 
+    /**
+     * Vypne modul. Zaplacený konec, který ještě neuplynul, zůstává.
+     *
+     * Vypnutí je volba zákazníka, ne vrácení peněz: kdyby se `ends_at`
+     * přepsal na teď, zaplacený zbytek měsíce by propadl a znovu zapnout by
+     * modul šel jen novou platbou. Konec se nastaví jen modulu bez konce
+     * (přidělenému natrvalo) nebo s koncem, který už minul.
+     */
     public function disableModule(GallerySpace $space, BillingModule $module): void
     {
         SpaceModule::where('gallery_space_id', $space->id)
             ->where('billing_module_id', $module->id)
-            ->update(['status' => 'paused', 'ends_at' => now()]);
+            ->update(['status' => 'paused']);
+
+        SpaceModule::where('gallery_space_id', $space->id)
+            ->where('billing_module_id', $module->id)
+            ->where(fn ($query) => $query->whereNull('ends_at')->orWhere('ends_at', '<=', now()))
+            ->update(['ends_at' => now()]);
 
         $this->forget($space);
     }
 
+    /**
+     * Přidělí tarif — do `$until`, nebo natrvalo, když konec nikdo neurčil.
+     *
+     * Zaplacené období patří do `ends_at`: podle něj `plan()` po konci vrátí
+     * výchozí tarif, upomínky (`gallery:billing-reminders`) poznají, že se
+     * konec blíží, a `CheckoutService::unusedCredit` započte nevyužitou část
+     * při změně tarifu. Dřív tu bylo vždy `null` a měsíční platba platila
+     * navždy. `null` zůstává pro výchozí tarif a přidělení provozovatelem.
+     */
     public function assignPlan(GallerySpace $space, BillingPlan $plan, ?User $actor = null, string $period = 'monthly', ?\DateTimeInterface $until = null): SpaceSubscription
     {
         $this->forget($space);
@@ -256,7 +287,7 @@ class EntitlementService
             ['gallery_space_id' => $space->id],
             [
                 'billing_plan_id' => $plan->id, 'status' => 'active',
-                'started_at' => now(), 'ends_at' => null,
+                'started_at' => now(), 'ends_at' => $until,
                 'billing_period' => $period, 'current_period_ends_at' => $until,
                 'granted_by' => $actor?->id,
             ]
@@ -311,6 +342,49 @@ class EntitlementService
             ->where('subject_type', class_basename($space))
             ->where('subject_id', $space->id)
             ->exists();
+    }
+
+    // ─── Kdo smí předplatné měnit ───────────────────────────────────
+
+    /** Role v prostoru, které smějí měnit jeho předplatné. */
+    public const ROLE_SPRAVCE = ['owner', 'admin'];
+
+    /**
+     * Smí účet měnit předplatné tohoto prostoru (tarif, moduly, nákup, zkušební období)?
+     *
+     * Rozhoduje role **v tomhle prostoru** — vlastník prostoru nebo členství
+     * owner/admin — nebo provozovatel. Nikdy `users.role`: tu má `owner`
+     * každý, kdo se sám zaregistruje, i když je v cizí galerii jen host.
+     * Na jednom místě, aby `BillingController` a `CheckoutController` nemohly
+     * rozhodovat každý jinak.
+     */
+    public function spravujePredplatne(User $user, GallerySpace $space): bool
+    {
+        if ($user->isOperator() || (int) $space->owner_id === (int) $user->id) {
+            return true;
+        }
+
+        return in_array($this->roleVProstoru($user, $space), self::ROLE_SPRAVCE, true);
+    }
+
+    /**
+     * Patří účet k dvojici prostoru (vlastník nebo `PristupDoGalerie::ROLE_DVOJICE`)?
+     *
+     * Pro volby funkcí: platí pro celou galerii, takže je mění partner i
+     * vlastník, ne host. Správci předplatného smějí vždy.
+     */
+    public function patriKDvojici(User $user, GallerySpace $space): bool
+    {
+        return $this->spravujePredplatne($user, $space)
+            || in_array($this->roleVProstoru($user, $space), PristupDoGalerie::ROLE_DVOJICE, true);
+    }
+
+    /** Role z členství — dotazem, ne z `pivot`, který mohl patřit jinému účtu. */
+    private function roleVProstoru(User $user, GallerySpace $space): ?string
+    {
+        $role = $space->members()->where('users.id', $user->id)->first()?->pivot?->role;
+
+        return $role === null ? null : (string) $role;
     }
 
     // ─── Limits ─────────────────────────────────────────────────────

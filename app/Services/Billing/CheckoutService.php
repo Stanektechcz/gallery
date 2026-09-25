@@ -7,8 +7,10 @@ use App\Models\BillingModule;
 use App\Models\BillingPlan;
 use App\Models\GallerySpace;
 use App\Models\Payment;
+use App\Models\SpaceModule;
 use App\Models\SpaceSubscription;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -176,39 +178,63 @@ class CheckoutService
         return $this->markPaid($payment, $status);
     }
 
-    /** @param array<string,string> $status */
+    /**
+     * Zaplatí platbu a udělí, co se koupilo — jednou, i když potvrzení přijde dvakrát.
+     *
+     * Notifikace z brány a dotaz prohlížeče po návratu z platby běží souběžně
+     * a každý má vlastní kopii platby. `isPaid()` na modelu v paměti tak
+     * pustilo obě: modul se prodloužil dvakrát a platba se zapsala dvakrát.
+     * Rozhoduje proto řádek přečtený v transakci se zámkem — druhé potvrzení
+     * počká na první a uvidí, že už je zaplaceno.
+     *
+     * @param  array<string,string>  $status
+     */
     public function markPaid(Payment $payment, array $status = []): Payment
     {
         if ($payment->isPaid()) {
             return $payment;
         }
 
-        DB::transaction(function () use ($payment, $status): void {
-            $payment->update([
+        $paid = DB::transaction(function () use ($payment, $status): ?Payment {
+            $locked = Payment::whereKey($payment->getKey())->lockForUpdate()->first();
+            if (! $locked || $locked->isPaid()) {
+                return null;
+            }
+
+            $locked->update([
                 'status' => 'paid',
                 'paid_at' => now(),
-                'method' => $status['method'] ?? $payment->method,
-                'payer_email' => $status['email'] ?? $payment->payer_email,
-                'gateway_payload' => $status ?: $payment->gateway_payload,
+                'method' => $status['method'] ?? $locked->method,
+                'payer_email' => $status['email'] ?? $locked->payer_email,
+                'gateway_payload' => $status ?: $locked->gateway_payload,
             ]);
 
-            $space = $payment->space;
+            $space = $locked->space;
             if (! $space) {
-                return;
+                return $locked;
             }
 
-            $until = $payment->billing_period === 'yearly' ? now()->addYear() : now()->addMonth();
-            $buyer = $payment->created_by ? User::find($payment->created_by) : null;
+            $buyer = $locked->created_by ? User::find($locked->created_by) : null;
 
-            if ($payment->purchase_type === 'plan' && $payment->plan) {
-                $subscription = $this->entitlements->assignPlan($space, $payment->plan, $buyer, $payment->billing_period, $until);
-                $subscription->update(['last_payment_id' => $payment->id]);
+            if ($locked->purchase_type === 'plan' && $locked->plan) {
+                $until = $this->periodEnd($locked, now());
+                $subscription = $this->entitlements->assignPlan($space, $locked->plan, $buyer, $locked->billing_period, $until);
+                $subscription->update(['last_payment_id' => $locked->id]);
             }
 
-            if ($payment->purchase_type === 'module' && $payment->module) {
-                $this->entitlements->enableModule($space, $payment->module, $buyer, $payment->billing_period, $until);
+            if ($locked->purchase_type === 'module' && $locked->module) {
+                $until = $this->periodEnd($locked, $this->moduleRenewsFrom($space, $locked->module));
+                $this->entitlements->enableModule($space, $locked->module, $buyer, $locked->billing_period, $until);
             }
+
+            return $locked;
         });
+
+        if ($paid === null) {
+            return $payment->fresh() ?? $payment;
+        }
+
+        $payment = $paid;
 
         AuditLog::record('billing.payment.paid', $payment, [
             'reference' => $payment->reference,
@@ -230,5 +256,30 @@ class CheckoutService
         }
 
         return $payment->fresh();
+    }
+
+    private function periodEnd(Payment $payment, \DateTimeInterface $from): \DateTimeInterface
+    {
+        $from = Carbon::instance($from);
+
+        return $payment->billing_period === 'yearly' ? $from->addYear() : $from->addMonth();
+    }
+
+    /**
+     * Odkdy běží nově zaplacené období modulu.
+     *
+     * Modul nemá zápočet jako tarif, takže platba před koncem období musí
+     * prodloužit od konce, ne od teď — jinak zbytek zaplaceného měsíce propadne.
+     * Tarif zůstává od teď schválně: `startPlanPurchase` nevyužitou část odečte
+     * z ceny (`unusedCredit`), a prodloužení od konce by ji dalo podruhé.
+     */
+    private function moduleRenewsFrom(GallerySpace $space, BillingModule $module): \DateTimeInterface
+    {
+        $end = SpaceModule::where('gallery_space_id', $space->id)
+            ->where('billing_module_id', $module->id)
+            ->where('ends_at', '>', now())
+            ->value('ends_at');
+
+        return $end ? Carbon::parse($end) : now();
     }
 }
