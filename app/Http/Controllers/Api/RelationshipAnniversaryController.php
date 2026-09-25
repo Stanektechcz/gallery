@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
+use App\Services\Auth\PristupDoGalerie;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -26,7 +28,9 @@ class RelationshipAnniversaryController extends Controller
     {
         $data = $request->validate([
             'gallery_space_id' => 'required|integer',
-            'started_on' => 'required|date|before_or_equal:today',
+            // „Dnes" dvojice (Praha), ne serveru v UTC — po půlnoci by jinak
+            // dnešní datum neprošlo.
+            'started_on' => 'required|date|before_or_equal:'.Cas::dnes()->toDateString(),
             'reminder_days' => 'nullable|array|min:1|max:8',
             'reminder_days.*' => 'integer|between:0,365',
         ]);
@@ -107,7 +111,10 @@ class RelationshipAnniversaryController extends Controller
     /** @return array<string, int> */
     private function upsertCalendarEvents(GallerySpace $space, int $userId, Carbon $startedOn, array $reminderDays, array $knownIds): array
     {
-        $members = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($id) => (int) $id)->all();
+        // Výročí patří dvojici — host prostoru (`viewer`) nebyl jen pozvaný, ale
+        // dostal roli `editor` a připomínky na výročí cizího vztahu.
+        $members = app(PristupDoGalerie::class)->dvojice($space)->pluck('id')->map(fn ($id) => (int) $id)
+            ->push($userId)->unique()->values()->all();
         $definitions = [
             'one_month' => ['title' => '1 měsíc spolu', 'date' => $startedOn->copy()->addMonthNoOverflow(), 'recurrence' => null],
             'half_year' => ['title' => 'Půl roku spolu', 'date' => $startedOn->copy()->addMonthsNoOverflow(6), 'recurrence' => null],
@@ -146,6 +153,11 @@ class RelationshipAnniversaryController extends Controller
                 'role' => $memberId === $userId ? 'owner' : 'editor',
                 'response' => 'accepted',
             ]])->all());
+            // Hosta zapsaného dřívější verzí z akce výročí zase odebere.
+            $cizi = $event->participants()->pluck('users.id')->map(fn ($id) => (int) $id)->diff($members)->values()->all();
+            if ($cizi !== []) {
+                $event->participants()->detach($cizi);
+            }
 
             // The recurring annual reminder is calculated from the source date
             // by gallery:relationship-milestones. One-off first-month and
@@ -169,9 +181,10 @@ class RelationshipAnniversaryController extends Controller
         return $ids;
     }
 
+    /** Jen prostor, kde účet patří do dvojice — ne galerie, kam je pozvaný jako host. */
     private function space(Request $request, ?int $id): GallerySpace
     {
-        $query = $request->user()->gallerySpaces();
+        $query = $request->user()->gallerySpaces()->whereKey(app(PristupDoGalerie::class)->idProstoruDvojice($request->user()));
 
         return $id ? $query->whereKey($id)->firstOrFail() : $query->firstOrFail();
     }

@@ -4,6 +4,8 @@ namespace App\Services\Planning;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -54,8 +56,12 @@ class PartnerCoordinationService
         $actions = $allActions->reject(fn (array $action) => $snoozed->has($action['type'].':'.$action['source_key']))->values();
 
         $checkIns = $this->checkIns($space, $viewer);
+        // Rozdělení práce je mezi dvojicí — host galerie (`viewer`/`contributor`)
+        // v něm nefiguruje a nedá se mu nic přiřadit.
         $members = DB::table('gallery_space_user as membership')->join('users', 'users.id', '=', 'membership.user_id')
-            ->where('membership.gallery_space_id', $space->id)->where('users.is_active', true)->orderBy('users.name')
+            ->where('membership.gallery_space_id', $space->id)->where('users.is_active', true)
+            ->where(fn ($role) => $role->whereIn('membership.role', PristupDoGalerie::ROLE_DVOJICE)->orWhere('membership.user_id', (int) $space->owner_id))
+            ->orderBy('users.name')
             ->get(['users.id', 'users.name', 'users.avatar_path'])
             ->map(function ($member) use ($allActions, $checkIns) {
                 $assigned = $allActions->where('assigned_to.id', (int) $member->id);
@@ -278,7 +284,8 @@ class PartnerCoordinationService
         }
 
         return DB::table('partner_check_ins as checkin')->join('users', 'users.id', '=', 'checkin.user_id')
-            ->where('checkin.gallery_space_id', $space->id)->where('checkin.check_in_on', now()->toDateString())
+            // Dnešek dvojice (Praha) — stejný den, pod jakým check-in uložil řadič.
+            ->where('checkin.gallery_space_id', $space->id)->where('checkin.check_in_on', Cas::dnes()->toDateString())
             ->where(fn ($visible) => $visible->where('checkin.is_shared', true)->orWhere('checkin.user_id', $viewer->id))
             ->orderBy('users.name')->get(['checkin.uuid', 'checkin.user_id', 'users.name as user_name', 'checkin.check_in_on', 'checkin.mood', 'checkin.energy', 'checkin.capacity', 'checkin.focus', 'checkin.note', 'checkin.is_shared'])
             ->map(fn ($item) => ['uuid' => $item->uuid, 'user_id' => (int) $item->user_id, 'user_name' => $item->user_name, 'check_in_on' => $item->check_in_on, 'mood' => $item->mood, 'energy' => $item->energy !== null ? (int) $item->energy : null, 'capacity' => $item->capacity, 'focus' => $item->focus, 'note' => $item->note, 'is_shared' => (bool) $item->is_shared]);

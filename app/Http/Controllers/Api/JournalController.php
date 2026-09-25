@@ -6,6 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\JournalEntry;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Schema;
@@ -65,7 +67,8 @@ class JournalController extends Controller
             'title' => $data['title'] ?? null,
             'body' => $data['body'],
             'mood' => $data['mood'] ?? null,
-            'entry_date' => $data['entry_date'] ?? now()->toDateString(),
+            // Datum zápisu je den dvojice (Praha) — po půlnoci ne ještě včerejšek v UTC.
+            'entry_date' => $data['entry_date'] ?? Cas::dnes()->toDateString(),
             // Sharing is its own action; a new entry is never born public.
             'visibility' => JournalEntry::VISIBILITY_PRIVATE,
         ]);
@@ -144,7 +147,7 @@ class JournalController extends Controller
             'title' => 'nullable|string|max:180',
             'body' => 'required|string|max:50000',
             'mood' => 'nullable|string|in:'.implode(',', self::MOODS),
-            'entry_date' => 'nullable|date|before_or_equal:today',
+            'entry_date' => 'nullable|date|before_or_equal:'.Cas::dnes()->toDateString(),
         ]);
     }
 
@@ -163,9 +166,14 @@ class JournalController extends Controller
         return $entry;
     }
 
+    /**
+     * Jen prostor dvojice — ne galerie, kam je účet pozvaný jako host. Brána
+     * posuzuje jen první prostor účtu; „kterékoli členství" by hostovi cizí
+     * galerie otevřelo její sdílené zápisky.
+     */
     private function space(Request $request, ?int $id): GallerySpace
     {
-        $query = GallerySpace::whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
+        $query = GallerySpace::whereKey(app(PristupDoGalerie::class)->idProstoruDvojice($request->user()));
 
         return $id ? $query->findOrFail($id) : $query->orderByDesc('is_default')->firstOrFail();
     }

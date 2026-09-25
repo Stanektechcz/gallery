@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\EventReminder;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\ReminderActionService;
 use App\Support\Cestina;
 use Carbon\Carbon;
@@ -26,7 +27,8 @@ class ReminderActionController extends Controller
             'channel' => ['nullable', Rule::in(['database', 'email', 'push'])],
         ]);
         $user = $request->user();
-        $spaceIds = $user->gallerySpaces()->pluck('gallery_spaces.id')->merge($user->ownedSpaces()->pluck('id'))->unique();
+        // Prostory dvojice (a vlastní) — ne galerie, kam je účet pozvaný jen jako host.
+        $spaceIds = collect(app(PristupDoGalerie::class)->idProstoruDvojice($user))->merge($user->ownedSpaces()->pluck('id'))->unique();
         $event = CalendarEvent::query()->where('uuid', $eventUuid)->whereIn('gallery_space_id', $spaceIds)
             ->where(fn (Builder $query) => $query->where('is_private', false)->orWhere('created_by', $user->id)
                 ->orWhereHas('participants', fn (Builder $participants) => $participants->whereKey($user->id)))

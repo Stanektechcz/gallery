@@ -34,7 +34,10 @@ class DateIdeaPlanningService
             return $event->fresh();
         }
 
-        $event = DB::transaction(function () use ($idea, $actor, $options) {
+        // Druhý požadavek dvojkliku najde pod zámkem hotovou akci — upozornění
+        // pak nechodí podruhé.
+        $created = false;
+        $event = DB::transaction(function () use ($idea, $actor, $options, &$created) {
             $locked = CoupleDateIdea::query()->lockForUpdate()->findOrFail($idea->id);
             if ($locked->calendar_event_id) {
                 return CalendarEvent::findOrFail($locked->calendar_event_id);
@@ -73,20 +76,14 @@ class DateIdeaPlanningService
                 ],
             ]);
 
-            $members = $locked->space()->firstOrFail()->members()->get(['users.id']);
-            if (! $members->contains('id', $actor->id)) {
-                $members->push($actor);
-            }
+            // Účastníky (dvojici, bez hostů galerie) už zapsal `CalendarEventCreationService`.
+            // Dřív se tu znovu brali všichni členové prostoru — host tak dostal
+            // pozvánku, připomínku i upozornění na randíčko dvojice.
             $reminderMinutes = (int) ($options['reminder_minutes'] ?? ($createTrip ? 1440 : 180));
 
-            foreach ($members->unique('id') as $member) {
-                $isActor = (int) $member->id === (int) $actor->id;
-                $event->participants()->syncWithoutDetaching([$member->id => [
-                    'role' => $isActor ? 'owner' : 'guest',
-                    'response' => $isActor ? 'accepted' : 'pending',
-                ]]);
+            foreach ($event->participants()->pluck('users.id') as $memberId) {
                 $event->reminders()->create([
-                    'user_id' => $member->id,
+                    'user_id' => $memberId,
                     'channel' => 'database',
                     'remind_at' => $start->copy()->subMinutes($reminderMinutes)->max(now()->addMinute()),
                     'status' => 'pending',
@@ -103,6 +100,7 @@ class DateIdeaPlanningService
             }
 
             $locked->update(['calendar_event_id' => $event->id, 'status' => 'planned']);
+            $created = true;
 
             return $event;
         });
@@ -117,9 +115,11 @@ class DateIdeaPlanningService
             $this->tripSync->sync($idea->fresh(), $event, (int) $event->trip_id, $actor);
         }
 
-        $event->participants()->whereKeyNot($actor->id)->get()->each(function (User $participant) use ($actor, $event) {
-            $participant->notify(new GalleryNotification('date_idea.planned', $actor->name.' naplánoval/a nové randíčko: '.$event->title, '/calendar/events/'.$event->uuid));
-        });
+        if ($created) {
+            $event->participants()->whereKeyNot($actor->id)->get()->each(function (User $participant) use ($actor, $event) {
+                $participant->notify(new GalleryNotification('date_idea.planned', $actor->name.' naplánoval/a nové randíčko: '.$event->title, '/calendar/events/'.$event->uuid));
+            });
+        }
 
         return $event->fresh();
     }

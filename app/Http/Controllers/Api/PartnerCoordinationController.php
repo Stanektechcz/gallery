@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\GallerySpace;
 use App\Models\SharedTodo;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\PartnerCoordinationService;
 use App\Services\Planning\SharedTodoService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -45,7 +47,8 @@ class PartnerCoordinationController extends Controller
         ]);
         $space = $this->space($request, (int) $data['gallery_space_id']);
         if (array_key_exists('assigned_to', $data) && $data['assigned_to'] !== null) {
-            abort_unless($space->members()->whereKey($data['assigned_to'])->exists(), 422, 'Krok lze přiřadit pouze členovi společného prostoru.');
+            // Přiřadit jde jen jednomu z dvojice — host galerie kroky dvojice nevyřizuje.
+            abort_unless(app(PristupDoGalerie::class)->dvojice($space)->contains('id', (int) $data['assigned_to']), 422, 'Krok lze přiřadit pouze jednomu z vás dvou.');
         }
 
         $this->updateSource($request, $space, $type, $key, $data);
@@ -82,8 +85,11 @@ class PartnerCoordinationController extends Controller
             'is_shared' => 'nullable|boolean',
         ]);
         $space = $this->space($request, (int) $data['gallery_space_id']);
-        $day = Carbon::parse($data['check_in_on'] ?? now())->toDateString();
-        abort_unless(Carbon::parse($day)->betweenIncluded(now()->subDays(7)->startOfDay(), now()->addDays(7)->endOfDay()), 422, 'Check-in lze uložit nejvýše týden zpětně nebo dopředu.');
+        // Den i týdenní okno podle dnešku dvojice (Praha), ne serveru v UTC —
+        // check-in po půlnoci jinak patřil ke včerejšku.
+        $dnes = Cas::dnes();
+        $day = isset($data['check_in_on']) ? Carbon::parse($data['check_in_on'])->toDateString() : $dnes->toDateString();
+        abort_unless($day >= $dnes->subDays(7)->toDateString() && $day <= $dnes->addDays(7)->toDateString(), 422, 'Check-in lze uložit nejvýše týden zpětně nebo dopředu.');
         $lookup = ['gallery_space_id' => $space->id, 'user_id' => $request->user()->id, 'check_in_on' => $day];
         $existing = DB::table('partner_check_ins')->where($lookup)->first();
         DB::table('partner_check_ins')->updateOrInsert($lookup, [
@@ -200,9 +206,10 @@ class PartnerCoordinationController extends Controller
         DB::table('gift_ideas')->where('id', $gift->id)->update($updates);
     }
 
+    /** Jen prostor dvojice — ne galerie, kam je účet pozvaný jako host. */
     private function space(Request $request, ?int $id): GallerySpace
     {
-        $query = GallerySpace::query()->whereHas('members', fn ($members) => $members->whereKey($request->user()->id));
+        $query = GallerySpace::query()->whereKey(app(PristupDoGalerie::class)->idProstoruDvojice($request->user()));
         if ($id) {
             return $query->findOrFail($id);
         }

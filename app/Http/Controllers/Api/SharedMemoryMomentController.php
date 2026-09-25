@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,8 +15,7 @@ class SharedMemoryMomentController extends Controller
 {
     public function index(Request $request): JsonResponse
     {
-        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
-        $items = DB::table('shared_memory_moments')->whereIn('gallery_space_id', $spaceIds)->orderByDesc('happened_on')->latest()->get();
+        $items = DB::table('shared_memory_moments')->whereIn('gallery_space_id', $this->spaceIds($request))->orderByDesc('happened_on')->latest()->get();
 
         return response()->json($items->map(fn ($item) => $this->payload($item, $request->user()->id)));
     }
@@ -23,9 +23,11 @@ class SharedMemoryMomentController extends Controller
     public function store(Request $request): JsonResponse
     {
         $data = $request->validate(['gallery_space_id' => 'required|integer', 'title' => 'required|string|max:160', 'note' => 'nullable|string|max:5000', 'happened_on' => 'nullable|date', 'media_item_ids' => 'nullable|array|max:30', 'media_item_ids.*' => 'integer|distinct', 'is_favorite' => 'nullable|boolean']);
-        abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
+        abort_unless(in_array((int) $data['gallery_space_id'], $this->spaceIds($request), true), 404);
         $mediaIds = $data['media_item_ids'] ?? [];
-        abort_unless(count($mediaIds) === MediaItem::whereIn('id', $mediaIds)->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->count(), 422, 'Do společné vzpomínky lze přidat jen média z daného prostoru.');
+        // Trezor do společné vzpomínky nepatří ani s odemčeným trezorem: vzpomínku
+        // vidí oba a zůstane čitelná i po jeho zamčení.
+        abort_unless(count($mediaIds) === MediaItem::whereIn('id', $mediaIds)->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->where('is_hidden', false)->count(), 422, 'Do společné vzpomínky lze přidat jen média z daného prostoru, ne z koše ani z trezoru.');
         $id = DB::table('shared_memory_moments')->insertGetId(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $data['gallery_space_id'], 'created_by' => $request->user()->id, 'title' => $data['title'], 'note' => $data['note'] ?? null, 'happened_on' => $data['happened_on'] ?? null, 'media_item_ids' => json_encode($mediaIds), 'is_favorite' => $data['is_favorite'] ?? false, 'created_at' => now(), 'updated_at' => now()]);
 
         return response()->json($this->payload(DB::table('shared_memory_moments')->find($id), $request->user()->id), 201);
@@ -69,13 +71,27 @@ class SharedMemoryMomentController extends Controller
 
     private function visibleMoment(Request $request, string $uuid): object
     {
-        return DB::table('shared_memory_moments')->where('uuid', $uuid)->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->firstOrFail();
+        return DB::table('shared_memory_moments')->where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request))->firstOrFail();
+    }
+
+    /**
+     * Prostory dvojice — ne galerie, kam je účet pozvaný jen jako host. Brána
+     * posuzuje jen první prostor účtu; „kterékoli členství" by hostovi cizí
+     * galerie otevřelo její společné vzpomínky.
+     *
+     * @return list<int>
+     */
+    private function spaceIds(Request $request): array
+    {
+        return app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
     }
 
     private function payload(object $item, ?int $viewerId = null): array
     {
         $ids = array_values(array_filter(json_decode($item->media_item_ids ?: '[]', true) ?: [], 'is_numeric'));
-        $media = MediaItem::whereIn('id', $ids)->with('variants')->get()->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url]);
+        // Starší vzpomínka může odkazovat na fotku, která je teď v koši nebo v
+        // trezoru — ta se nevypíše; vrátí-li se, objeví se tu zase.
+        $media = MediaItem::whereIn('id', $ids)->whereNull('trashed_at')->where('is_hidden', false)->with('variants')->get()->map(fn (MediaItem $media) => ['uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename, 'thumbnail_url' => $media->thumbnail_url]);
         $directAlbum = ! empty($item->album_id)
             ? DB::table('albums')->where('id', $item->album_id)->where('gallery_space_id', $item->gallery_space_id)->whereNull('deleted_at')->first(['uuid', 'title'])
             : null;

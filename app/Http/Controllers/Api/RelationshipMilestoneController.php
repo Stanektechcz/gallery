@@ -7,8 +7,10 @@ use App\Models\CalendarEvent;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\RelationshipMilestoneService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -26,9 +28,9 @@ class RelationshipMilestoneController extends Controller
     {
         $data = $this->validated($request);
         $data = $this->normalizePersonalDay($data);
-        abort_unless($request->user()->gallerySpaces()->whereKey($data['gallery_space_id'])->exists(), 404);
+        abort_unless(in_array((int) $data['gallery_space_id'], $this->spaceIds($request), true), 404);
         if (! empty($data['media_item_id'])) {
-            DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $data['gallery_space_id'])->whereNull('trashed_at')->firstOrFail();
+            $this->sdilitelneMedium((int) $data['gallery_space_id'], (int) $data['media_item_id']);
         }
         $milestone = $milestones->create((int) $data['gallery_space_id'], $request->user()->id, $data, 'manual');
 
@@ -45,7 +47,7 @@ class RelationshipMilestoneController extends Controller
         unset($data['gallery_space_id']);
         $data = $this->normalizePersonalDay($data, $milestone);
         if (! empty($data['media_item_id'])) {
-            DB::table('media_items')->where('id', $data['media_item_id'])->where('gallery_space_id', $milestone->gallery_space_id)->whereNull('trashed_at')->firstOrFail();
+            $this->sdilitelneMedium((int) $milestone->gallery_space_id, (int) $data['media_item_id']);
         }
         DB::table('relationship_milestones')->where('id', $milestone->id)->update($data + ['updated_at' => now()]);
 
@@ -63,13 +65,14 @@ class RelationshipMilestoneController extends Controller
 
     public function upcoming(Request $request): JsonResponse
     {
-        $today = now();
+        // Dnešek dvojice (Praha) — po půlnoci v UTC by výročí vycházelo až „zítra".
+        $today = Carbon::parse(Cas::dnes()->toDateString());
         $items = $this->visible($request)->where('remind_annually', true)->get()->map(function ($item) use ($today) {
             $next = Carbon::parse($item->occurred_on)->year($today->year);
-            if ($next->lt($today->copy()->startOfDay())) {
+            if ($next->lt($today)) {
                 $next->addYear();
             } $item->next_anniversary = $next->toDateString();
-            $item->days_until = $today->startOfDay()->diffInDays($next->startOfDay());
+            $item->days_until = (int) $today->diffInDays($next->copy()->startOfDay());
 
             return $item;
         })->sortBy('days_until')->values();
@@ -122,7 +125,8 @@ class RelationshipMilestoneController extends Controller
                 'status' => 'pending',
             ]);
         }
-        if ($milestone->media_item_id) {
+        // Fotka milníku, která je teď v koši nebo v trezoru, ke sdílené akci nejde.
+        if ($milestone->media_item_id && $this->jeSdilitelne((int) $milestone->gallery_space_id, (int) $milestone->media_item_id)) {
             EventAttachment::firstOrCreate(['event_id' => $event->id, 'media_item_id' => $milestone->media_item_id], ['kind' => 'memory']);
         }
 
@@ -131,7 +135,18 @@ class RelationshipMilestoneController extends Controller
 
     private function visible(Request $request)
     {
-        return DB::table('relationship_milestones')->whereIn('gallery_space_id', $request->user()->gallerySpaces()->pluck('gallery_spaces.id'))->where(fn ($query) => $query->where('visibility', 'shared')->orWhere('created_by', $request->user()->id));
+        return DB::table('relationship_milestones')->whereIn('gallery_space_id', $this->spaceIds($request))->where(fn ($query) => $query->where('visibility', 'shared')->orWhere('created_by', $request->user()->id));
+    }
+
+    /**
+     * Prostory dvojice — ne galerie, kam je účet pozvaný jen jako host (brána
+     * posuzuje jen první prostor účtu).
+     *
+     * @return list<int>
+     */
+    private function spaceIds(Request $request): array
+    {
+        return app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
     }
 
     /**
@@ -146,9 +161,12 @@ class RelationshipMilestoneController extends Controller
             return $milestones->map(fn ($milestone) => array_merge((array) $milestone, ['media' => null]))->values();
         }
 
+        // Milník je sdílený (přehled, kalendář) — fotka z trezoru se u něj
+        // neukáže, dokud se z trezoru nevrátí.
         $mediaById = MediaItem::query()
             ->whereIn('id', $mediaIds)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->with('variants')
             ->get()
             ->keyBy('id');
@@ -166,6 +184,21 @@ class RelationshipMilestoneController extends Controller
 
             return $row;
         })->values();
+    }
+
+    /**
+     * Fotka k milníku musí být z téhož prostoru a mimo koš i trezor — jinak 404,
+     * stejně jako fotka z cizího prostoru.
+     */
+    private function sdilitelneMedium(int $spaceId, int $mediaId): void
+    {
+        abort_unless($this->jeSdilitelne($spaceId, $mediaId), 404);
+    }
+
+    private function jeSdilitelne(int $spaceId, int $mediaId): bool
+    {
+        return DB::table('media_items')->where('id', $mediaId)->where('gallery_space_id', $spaceId)
+            ->whereNull('trashed_at')->where('is_hidden', false)->exists();
     }
 
     private function celebrationPayload(CalendarEvent $event): array

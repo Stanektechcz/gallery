@@ -10,6 +10,7 @@ use App\Models\MediaItem;
 use App\Models\MemoryEvening;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -19,7 +20,10 @@ use Illuminate\Support\Str;
 
 class MemoryEveningService
 {
-    public function __construct(private readonly CalendarEventCreationService $calendarEvents) {}
+    public function __construct(
+        private readonly CalendarEventCreationService $calendarEvents,
+        private readonly PristupDoGalerie $pristup,
+    ) {}
 
     public function schedule(GallerySpace $space, User $actor, array $data, Collection $media): MemoryEvening
     {
@@ -76,7 +80,8 @@ class MemoryEveningService
             ]);
         });
 
-        foreach ($space->members()->where('users.id', '!=', $actor->id)->get() as $member) {
+        // Upozornění dostane jen druhý z dvojice — host galerie ne.
+        foreach ($this->pristup->dvojice($space)->reject(fn (User $clen) => (int) $clen->id === (int) $actor->id) as $member) {
             $member->notify(new GalleryNotification('memory.evening.planned', $actor->name.' naplánoval/a společný večer se vzpomínkami: '.$evening->title, '/memories#memory-evenings', '💞', ['memory_evening_uuid' => $evening->uuid]));
         }
 
@@ -89,6 +94,13 @@ class MemoryEveningService
             return $evening;
         }
         $result = DB::transaction(function () use ($evening, $actor) {
+            // Dvojklik nebo oba partneři naráz: stav se kontroluje znovu až pod
+            // zámkem řádku, jinak by vznikla dvě alba i dvě společné vzpomínky.
+            $locked = MemoryEvening::whereKey($evening->id)->lockForUpdate()->firstOrFail();
+            if ($locked->status === 'completed') {
+                return [$locked, null];
+            }
+
             $items = DB::table('curation_board_items as item')->where('item.curation_board_id', $evening->curation_board_id)->orderBy('item.sort_order')->get();
             $selectedIds = DB::table('curation_board_votes as vote')->join('curation_board_items as item', 'item.id', '=', 'vote.curation_board_item_id')
                 ->where('item.curation_board_id', $evening->curation_board_id)->where('vote.is_selected', true)->distinct()->pluck('item.media_item_id');
@@ -96,7 +108,11 @@ class MemoryEveningService
                 $selectedIds = $items->pluck('media_item_id')->take(16);
             }
             abort_if($selectedIds->isEmpty(), 422, 'Večer neobsahuje žádné dostupné fotografie ani video.');
-            $media = MediaItem::whereIn('id', $selectedIds)->where('gallery_space_id', $evening->gallery_space_id)->whereNull('trashed_at')->orderBy('taken_at')->get();
+            // Fotka, kterou mezi naplánováním a dokončením někdo uklidil do trezoru,
+            // do sdíleného alba (ani na jeho obálku) nepatří — album zůstane čitelné
+            // i se zamčeným trezorem, stejně jako fotokniha.
+            $media = MediaItem::whereIn('id', $selectedIds)->where('gallery_space_id', $evening->gallery_space_id)
+                ->whereNull('trashed_at')->where('is_hidden', false)->orderBy('taken_at')->get();
             abort_if($media->isEmpty(), 422, 'Vybrané vzpomínky už nejsou v galerii dostupné.');
 
             $album = Album::create([
@@ -111,7 +127,10 @@ class MemoryEveningService
             foreach ($media->values() as $index => $item) {
                 DB::table('album_media')->insertOrIgnore(['album_id' => $album->id, 'media_item_id' => $item->id, 'sort_order' => $index, 'is_cover' => $index === 0, 'added_at' => now(), 'added_by' => $actor->id]);
             }
-            $permissions = DB::table('gallery_space_user')->where('gallery_space_id', $evening->gallery_space_id)->pluck('user_id')->map(fn ($userId) => ['album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now()])->all();
+            // Editorem alba je dvojice, ne každý člen prostoru: host (`viewer`)
+            // by s řádkem `editor` album otevřel i upravoval (viz `AlbumPolicy`).
+            $space = GallerySpace::findOrFail($evening->gallery_space_id);
+            $permissions = $this->pristup->dvojice($space)->pluck('id')->map(fn ($userId) => ['album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false, 'created_at' => now(), 'updated_at' => now()])->all();
             if ($permissions) {
                 DB::table('album_user_permissions')->upsert($permissions, ['album_id', 'user_id'], ['role', 'updated_at']);
             }
@@ -142,7 +161,9 @@ class MemoryEveningService
 
             return [$evening->fresh(), $album];
         });
-        DB::afterCommit(fn () => CreateDriveFolderJob::dispatch($result[1]));
+        if ($result[1] !== null) {
+            DB::afterCommit(fn () => CreateDriveFolderJob::dispatch($result[1]));
+        }
 
         return $result[0];
     }

@@ -6,9 +6,11 @@ use App\Http\Controllers\Controller;
 use App\Models\CoupleDateIdea;
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\DateIdeaGeneratorService;
 use App\Services\Planning\DateIdeaLifecycleService;
 use App\Services\Planning\DateIdeaPlanningService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -44,7 +46,8 @@ class DateIdeaController extends Controller
             'transport_mode' => ['nullable', Rule::in(['walk', 'bike', 'transit', 'car', 'train'])],
             'duration' => ['nullable', Rule::in(['quick', 'evening', 'half_day', 'full_day', 'weekend'])],
             'time_of_day' => ['nullable', Rule::in(['any', 'morning', 'afternoon', 'evening'])],
-            'preferred_date' => 'nullable|date|after_or_equal:today',
+            // „Dnes" dvojice (Praha), ne serveru v UTC.
+            'preferred_date' => 'nullable|date|after_or_equal:'.Cas::dnes()->toDateString(),
             'setting' => ['nullable', Rule::in(['any', 'indoor', 'outdoor'])],
             'energy' => ['nullable', Rule::in(['low', 'medium', 'high'])],
             'food' => ['nullable', Rule::in(['any', 'none', 'cafe', 'dinner', 'picnic'])],
@@ -139,15 +142,22 @@ class DateIdeaController extends Controller
         ];
     }
 
+    /**
+     * Jen prostor dvojice — ne galerie, kam je účet pozvaný jako host. Brána
+     * posuzuje jen první prostor účtu, takže „kterékoli členství" by hostovi
+     * otevřelo randíčka cizí dvojice.
+     */
     private function space(User $user, int $id): GallerySpace
     {
+        abort_unless(in_array($id, app(PristupDoGalerie::class)->idProstoruDvojice($user), true), 404);
+
         return $user->gallerySpaces()->whereKey($id)->firstOrFail();
     }
 
     private function idea(User $user, string $uuid): CoupleDateIdea
     {
         return CoupleDateIdea::query()->where('uuid', $uuid)
-            ->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))
+            ->whereIn('gallery_space_id', app(PristupDoGalerie::class)->idProstoruDvojice($user))
             ->with(['space', 'event'])->firstOrFail();
     }
 

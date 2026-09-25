@@ -7,7 +7,9 @@ use App\Models\CalendarEvent;
 use App\Models\EventAttachment;
 use App\Models\EventReminder;
 use App\Models\MediaItem;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Support\Trezor;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -18,12 +20,14 @@ class RevisitSuggestionController extends Controller
 
     public function show(Request $request, string $uuid): JsonResponse
     {
-        $spaceIds = $request->user()->gallerySpaces()->pluck('gallery_spaces.id');
-        $source = MediaItem::where('uuid', $uuid)->whereIn('gallery_space_id', $spaceIds)->whereNull('trashed_at')->firstOrFail();
+        $source = MediaItem::where('uuid', $uuid)->whereIn('gallery_space_id', $this->spaceIds($request))->whereNull('trashed_at')->firstOrFail();
         if ($source->latitude === null || $source->longitude === null) {
             return response()->json(['source' => $source->uuid, 'candidates' => [], 'message' => 'Zdrojová fotografie nemá GPS souřadnice.']);
         }
+        // Zdroj z trezoru pustí už `ProtectVaultMedia` jen s odemčeným trezorem;
+        // kandidáti z trezoru se ale vypisovali vždy — i se zamčeným.
         $candidates = MediaItem::where('gallery_space_id', $source->gallery_space_id)->whereNull('trashed_at')->where('id', '!=', $source->id)
+            ->when(! Trezor::odemcen($request), fn ($query) => $query->where('is_hidden', false))
             ->whereNotNull('latitude')->whereNotNull('longitude')
             ->whereRaw('ABS(latitude - ?) < 0.015 AND ABS(longitude - ?) < 0.015', [$source->latitude, $source->longitude])
             ->orderByDesc('taken_at')->limit(24)->get(['uuid', 'display_title', 'original_filename', 'taken_at', 'latitude', 'longitude']);
@@ -41,9 +45,11 @@ class RevisitSuggestionController extends Controller
         $user = $request->user();
         $source = MediaItem::query()
             ->where('uuid', $uuid)
-            ->whereIn('gallery_space_id', $user->gallerySpaces()->pluck('gallery_spaces.id'))
+            ->whereIn('gallery_space_id', $this->spaceIds($request))
             ->whereNull('trashed_at')
             ->firstOrFail();
+        // Fotka se připojí ke společné akci, kterou vidí oba i se zamčeným trezorem.
+        abort_if($source->is_hidden, 422, 'Fotku z trezoru nelze připojit ke společné akci. Nejdřív ji z trezoru vraťte.');
         abort_if($source->latitude === null || $source->longitude === null, 422, 'Pro návrat na místo potřebuje fotografie GPS souřadnice.');
 
         $data = $request->validate([
@@ -87,6 +93,17 @@ class RevisitSuggestionController extends Controller
         EventAttachment::firstOrCreate(['event_id' => $event->id, 'media_item_id' => $source->id], ['kind' => 'memory']);
 
         return response()->json($this->payload($event), 201);
+    }
+
+    /**
+     * Prostory dvojice — ne galerie, kam je účet pozvaný jen jako host (brána
+     * posuzuje jen první prostor účtu).
+     *
+     * @return list<int>
+     */
+    private function spaceIds(Request $request): array
+    {
+        return app(PristupDoGalerie::class)->idProstoruDvojice($request->user());
     }
 
     private function payload(CalendarEvent $event): array

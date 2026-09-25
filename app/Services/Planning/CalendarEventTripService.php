@@ -20,6 +20,15 @@ class CalendarEventTripService
         }
 
         return DB::transaction(function () use ($event, $actorId) {
+            // Dvojklik nebo oba partneři naráz: `trip_id` se znovu přečte pod
+            // zámkem řádku akce, jinak by z jedné akce vznikly dvě cesty.
+            $lockedTripId = CalendarEvent::whereKey($event->id)->lockForUpdate()->value('trip_id');
+            if ($lockedTripId) {
+                $event->forceFill(['trip_id' => $lockedTripId])->syncOriginalAttribute('trip_id');
+
+                return [DB::table('trips')->find($lockedTripId), false];
+            }
+
             $end = $event->ends_at ?? $event->starts_at;
             $source = $event->created_from ?? (is_array($event->metadata) ? ($event->metadata['source'] ?? 'calendar') : 'calendar');
             $tripRow = [

@@ -9,6 +9,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -131,7 +132,9 @@ class RelationshipAnniversaryRecapService
             }
             $album->media()->sync($sync);
             $album->update(['media_count' => count($sync), 'total_size_bytes' => $ordered->sum('size_bytes')]);
-            $permissions = DB::table('gallery_space_user')->where('gallery_space_id', $space->id)->pluck('user_id')->map(fn ($userId) => [
+            // Editorem výročního alba je dvojice — host prostoru (`viewer`) by s
+            // řádkem `editor` album otevřel i upravoval (viz `AlbumPolicy`).
+            $permissions = app(PristupDoGalerie::class)->dvojice($space)->pluck('id')->map(fn ($userId) => [
                 'album_id' => $album->id, 'user_id' => $userId, 'role' => 'editor', 'inherited' => false,
                 'created_at' => now(), 'updated_at' => now(),
             ])->all();

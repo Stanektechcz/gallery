@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CalendarEvent;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -171,28 +172,37 @@ class PlanningExpansionController extends Controller
         }
         $data = $request->validate(['starts_at' => 'nullable|date|after:now']);
         $startsAt = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $this->nextFreeSaturday($list->gallery_space_id);
-        $event = $this->calendarEvents->create($this->space($request->user(), (int) $list->gallery_space_id), $request->user(), [
-            'created_by' => $request->user()->id,
-            'title' => $item->title,
-            'description' => $item->notes ?: 'Vzniklo ze společného seznamu přání.',
-            'type' => 'outing',
-            'status' => 'planned',
-            'starts_at' => $startsAt,
-            'ends_at' => $startsAt->copy()->addMinutes(max(30, (int) ($item->estimated_minutes ?: 120))),
-            'timezone' => 'Europe/Prague',
-            'place_name' => $item->category === 'place' ? $item->title : null,
-            'latitude' => $item->latitude,
-            'longitude' => $item->longitude,
-            'is_private' => false,
-            'metadata' => ['source' => 'wishlist'],
-        ]);
-        foreach (DB::table('gallery_space_user')->where('gallery_space_id', $list->gallery_space_id)->pluck('user_id') as $memberId) {
-            $event->participants()->syncWithoutDetaching([(int) $memberId => ['role' => (int) $memberId === $request->user()->id ? 'owner' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending']]);
-            $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subDays(7), 'status' => 'pending']);
-        }
-        DB::table('travel_wishlist_items')->where('id', $item->id)->update(['calendar_event_id' => $event->id, 'status' => 'planned', 'updated_at' => now()]);
+        $space = $this->space($request->user(), (int) $list->gallery_space_id);
 
-        return response()->json($event->load('participants:id,name,email', 'reminders'), 201);
+        // Dvojklik: přání se znovu přečte pod zámkem, jinak by z něj vznikly dvě akce.
+        [$event, $created] = DB::transaction(function () use ($request, $item, $startsAt, $space) {
+            $locked = DB::table('travel_wishlist_items')->where('id', $item->id)->lockForUpdate()->first();
+            if ($locked?->calendar_event_id) {
+                return [CalendarEvent::findOrFail($locked->calendar_event_id), false];
+            }
+
+            $event = $this->calendarEvents->create($space, $request->user(), [
+                'created_by' => $request->user()->id,
+                'title' => $item->title,
+                'description' => $item->notes ?: 'Vzniklo ze společného seznamu přání.',
+                'type' => 'outing',
+                'status' => 'planned',
+                'starts_at' => $startsAt,
+                'ends_at' => $startsAt->copy()->addMinutes(max(30, (int) ($item->estimated_minutes ?: 120))),
+                'timezone' => 'Europe/Prague',
+                'place_name' => $item->category === 'place' ? $item->title : null,
+                'latitude' => $item->latitude,
+                'longitude' => $item->longitude,
+                'is_private' => false,
+                'metadata' => ['source' => 'wishlist'],
+            ]);
+            $this->remindParticipants($event, $startsAt);
+            DB::table('travel_wishlist_items')->where('id', $item->id)->update(['calendar_event_id' => $event->id, 'status' => 'planned', 'updated_at' => now()]);
+
+            return [$event, true];
+        });
+
+        return response()->json($event->load('participants:id,name,email', 'reminders'), $created ? 201 : 200);
     }
 
     public function polls(Request $request): JsonResponse
@@ -303,15 +313,41 @@ class PlanningExpansionController extends Controller
         abort_if($poll->status === 'decided', 422, 'Toto hlasování už je převedené na společnou akci.');
         $data = $request->validate(['starts_at' => 'nullable|date|after:now']);
         $startsAt = isset($data['starts_at']) ? Carbon::parse($data['starts_at']) : $this->nextFreeSaturday($poll->gallery_space_id);
-        $event = $this->calendarEvents->create($this->space($request->user(), (int) $poll->gallery_space_id), $request->user(), ['title' => $option->title, 'description' => "Vzniklo ze společného rozhodnutí: {$poll->question}", 'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2), 'timezone' => 'Europe/Prague', 'is_private' => false, 'metadata' => ['source' => 'poll']]);
-        foreach (DB::table('gallery_space_user')->where('gallery_space_id', $poll->gallery_space_id)->pluck('user_id') as $memberId) {
-            $event->participants()->syncWithoutDetaching([(int) $memberId => ['role' => (int) $memberId === $request->user()->id ? 'owner' : 'guest', 'response' => (int) $memberId === $request->user()->id ? 'accepted' : 'pending']]);
+        $space = $this->space($request->user(), (int) $poll->gallery_space_id);
+
+        // Dvojklik: hlasování se znovu přečte pod zámkem, jinak by z jednoho
+        // rozhodnutí vznikly dvě akce.
+        [$event, $created] = DB::transaction(function () use ($request, $poll, $option, $startsAt, $space) {
+            $locked = DB::table('decision_polls')->where('id', $poll->id)->lockForUpdate()->first();
+            $lockedOption = DB::table('decision_poll_options')->where('id', $option->id)->first();
+            if ($lockedOption?->calendar_event_id) {
+                return [CalendarEvent::findOrFail($lockedOption->calendar_event_id), false];
+            }
+            abort_if($locked?->status === 'decided', 422, 'Toto hlasování už je převedené na společnou akci.');
+
+            $event = $this->calendarEvents->create($space, $request->user(), ['title' => $option->title, 'description' => "Vzniklo ze společného rozhodnutí: {$poll->question}", 'type' => 'outing', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addHours(2), 'timezone' => 'Europe/Prague', 'is_private' => false, 'metadata' => ['source' => 'poll']]);
+            $this->remindParticipants($event, $startsAt);
+            DB::table('decision_poll_options')->where('id', $option->id)->update(['calendar_event_id' => $event->id, 'updated_at' => now()]);
+            DB::table('decision_polls')->where('id', $poll->id)->update(['status' => 'decided', 'updated_at' => now()]);
+
+            return [$event, true];
+        });
+
+        return response()->json($event->load('participants:id,name,email', 'reminders'), $created ? 201 : 200);
+    }
+
+    /**
+     * Připomínka týden předem pro každého účastníka akce.
+     *
+     * Účastníky zapsal `CalendarEventCreationService` — dvojici, bez hostů galerie.
+     * Dřív se tu znovu brali všichni členové prostoru a host tak dostal pozvánku
+     * i připomínku na akci dvojice.
+     */
+    private function remindParticipants(CalendarEvent $event, Carbon $startsAt): void
+    {
+        foreach ($event->participants()->pluck('users.id') as $memberId) {
             $event->reminders()->create(['user_id' => $memberId, 'channel' => 'database', 'remind_at' => $startsAt->copy()->subDays(7), 'status' => 'pending']);
         }
-        DB::table('decision_poll_options')->where('id', $option->id)->update(['calendar_event_id' => $event->id, 'updated_at' => now()]);
-        DB::table('decision_polls')->where('id', $poll->id)->update(['status' => 'decided', 'updated_at' => now()]);
-
-        return response()->json($event->load('participants:id,name,email', 'reminders'), 201);
     }
 
     public function emergencyCard(Request $request, int $tripId): JsonResponse
@@ -383,9 +419,14 @@ class PlanningExpansionController extends Controller
         return response($calendar, 200, ['Content-Type' => 'text/calendar; charset=utf-8', 'Content-Disposition' => 'attachment; filename="akce-'.$event->uuid.'.ics"']);
     }
 
+    /**
+     * Prostory dvojice — ne galerie, kam je účet pozvaný jen jako host. Brána
+     * posuzuje jen první prostor účtu, takže „kterékoli členství" by hostovi
+     * otevřelo šablony, přání, ankety i nouzové karty cizí galerie.
+     */
     private function spaceIds(User $user): array
     {
-        return $user->gallerySpaces()->pluck('gallery_spaces.id')->all();
+        return app(PristupDoGalerie::class)->idProstoruDvojice($user);
     }
 
     private function tablesExist(array $tables): bool
@@ -419,6 +460,8 @@ class PlanningExpansionController extends Controller
 
     private function space(User $user, int $id)
     {
+        abort_unless(in_array($id, $this->spaceIds($user), true), 404);
+
         return $user->gallerySpaces()->whereKey($id)->firstOrFail();
     }
 

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CycleDay;
 use App\Models\GallerySpace;
 use App\Services\Health\CycleService;
+use App\Support\Cas;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -116,7 +117,9 @@ class CycleController extends Controller
 
         $data = $request->validate([
             'starts' => 'required|array|min:1|max:24',
-            'starts.*' => 'required|date|before_or_equal:today',
+            // „Dnes" dvojice (Praha), ne serveru v UTC — po půlnoci by dnešní
+            // začátek neprošel.
+            'starts.*' => 'required|date|before_or_equal:'.Cas::dnes()->toDateString(),
             'period_days' => 'sometimes|integer|min:1|max:14',
         ]);
 
