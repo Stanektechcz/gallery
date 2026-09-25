@@ -61,7 +61,17 @@ class AlbumController extends Controller
         // variants, and loading the media row without them meant every album drew the
         // folder placeholder — including one with fifty-two photographs in it, and
         // including albums whose cover had just been chosen by hand.
-        $albums = Album::with(['cover.variants', 'children.cover.variants'])
+        // Ručně vybraný obal, který mezitím odešel do trezoru nebo koše, `cover_media_id`
+        // dál drží — přesun ho nesmaže. Bez týhle podmínky by se sem dostal celý jeho
+        // řádek (GPS, jméno souboru, ID na disku…), i když je trezor zamčený.
+        $skryteHledisko = fn ($q) => $q->whereNull('trashed_at')->where('is_hidden', false);
+
+        $albums = Album::with([
+            'cover' => $skryteHledisko,
+            'cover.variants',
+            'children.cover' => $skryteHledisko,
+            'children.cover.variants',
+        ])
             ->where('gallery_space_id', $space->id)
             ->whereNull('parent_id')
             ->whereNull('deleted_at')
@@ -115,6 +125,10 @@ class AlbumController extends Controller
             ->join('media_items', 'media_items.id', '=', 'album_media.media_item_id')
             ->whereIn('album_media.album_id', $chybi->pluck('id'))
             ->whereNull('media_items.trashed_at')
+            // Trezor se do automatického obalu nepočítá — jinak by fotka z něj
+            // vyhrála konkurz na obal a celý její řádek (GPS, jméno souboru…)
+            // odjel na přehled alb i s trezorem zamčeným.
+            ->where('media_items.is_hidden', false)
             ->orderByDesc('media_items.is_favorite')
             ->orderByRaw('COALESCE(media_items.rating, 0) DESC')
             ->orderByRaw("CASE WHEN media_items.media_type = 'photo' THEN 0 ELSE 1 END")
@@ -139,8 +153,13 @@ class AlbumController extends Controller
 
     public function show(Request $request, string $uuid): Response
     {
+        // Stejná podmínka jako v `index()`: ručně vybraný obal skrytý v trezoru nebo
+        // smazaný do koše se dál nenačítá, i když ho album pořád ukazuje na `cover_media_id`.
         $album = Album::where('uuid', $uuid)
-            ->with(['cover', 'places', 'tags', 'people'])
+            ->with([
+                'cover' => fn ($q) => $q->whereNull('trashed_at')->where('is_hidden', false),
+                'places', 'tags', 'people',
+            ])
             ->firstOrFail();
 
         Gate::authorize('view', $album);
@@ -402,6 +421,10 @@ class AlbumController extends Controller
         Gate::authorize('update', $album);
         if ($newParent) {
             Gate::authorize('update', $newParent);
+            // `exists:albums,id` ve `MoveAlbumRequest` ověří jen to, že album někde
+            // existuje, ne že je ve stejné galerii — bez týhle podmínky šlo album
+            // zavěsit pod rodiče z úplně jiného prostoru.
+            abort_if($newParent->gallery_space_id !== $album->gallery_space_id, 404, 'Cílové album je z jiné galerie.');
         }
 
         $album->moveTo($newParent?->id);

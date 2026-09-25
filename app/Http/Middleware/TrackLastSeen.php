@@ -22,11 +22,22 @@ class TrackLastSeen
 {
     private const EVERY_SECONDS = 60;
 
+    /**
+     * Výsledek `Schema::hasColumn` pro běh procesu.
+     *
+     * Sloupec po nasazení migrace nezmizí, takže se dotaz do `information_schema`
+     * (respektive `pragma_table_xinfo` v testech) stačí položit jednou, ne na
+     * úplně každém přihlášeném požadavku vedle všech ostatních dotazů stránky.
+     */
+    private static ?bool $maSloupec = null;
+
     public function handle(Request $request, Closure $next): Response
     {
         $user = $request->user();
 
-        if ($user && Schema::hasColumn('users', 'last_seen_at')) {
+        self::$maSloupec ??= Schema::hasColumn('users', 'last_seen_at');
+
+        if ($user && self::$maSloupec) {
             $last = $user->last_seen_at;
 
             if (! $last || $last->diffInSeconds(now()) >= self::EVERY_SECONDS) {

@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\MediaItem;
 use App\Services\Planning\CalendarEventLifecycleService;
+use App\Support\Cas;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -94,16 +95,22 @@ class InboxController extends Controller
         }
 
         if (Schema::hasTable('travel_inbox_items')) {
-            $today = now()->startOfDay();
+            // `now()->startOfDay()` byla půlnoc UTC kalendářního dne, ve kterém `now()`
+            // leží — v Praze je ale místní půlnoc dřív (+1/+2 h), takže tahle hranice
+            // ležela až o den zpátky a jako „ještě aktuální“ prošla i akce, která
+            // místně skončila už včera. `dnes()` dá správný den pro sloupec typu DATE,
+            // `pulnocUtc()` skutečný okamžik místní půlnoci pro porovnání s časovým razítkem.
+            $dnesDatum = Cas::dnes()->toDateString();
+            $mistniPulnoc = Cas::pulnocUtc();
             $items = $items->merge(DB::table('travel_inbox_items as item')
                 ->leftJoin('trips as trip', 'trip.id', '=', 'item.trip_id')
                 ->leftJoin('calendar_events as event', 'event.id', '=', 'item.event_id')
                 ->where('item.gallery_space_id', $spaceId)
                 ->whereIn('item.state', ['inbox', 'assigned'])
-                ->where(function ($active) use ($today) {
+                ->where(function ($active) use ($dnesDatum, $mistniPulnoc) {
                     $active->where(fn ($unlinked) => $unlinked->whereNull('item.trip_id')->whereNull('item.event_id'))
-                        ->orWhere('trip.end_date', '>=', $today->toDateString())
-                        ->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$today]);
+                        ->orWhere('trip.end_date', '>=', $dnesDatum)
+                        ->orWhereRaw('COALESCE(event.ends_at, event.starts_at) >= ?', [$mistniPulnoc]);
                 })
                 ->orderByDesc('item.updated_at')
                 ->limit(8)

@@ -15,6 +15,7 @@ use App\Services\Planning\PartnerCoordinationService;
 use App\Services\Planning\PartnerDecisionService;
 use App\Services\Planning\ReminderActionService;
 use App\Services\Planning\TripPreparationTimelineService;
+use App\Support\Cas;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -34,8 +35,12 @@ class DashboardController extends Controller
         }
 
         $now = now();
+        // Pozdrav i „dnešek" pro cestu a výročí patří pásmu dvojice, ne UTC serveru —
+        // těsně po půlnoci v Praze bral `$now->hour`/`toDateString()` ještě včerejší
+        // hodinu i datum, takže pozdrav i termíny seděly o hodinu až o den vedle.
+        $dnes = Cas::dnes();
         $eventLifecycle->completeElapsedPlans([$space->id]);
-        $hour = $now->hour;
+        $hour = Cas::ted()->hour;
         $name = $user->name;
 
         $greeting = match (true) {
@@ -60,7 +65,7 @@ class DashboardController extends Controller
             ->get(['id', 'name', 'icon', 'filters_json', 'view_type']);
         $upcomingTrip = DB::table('trips')
             ->where('gallery_space_id', $space->id)
-            ->where('end_date', '>=', now()->toDateString())
+            ->where('end_date', '>=', $dnes->toDateString())
             ->orderBy('start_date')
             ->first(['id', 'gallery_space_id', 'name', 'start_date', 'end_date', 'status', 'timezone', 'currency']);
         if ($upcomingTrip) {
@@ -98,14 +103,14 @@ class DashboardController extends Controller
             ->where('remind_annually', true)
             ->where(fn ($query) => $query->where('visibility', 'shared')->orWhere('created_by', $user->id))
             ->get(['uuid', 'title', 'icon', 'occurred_on', 'kind', 'relationship', 'person_name', 'is_highlighted'])
-            ->map(function ($milestone) use ($now) {
+            ->map(function ($milestone) use ($dnes) {
                 $original = Carbon::parse($milestone->occurred_on);
-                $next = Carbon::create($now->year, $original->month, min($original->day, Carbon::create($now->year, $original->month, 1)->daysInMonth))->startOfDay();
-                if ($next->lt($now->copy()->startOfDay())) {
+                $next = Carbon::create($dnes->year, $original->month, min($original->day, Carbon::create($dnes->year, $original->month, 1)->daysInMonth))->startOfDay();
+                if ($next->lt($dnes)) {
                     $next->addYear();
                 }
 
-                return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'kind' => $milestone->kind, 'relationship' => $milestone->relationship, 'person_name' => $milestone->person_name, 'is_highlighted' => (bool) $milestone->is_highlighted, 'days_until' => (int) $now->copy()->startOfDay()->diffInDays($next), 'next_anniversary' => $next->toDateString()];
+                return ['uuid' => $milestone->uuid, 'title' => $milestone->title, 'icon' => $milestone->icon, 'kind' => $milestone->kind, 'relationship' => $milestone->relationship, 'person_name' => $milestone->person_name, 'is_highlighted' => (bool) $milestone->is_highlighted, 'days_until' => (int) $dnes->diffInDays($next), 'next_anniversary' => $next->toDateString()];
             })->sortBy('days_until')->take(3)->values();
         $albumSuggestion = $albumSuggestions->prompt($space, $user);
         $reflectionPrompt = null;

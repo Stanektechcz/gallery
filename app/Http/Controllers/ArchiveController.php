@@ -20,6 +20,10 @@ class ArchiveController extends Controller
         $media = MediaItem::query()
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            // Trezor archiv nezruší — přesun do trezoru `is_archived` nemaže, jen skryje
+            // obsah přes `is_hidden`. Bez týhle podmínky archiv jméno souboru, datum
+            // i velikost zamčené položky ukázal, aniž by trezor vůbec byl odemčený.
+            ->where('is_hidden', false)
             ->where('is_archived', true)
             ->where('status', 'ready')
             ->with(['variants' => fn ($q) => $q->whereIn('type', ['thumbnail', 'placeholder'])])
@@ -37,6 +41,7 @@ class ArchiveController extends Controller
         $space = $request->user()->gallerySpaces()->first();
         $media = MediaItem::where('uuid', $uuid)
             ->where('gallery_space_id', $space->id)
+            ->where('is_hidden', false)
             ->firstOrFail();
 
         $media->update(['is_archived' => false]);
@@ -50,7 +55,10 @@ class ArchiveController extends Controller
         $space = $request->user()->gallerySpaces()->first();
         $uuids = $request->validate(['uuids' => 'required|array|max:200', 'uuids.*' => 'string'])['uuids'];
 
+        // Stejný filtr jako v `index()` — bez něj by hromadná akce odarchivovala
+        // i položku, kterou stránka vůbec nezobrazila, protože je v trezoru.
         $count = MediaItem::where('gallery_space_id', $space->id)
+            ->where('is_hidden', false)
             ->whereIn('uuid', $uuids)
             ->update(['is_archived' => false]);
 

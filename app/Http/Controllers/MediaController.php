@@ -23,6 +23,7 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class MediaController extends Controller
 {
@@ -366,6 +367,34 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
+        return $this->mezipamet($media, $this->plneRozliseni($media, $uuid));
+    }
+
+    /**
+     * Mezipaměť pro každý soubor, který odsud odchází.
+     *
+     * Soubor z trezoru `private, no-store`: s `max-age` na den ho prohlížeč po
+     * zamčení trezoru ukázal z paměti, aniž by se serveru zeptal — zámek
+     * (`ProtectVaultMedia`, `Trezor::odemcen()`) by platil jen pro soubory,
+     * které ještě nikdo neotevřel. Stejně jako `/files` (`MediaFileController`).
+     *
+     * Ostatní aspoň `private`: `response()->file()` i `download()` dělají
+     * odpověď veřejnou a `private` z předaných hlaviček tiše přepsaly na
+     * `public` — soukromé fotky tak mohla uložit i sdílená mezipaměť (proxy, CDN).
+     */
+    private function mezipamet(MediaItem $media, SymfonyResponse $odpoved): SymfonyResponse
+    {
+        if ($media->is_hidden) {
+            $odpoved->headers->set('Cache-Control', 'private, no-store');
+
+            return $odpoved;
+        }
+
+        return $odpoved->setPrivate();
+    }
+
+    private function plneRozliseni(MediaItem $media, string $uuid): SymfonyResponse
+    {
         // HEIC/HEIF and RAW originals are archival files. Browsers generally
         // cannot render them, so the viewer must prefer an already generated
         // high-quality web variant instead of returning an unrenderable 200.
@@ -493,6 +522,11 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
+        return $this->mezipamet($media, $this->stazeni($request, $media));
+    }
+
+    private function stazeni(Request $request, MediaItem $media): SymfonyResponse
+    {
         $wantOriginal = $request->boolean('original', false);
 
         if ($wantOriginal && $media->drive_file_id) {
@@ -536,6 +570,11 @@ class MediaController extends Controller
         $media = MediaItem::where('uuid', $uuid)->firstOrFail();
         Gate::authorize('view', $media);
 
+        return $this->mezipamet($media, $this->prehravani($media));
+    }
+
+    private function prehravani(MediaItem $media): SymfonyResponse
+    {
         // For videos, always prefer the compact, fast-start compatibility
         // file. It is served from the local cache with byte-range support.
         $compat = $media->getVariant('video_compat');

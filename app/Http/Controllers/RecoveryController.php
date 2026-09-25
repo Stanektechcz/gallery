@@ -90,10 +90,19 @@ class RecoveryController extends Controller
     {
         $space = $request->user()->gallerySpaces()->first();
 
+        // Účet bez galerie (čerstvě založený, ještě nepřijal pozvánku) tu nemá co
+        // porovnávat — bez tyhle podmínky `$space->id` o pár řádků níž padalo na 500.
+        if (! $space) {
+            return response()->json(['group_count' => 0, 'total_extras' => 0, 'unchecked' => 0, 'groups' => []]);
+        }
+
         // Find sha256 hashes that appear more than once
         $dupHashes = DB::table('media_items')
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            // Trezor se do porovnání duplicit nepočítá — jinak by odpověď nesla jméno
+            // souboru, datum i náhled zamčené položky, aniž by byl trezor odemčený.
+            ->where('is_hidden', false)
             ->whereNotNull('sha256')
             ->select('sha256', DB::raw('COUNT(*) as cnt'))
             ->groupBy('sha256')
@@ -107,6 +116,7 @@ class RecoveryController extends Controller
             $items = MediaItem::with('variants')
                 ->where('gallery_space_id', $space->id)
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->where('sha256', $hash)
                 ->orderBy('taken_at')
                 ->get();
@@ -134,6 +144,7 @@ class RecoveryController extends Controller
         $bezOtisku = DB::table('media_items')
             ->where('gallery_space_id', $space->id)
             ->whereNull('trashed_at')
+            ->where('is_hidden', false)
             ->whereNull('sha256')
             ->count();
 
@@ -152,10 +163,17 @@ class RecoveryController extends Controller
     public function cleanupSuggestions(Request $request): JsonResponse
     {
         $space = $request->user()->gallerySpaces()->first();
-        $base = MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at');
+
+        // Stejný důvod jako ve `findDuplicates()` — čerstvý účet bez galerie tu jinak
+        // padal na `$space->id` dřív, než se dostal k prvnímu dotazu.
+        if (! $space) {
+            return response()->json(['potential_savings' => 0, 'categories' => []]);
+        }
+
+        $base = MediaItem::where('gallery_space_id', $space->id)->whereNull('trashed_at')->where('is_hidden', false);
 
         $duplicateRows = DB::table('media_items')
-            ->where('gallery_space_id', $space->id)->whereNull('trashed_at')->whereNotNull('sha256')
+            ->where('gallery_space_id', $space->id)->whereNull('trashed_at')->where('is_hidden', false)->whereNotNull('sha256')
             ->select('sha256', DB::raw('COUNT(*) as count'), DB::raw('SUM(size_bytes) as bytes'))
             ->groupBy('sha256')->havingRaw('COUNT(*) > 1')->get();
         $duplicateExtras = $duplicateRows->sum(fn ($row) => max(0, $row->count - 1));
@@ -220,7 +238,10 @@ class RecoveryController extends Controller
             'media_ids.*' => 'integer',
         ]);
 
+        // Zamčený trezor se odsud přesouvat nedá — bez podmínky by tahle akce fungovala
+        // jako obchvat, který smaže položku z trezoru, aniž by ho kdokoli odemkl.
         $trashed = MediaItem::where('gallery_space_id', $space->id)
+            ->where('is_hidden', false)
             ->whereIn('id', $v['media_ids'])
             ->whereNull('trashed_at')
             ->get();

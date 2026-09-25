@@ -6,6 +6,7 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Services\Auth\PristupDoGalerie;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -14,11 +15,16 @@ use Inertia\Response;
 
 class FavoritesController extends Controller
 {
+    public function __construct(private readonly PristupDoGalerie $pristup) {}
+
     public function index(Request $request): Response
     {
         $user = $request->user();
         $space = $user->gallerySpaces()->first();
-        $members = $space->members()->get(['users.id', 'users.name']);
+        // Jen dvojice, ne každý host — host (viewer/contributor) vidí „jen sdílené
+        // odkazy" a jeho oblíbené se nikdy nedoplní; sdílené by tak čekalo na
+        // někoho, kdo se do aplikace vůbec nepřihlásí.
+        $members = $this->pristup->dvojice($space)->map(fn (User $m) => (object) ['id' => $m->id, 'name' => $m->name]);
 
         $myId = $user->id;
         $partnerIds = $members->where('id', '!=', $myId)->pluck('id');
@@ -101,18 +107,17 @@ class FavoritesController extends Controller
 
         $media->update(['is_favorite' => $anyFav]);
 
-        // Is shared (all space members favorited)?
-        $memberIds = $space->members()->pluck('users.id');
+        // Is shared (all COUPLE members favorited — host se do dvojice nepočítá)?
+        $dvojice = $this->pristup->dvojice($space);
+        $memberIds = $dvojice->pluck('id');
         $favCount = DB::table('user_favorites')
             ->where('media_item_id', $media->id)
             ->whereIn('user_id', $memberIds)
             ->count();
         $isShared = $memberIds->count() > 1 && $favCount >= $memberIds->count();
 
-        // Partner name for the UI badge
-        $partner = $space->members()
-            ->where('users.id', '!=', $user->id)
-            ->first(['users.name']);
+        // Partner name for the UI badge — jen z dvojice, aby tu nesvítilo jméno hosta.
+        $partner = $dvojice->firstWhere('id', '!=', $user->id);
 
         // Notify the media owner if it's not the same user
         if ($isMine && $media->owner_user_id && $media->owner_user_id !== $user->id) {
