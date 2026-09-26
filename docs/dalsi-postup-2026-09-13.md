@@ -804,6 +804,155 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2aq. Čtyřicáté čtvrté kolo — MySQL v CI, kopie v cloudu, token a CSP (26. 9.)
+
+Zadání: **„Pokračuj dalším kolem a pak to pushni"**. Vychází z bodů, které
+zbyly z auditu připravenosti (2ao) a ze „Zbývá" v 2ap. Pět auditů `task-plan`
+naráz (videa a fronta, kopie v cloudu, finance a sdílení, MySQL a CI, token
+a CSP), opravy po oblastech na oddělených souborech, každý nález nejdřív
+potvrdil test, který bez opravy spadl. Na závěr bezpečnostní a obecná revize
+celé změny; její nálezy jsou opravené taky.
+
+### Testy na MySQL v CI
+
+* **`.github/workflows/tests.yml`** — dvě úlohy: SQLite (povinná) a MySQL 8.0
+  (`continue-on-error` na zahořovací dobu). PHP 8.4, minimální `.env` jen
+  s klíčem, výsledky jako JUnit artefakt. Sada se na MySQL spouští poprvé;
+  první běhy ukážou, co SQLite schová.
+* **Testy, které by běh na MySQL rozbily** (DDL uvnitř transakce testu =
+  implicitní commit): mazání tabulek v `PlanningExpansionTest`, pád tabulky
+  oblíbených v `MediaVeStavuTest` a `StavDluhTest`, unikátní index faktur,
+  data `ZalohaDatabazeTest`. Nová `tests/Concerns/SelhavajiciTabulka`
+  (selhání tabulky bez DDL) a `SchemaMimoTransakce` (vlastní schéma
+  pro testy, které DDL opravdu potřebují).
+* **Chyby jen na MySQL:**
+  * Reakce emoji: `utf8mb4_unicode_ci` váží všechna emoji stejně — 😂 po 👍
+    👍 smazalo. Migrace `2026_09_29_110000_emoji_reakci_binarne` dá sloupci
+    `utf8mb4_bin` (na SQLite nic).
+  * Hledání (FULLTEXT) padalo na `@` a jiných operátorech a ignorovalo
+    krátká slova — `App\Support\FulltextDotaz`. **Víc slov se teď hledá
+    jako „všechna, i začátkem slova"** (dřív „kterékoli").
+  * Součty z `SUM()` šly do JSON jako řetězce (časová osa, statistiky,
+    rozpočet akce, úložiště, obnova).
+  * Stejný název kategorie, rozpočtu dárků nebo obálky (i jen jinak velkými
+    písmeny či bez diakritiky) → 500; teď 422 s vysvětlením.
+  * Přílohy vzpomínkového večera a připomínky sdíleného úkolu se mohly
+    zdvojit (`insertOrIgnore` bez klíče, který by duplicitu chytil).
+
+### Videa a fronta (zbytek z 2ap)
+
+* **Hardwarový kodér se ověří zkušebním snímkem** (0,1 s černé), výsledek
+  se pamatuje 7 dní. Distribuční ffmpeg hlásí `qsv`/`nvenc` i bez hardwaru —
+  dřív první převod každého videa selhal a do logu šlo varování. `vaapi`
+  se automaticky nevybírá (bez zařízení nefungoval nikdy). `VIDEO_ENCODER`
+  v `.env` kodér nastaví natvrdo.
+* **Fronta `heavy`** pro převod videa, vývoz a ruční spuštění úlohy
+  z administrace, s vlastním `heavy-drain` (jedna úloha, zámek 70 min).
+  Hodinový převod dřív přežil desetiminutový zámek `queue-drain` a vedle
+  se rozběhly další workery. Zámek `queue-drain` je 20 min.
+* Kopie k přehrávání se nepřevádí znovu, když už je (oprava náhledů ji
+  pouštěla pokaždé); dvě úlohy téhož videa si nemažou dočasný soubor.
+* Video kratší než 2 s dostane plakát (dřív náhradní obrázek).
+* `gallery:doctor` upozorní, když CLI nemá `pcntl` — bez něj se časové
+  limity úloh nevynucují.
+
+### Mazání kopií v cloudu
+
+* **Trvalé smazání mazalo jen z Google Disku** (a jen při zdravém spojení).
+  Kopie v Dropboxu, OneDrivu a na WebDAV zůstávaly navždy — klienti mazat
+  neuměli a odkaz na kopii odešel s řádkem fotky.
+* Teď `MediaPurger` před smazáním zapíše každou kopii do
+  `cloud_copy_deletions` (migrace `2026_09_29_100000`, bez jména souboru)
+  a úloha `RemoveCloudCopy` ji smaže s opakováním (6 pokusů, až 3 h).
+  Výpadek cloudu mazání u nás nezastaví; „nenalezeno" je úspěch. Všechny
+  cloudy mažou do vlastního koše.
+* `gallery:cloud-mazani` vypíše stav, `--znovu` vrátí selhaná do fronty;
+  `gallery:doctor` selhaná hlásí.
+* Úklid osiřelých položek (`gallery:exif --clean-orphans`) jde přes
+  `MediaPurger` a **položku s kopií v cloudu nemaže** — vypíše ji jako
+  obnovitelnou (chybějící originál umí způsobit i nepřipojený disk).
+* **Jména fotek z trezoru** už nejdou do protokolu při přesunu do trezoru
+  a ven ani při trvalém smazání a přehled „Dnes" je nevypíše ani u starého
+  záznamu o nahrání fotky, která je teď v trezoru. Migrace
+  `2026_09_29_120000` je dočistí ze starších záznamů přesunu i ze záznamů
+  o položkách v trezoru. Záznamy trvalého smazání z dřívějška zůstávají
+  (u smazané položky se trezor poznat nedá).
+* Mrtvá `PurgeMediaFromDriveJob` (mazala přes kterýkoli Disk v systému)
+  je pryč.
+
+### Přihlašovací token a CSP
+
+* **Přihlášení platí 60 dní od posledního použití** (heslem i otiskem;
+  použití platnost posune, nejvýš jednou denně, podmíněně — zrušení
+  uprostřed požadavku se nepřepíše). Dosavadní tokeny bez platnosti
+  hlídá dál limit nečinnosti 90 dní, dalším přihlášením se nahradí.
+  Klíče k API platnost nemají. `gallery:uklid-prihlaseni` (denně) maže
+  jen prošlá přihlášení, zrušené klíče zůstávají vidět.
+* Prošlý token ani cizí token k přihlášenému sezení nedostanou výjimku
+  z ochrany proti CSRF.
+* **Prototyp bez `'unsafe-inline'` u skriptů:** vlastní CSP s otisky
+  (`sha256`) přesně těch inline skriptů, které dokument nese, spočítanými
+  z těla odpovědi (ETag i 304 zůstávají). Z unpkg jen tři soubory, které
+  runtime stahuje (React, ReactDOM, Babel), ne celý host. Ověřeno
+  v prohlížeči na počítači i telefonu: aplikace naběhne, vložený skript
+  i cizí balík z unpkg prohlížeč zablokuje. Ostatní stránky mají politiku
+  beze změny. `'unsafe-eval'` zůstává (runtime překládá JSX v prohlížeči).
+
+### Finance a sdílené odkazy
+
+* Vynulování fondu ze stavu (`season`) nesmaže vklad partnera, který přišel
+  mezitím; úprava cíle cesty ve starém rozhraní nevynuluje naspořené;
+  korekce zůstatku a slučování účtů zamykají řádky.
+* Podepsaná adresa souboru bez řádku v databázi se nevydá (404).
+* Správné heslo k odkazu obnoví sezení; **změna hesla zamkne i ty, kdo
+  odkaz odemkli dřív**; na neplatný odkaz se heslo nezkouší.
+
+### Po nasazení
+
+1. **Tři migrace**: `cloud_copy_deletions`, emoji `utf8mb4_bin`, jména
+   z protokolu — rychlé, bez přestavby velkých tabulek.
+2. Oba se po nasazení **znovu přihlásí** jen tehdy, když zařízení nepoužili
+   přes 90 dní; ostatní jedou dál a s dalším přihlášením dostanou token
+   s klouzavou platností.
+3. Cron beze změny — `heavy-drain` a úklid přihlášení jdou přes
+   `schedule:run`. Kdo má stálé workery (systemd), přidá frontu `heavy`
+   (`DEPLOYMENT_ISPCONFIG.md`, opravená i binárka PHP 8.4).
+4. `gallery:doctor`: `pcntl` v CLI a selhaná mazání v cloudu.
+5. Po prvním běhu CI zkontrolovat úlohu MySQL; až bude zelená, odstranit
+   `continue-on-error`.
+
+### Zbývá
+
+* **Rozhodnutí:** mají se fotky z trezoru kopírovat do cloudu vůbec? Dnes
+  ano (jediná záloha mimo server), cloudový účet ale trezor nechrání.
+* Starší kopie v OneDrivu se mažou podle jména; kdo soubor v OneDrivu
+  přejmenoval, tomu zůstane. Kopie z doby před tímhle kolem, jejichž
+  fotka už je smazaná, se dohledat nedají.
+* Mazání vybírá spojení podle prostoru a poskytovatele; kopie nahraná přes
+  dřívější, mezitím nahrazený účet se smaže jen z účtu, který je připojený
+  teď (varianta si spojení nepamatuje).
+* Přihlášení nemá absolutní strop — token používaný aspoň jednou za 60 dní
+  platí dál. Cookie místo tokenu v `localStorage` (etapa C auditu) zůstává
+  na další kolo.
+* Statické `mapa.html` a `offline.html` vydává webový server bez CSP.
+* Ze 2ao dál: přihlášený průchod obou zařízení, staré `/prehled`, partner
+  s odebraným přístupem.
+
+| Commit | Obsah |
+|---|---|
+| `88b3b471` | Videa — ověřený hardwarový kodér, fronta `heavy`, bez opakovaných převodů |
+| `e082dabb` | Trvalé smazání maže kopie ve všech cloudech, jména z trezoru pryč z protokolu |
+| `0ea9e529` | Přihlášení zařízení platí 60 dní od posledního použití |
+| `de90c6e1` | Prototyp bez `'unsafe-inline'` — inline skripty jen podle otisku |
+| `daacce9b` | Souběžné vklady a úpravy peněz se neztrácejí |
+| `4b7ad202` | Sdílené odkazy — změna hesla zamkne odemčené, sezení se obnoví |
+| `268b2f12` | CI: testy na SQLite i MySQL 8, testy bez DDL uvnitř transakce |
+| `8277125e` | Chyby jen na MySQL — emoji, hledání, součty, duplicity |
+
+Testy: **2797 PHP testů (104 nových)**, všechny prošly v běžném čase,
+o Silvestru 23:30 i v letní noci 1. 7. 22:40. **Tři migrace** (viz Po
+nasazení). Běh na MySQL ukáže až CI.
+
 ## 2ap. Čtyřicáté třetí kolo — videa bez shellu, nasazení v režimu údržby (26. 9.)
 
 Zadání: **„Pokračuj dalším kolem, oprav videa a nasazení, pak pushni"**.
