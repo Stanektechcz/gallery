@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Http\Controllers\Api\FinanceSetupController;
 use App\Models\FinanceCategory;
 use App\Models\FinanceProject;
 use App\Models\GallerySpace;
@@ -145,6 +146,41 @@ class FinanceSetupTest extends TestCase
         $this->assertFalse($korekce->countsTowardsBudget());
     }
 
+    /**
+     * Souběh dvou korekcí naráz: SQLite v jednom vlákně dva požadavky
+     * nespustí zároveň, takže se to, co dva zápisy bez zámku dřív rozbilo
+     * (každý napsal celý rozdíl a dohromady zdvojnásobily korekci), ověřuje
+     * aspoň strukturou zdrojáku — zůstatek se čte i zapisuje pod zámkem
+     * na řádek účtu v jedné transakci.
+     */
+    public function test_korekce_ma_zamek_a_transakci_proti_soubehu(): void
+    {
+        $zdroj = (new \ReflectionMethod(FinanceSetupController::class, 'correctWallet'))
+            ->getFileName();
+        $telo = file_get_contents($zdroj);
+
+        $this->assertStringContainsString('DB::transaction', $telo);
+        $this->assertStringContainsString('lockForUpdate', $telo);
+    }
+
+    /** Dvě korekce po sobě dopočítají zůstatek správně — chování se zámkem se nemění. */
+    public function test_dve_korekce_po_sobe_davaji_spravny_zustatek(): void
+    {
+        $u = $this->ucet('Hotovost', 'EUR', 500);
+        $this->vydaj($u, 100); // podle knihy zbývá 400
+
+        $this->postJson("/api/v1/rozpocet/ucty/{$u->uuid}/korekce", [
+            'actual_balance' => 380, 'reason' => 'první korekce',
+        ])->assertOk();
+
+        $odpoved = $this->postJson("/api/v1/rozpocet/ucty/{$u->uuid}/korekce", [
+            'actual_balance' => 350, 'reason' => 'druhá korekce',
+        ])->assertOk();
+
+        $this->assertEqualsWithDelta(-30, $odpoved->json('difference'), 0.001);
+        $this->assertEqualsWithDelta(350, collect($odpoved->json('wallets'))->firstWhere('name', 'Hotovost')['balance'], 0.001);
+    }
+
     public function test_korekce_kdyz_zustatek_sedi(): void
     {
         $u = $this->ucet('EUR', 'EUR', 500);
@@ -285,5 +321,23 @@ class FinanceSetupTest extends TestCase
         $this->assertTrue(collect($odpoved->json('categories'))->contains(
             fn ($k) => $k['name'] === 'Sauna' && $k['is_favourite'],
         ));
+    }
+
+    /**
+     * Přesná duplicita (stejný název, prostor i druh) dřív spadla na 500.
+     *
+     * `finance_categories` má `unique(gallery_space_id, name, kind)` — bez
+     * odchycení `UniqueConstraintViolationException` to `create()` prostě
+     * pustil do databáze a ta to vrátila jako neošetřenou výjimku.
+     */
+    public function test_presna_duplicita_kategorie_vrati_422(): void
+    {
+        $this->postJson('/api/v1/rozpocet/kategorie', ['name' => 'Sauna', 'kind' => 'expense'])->assertCreated();
+
+        $odpoved = $this->postJson('/api/v1/rozpocet/kategorie', ['name' => 'Sauna', 'kind' => 'expense'])
+            ->assertStatus(422);
+
+        $this->assertSame(1, FinanceCategory::where('gallery_space_id', $this->space->id)->where('name', 'Sauna')->count());
+        $this->assertNotEmpty($odpoved->json('message'));
     }
 }

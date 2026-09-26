@@ -4,6 +4,7 @@ namespace Tests\Feature\Galerie;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Services\Provoz\RozboryVeStavu;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -234,6 +235,32 @@ class RozboryVeStavuTest extends TestCase
         $this->stav(['season' => [['id' => $uuid, 'saved' => 38200, 'per' => 3400]]])->assertOk();
 
         $this->assertSame('2026-12-01', substr((string) DB::table('budget_goals')->where('uuid', $uuid)->value('target_on'), 0, 10));
+    }
+
+    /**
+     * Vklad, který mezitím udělal ten druhý přes Rozpočty, se vynulováním nesmí zahodit.
+     *
+     * `zpracuj()` dřív obálku vynuloval podle toho, co přečetl na začátku —
+     * bez ohledu na to, co do ní mezitím přibylo. Vynulování tu simulujeme
+     * napřímo přes `vynulujFond()`, protože SQLite v jednom vlákně opravdový
+     * souběh dvou požadavků nepředvede: `saved_amount` v databázi (500) už
+     * neodpovídá tomu, co si metoda myslí, že tam pořád je (300).
+     */
+    public function test_vynulovani_fondu_nezahodi_mezitimni_vklad(): void
+    {
+        $uuid = $this->fond(['saved_amount' => 500]);
+        $id = (int) DB::table('budget_goals')->where('uuid', $uuid)->value('id');
+
+        $rozbory = app(RozboryVeStavu::class);
+        $metoda = new \ReflectionMethod($rozbory, 'vynulujFond');
+        $metoda->setAccessible(true);
+
+        $this->assertFalse($metoda->invoke($rozbory, $id, '300'));
+        $this->assertSame(500.0, (float) DB::table('budget_goals')->where('id', $id)->value('saved_amount'));
+
+        // Normální cesta — očekávaná hodnota sedí — pořád vynuluje.
+        $this->assertTrue($metoda->invoke($rozbory, $id, '500'));
+        $this->assertSame(0.0, (float) DB::table('budget_goals')->where('id', $id)->value('saved_amount'));
     }
 
     // ——— pomůcky ———

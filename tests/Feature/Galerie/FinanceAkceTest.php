@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Http\Controllers\Api\Galerie\FinanceAkceController;
 use App\Models\Budget;
 use App\Models\BudgetGoal;
 use App\Models\FinanceCategory;
@@ -310,6 +311,23 @@ class FinanceAkceTest extends TestCase
         $this->postJson('/api/finance/rozpocet/obalka', ['castka' => 900])->assertStatus(201);
         $this->assertSame(1, FinanceCategory::withTrashed()->where('name', 'Obálka pro sebe')->count());
         $this->assertEquals(900, (float) $this->limit($rozpocet, 'Obálka pro sebe'));
+    }
+
+    /**
+     * Souběh dvou „Zvednout obálku" naráz nesmí spadnout na 500.
+     *
+     * `firstOrNew` napřed přečte, teprve pak `save()` zapisuje — souběh dvou
+     * požadavků se stejnou (pevnou) kategorií mezi tím projeví přesně jako
+     * duplicita v `storeCategory` výš. Skutečný souběh dvou HTTP požadavků
+     * PHPUnit v jednom vlákně nepředvede, proto se odchycení
+     * `UniqueConstraintViolationException` ověřuje strukturou zdrojáku —
+     * stejně jako `FinanceSetupController::correctWallet`.
+     */
+    public function test_obalka_ma_odchyceni_soubehu_pri_zalozeni(): void
+    {
+        $zdroj = file_get_contents((new \ReflectionMethod(FinanceAkceController::class, 'obalka'))->getFileName());
+
+        $this->assertStringContainsString('UniqueConstraintViolationException', $zdroj);
     }
 
     public function test_obalka_bez_rozpoctu_rekne_proc(): void

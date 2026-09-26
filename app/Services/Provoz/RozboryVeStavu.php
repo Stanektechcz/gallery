@@ -52,9 +52,15 @@ class RozboryVeStavu
             return [];
         }
 
+        /*
+         * `lockForUpdate` drží řádky, dokud `zpracuj()` neskončí (běží uvnitř
+         * `DB::transaction` ve `StateController`) — vklad z Rozpočtů, který by
+         * jinak spadl přesně mezi tohle čtení a zápis níž, počká.
+         */
         $fondy = DB::table('budget_goals as c')
             ->join('budgets as r', 'r.id', '=', 'c.budget_id')
             ->where('r.gallery_space_id', $prostor->id)
+            ->lockForUpdate()
             ->get(['c.id', 'c.uuid', 'c.budget_id', 'r.owner_user_id', 'c.target_amount', 'c.saved_amount', 'c.target_on'])
             ->keyBy('uuid');
 
@@ -100,25 +106,44 @@ class RozboryVeStavu
              * Obrazovka uspořenou částku jinak než na nulu nemění; vklady a
              * výběry chodí přes Rozpočty. Jiné číslo je tedy opis z doby
              * načtení a zapsat ho by smazalo vklad, který mezitím přišel.
+             *
+             * Vynulování je navíc podmíněné tím, co se opravdu přečetlo
+             * (`vynulujFond`) — `lockForUpdate` výš řeší souběh v rámci jedné
+             * transakce, tahle podmínka je pojistka navíc a jde otestovat
+             * i tam, kde SQLite žádný zámek nedrží.
              */
             if (array_key_exists('saved', $f) && is_numeric($f['saved']) && (float) $f['saved'] == 0 && (float) $fond->saved_amount != 0) {
-                $zmena['saved_amount'] = 0;
+                if ($this->vynulujFond((int) $fond->id, (string) $fond->saved_amount)) {
+                    $zmena['saved_amount'] = 0;
+                }
             }
 
             $termin = $this->novyTermin($f, $fond, $zmena, $dnes);
 
             if ($termin !== null) {
-                $zmena['target_on'] = $termin;
-            }
-
-            if ($zmena !== []) {
-                DB::table('budget_goals')->where('id', $fond->id)->update($zmena + ['updated_at' => now()]);
+                DB::table('budget_goals')->where('id', $fond->id)->update(['target_on' => $termin, 'updated_at' => now()]);
             }
         }
 
         $fondy = $this->obsah->kolekce($prostor)['SEASON'] ?? [];
 
         return $fondy ? ['season' => $fondy] : [];
+    }
+
+    /**
+     * Vynuluje uspořenou částku, jen když v databázi je pořád to, co jsme přečetli.
+     *
+     * `WHERE saved_amount = $ocekavano` je podmínka platná v okamžiku zápisu, ne
+     * ta přečtená o chvíli dřív — vklad, který mezitím přišel z Rozpočtů
+     * (`FinanceAkceController::vklad`), tak zápis nulou nepřepíše. Vrací, jestli
+     * se opravdu zapsalo.
+     */
+    private function vynulujFond(int $id, string $ocekavano): bool
+    {
+        return DB::table('budget_goals')
+            ->where('id', $id)
+            ->where('saved_amount', $ocekavano)
+            ->update(['saved_amount' => 0, 'updated_at' => now()]) > 0;
     }
 
     /**

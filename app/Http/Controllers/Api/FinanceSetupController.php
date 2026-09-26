@@ -19,11 +19,14 @@ use App\Services\Finance\FinanceService;
 use App\Services\Finance\RecurringService;
 use App\Services\Finance\SlucovaniService;
 use App\Support\Meny;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * Správa účtů, cest, kategorií a partnerů.
@@ -127,10 +130,16 @@ class FinanceSetupController extends Controller
      * zapsaným rozdílem s důvodem. Za půl roku pak jde zjistit, že se tehdy něco
      * nezapsalo — místo aby zůstatek prostě někdy někde skočil.
      */
+    /**
+     * Souběh dvou korekcí naráz by bez zámku obě spočítaly rozdíl podle
+     * stejného, ještě neopraveného zůstatku a zapsaly ho obě — korekce by se
+     * tak zdvojnásobila. `lockForUpdate` na řádek účtu drží druhý požadavek,
+     * dokud první nezapíše a transakce se nezavře; druhý pak počítá rozdíl
+     * už z opraveného zůstatku.
+     */
     public function correctWallet(Request $request, string $uuid): JsonResponse
     {
         $space = $this->space($request);
-        $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->firstOrFail();
 
         $data = $request->validate([
             'actual_balance' => 'required|numeric|between:-999999999.99,999999999.99',
@@ -138,36 +147,40 @@ class FinanceSetupController extends Controller
             'occurred_at' => 'nullable|date',
         ]);
 
-        $podleKnihy = (float) collect($this->finance->balances($space)['wallets'])
-            ->firstWhere('uuid', $ucet->uuid)['balance'];
+        return DB::transaction(function () use ($request, $space, $uuid, $data) {
+            $ucet = Wallet::where('gallery_space_id', $space->id)->where('uuid', $uuid)->lockForUpdate()->firstOrFail();
 
-        $rozdil = round((float) $data['actual_balance'] - $podleKnihy, 2);
+            $podleKnihy = (float) collect($this->finance->balances($space)['wallets'])
+                ->firstWhere('uuid', $ucet->uuid)['balance'];
 
-        if (abs($rozdil) < 0.005) {
-            return response()->json(['message' => 'Zůstatek už sedí, korekce není potřeba.', 'difference' => 0]);
-        }
+            $rozdil = round((float) $data['actual_balance'] - $podleKnihy, 2);
 
-        // Chybí peníze → výdaj; přebývají → příjem. Obojí označené jako korekce, aby
-        // šlo ve statistikách odlišit od skutečného nákupu.
-        Transaction::create([
-            'gallery_space_id' => $space->id,
-            'type' => $rozdil < 0 ? 'expense' : 'income',
-            'occurred_at' => $data['occurred_at'] ?? FinanceFilter::dnes()->toDateString(),
-            'wallet_from_id' => $rozdil < 0 ? $ucet->id : null,
-            'wallet_to_id' => $rozdil > 0 ? $ucet->id : null,
-            'amount_from' => $rozdil < 0 ? abs($rozdil) : null,
-            'currency_from' => $ucet->currency,
-            'amount_to' => $rozdil > 0 ? $rozdil : null,
-            'currency_to' => $rozdil > 0 ? $ucet->currency : null,
-            'description' => 'Korekce zůstatku: '.$data['reason'],
-            // Do rozpočtu se korekce nepočítá — nikdo za ni nic nekoupil.
-            'excluded_from_budget' => true,
-            'exclusion_reason' => 'Korekce zůstatku',
-            'state' => 'approved',
-            'created_by' => $request->user()->id,
-        ]);
+            if (abs($rozdil) < 0.005) {
+                return response()->json(['message' => 'Zůstatek už sedí, korekce není potřeba.', 'difference' => 0]);
+            }
 
-        return response()->json(['difference' => $rozdil] + $this->finance->balances($space));
+            // Chybí peníze → výdaj; přebývají → příjem. Obojí označené jako korekce, aby
+            // šlo ve statistikách odlišit od skutečného nákupu.
+            Transaction::create([
+                'gallery_space_id' => $space->id,
+                'type' => $rozdil < 0 ? 'expense' : 'income',
+                'occurred_at' => $data['occurred_at'] ?? FinanceFilter::dnes()->toDateString(),
+                'wallet_from_id' => $rozdil < 0 ? $ucet->id : null,
+                'wallet_to_id' => $rozdil > 0 ? $ucet->id : null,
+                'amount_from' => $rozdil < 0 ? abs($rozdil) : null,
+                'currency_from' => $ucet->currency,
+                'amount_to' => $rozdil > 0 ? $rozdil : null,
+                'currency_to' => $rozdil > 0 ? $ucet->currency : null,
+                'description' => 'Korekce zůstatku: '.$data['reason'],
+                // Do rozpočtu se korekce nepočítá — nikdo za ni nic nekoupil.
+                'excluded_from_budget' => true,
+                'exclusion_reason' => 'Korekce zůstatku',
+                'state' => 'approved',
+                'created_by' => $request->user()->id,
+            ]);
+
+            return response()->json(['difference' => $rozdil] + $this->finance->balances($space));
+        });
     }
 
     public function destroyWallet(Request $request, string $uuid): JsonResponse
@@ -771,6 +784,14 @@ class FinanceSetupController extends Controller
         return response()->json(['categories' => $this->kategorie($this->space($request))]);
     }
 
+    /**
+     * Nová kategorie — název je v prostoru pro daný druh (příjem/výdaj) jedinečný.
+     *
+     * `unique(gallery_space_id, name, kind)` to hlídá v databázi, ne tady —
+     * SQLite porovnává přesně, MySQL (`utf8mb4_unicode_ci`) navíc bez ohledu
+     * na velikost písmen a diakritiku („jidlo" vedle „Jídlo"). Bez odchycení
+     * by shoda v obou případech skončila jako 500, ne jako srozumitelná chyba.
+     */
     public function storeCategory(Request $request): JsonResponse
     {
         $space = $this->space($request);
@@ -783,10 +804,20 @@ class FinanceSetupController extends Controller
             'is_favourite' => 'sometimes|boolean',
         ]);
 
-        FinanceCategory::create($data + [
-            'gallery_space_id' => $space->id,
-            'sort_order' => (int) FinanceCategory::where('gallery_space_id', $space->id)->max('sort_order') + 10,
-        ]);
+        // Přesná shoda předem: rychlejší odpověď v běžném případě a jasnější
+        // chyba u pole, i když poslední slovo má stejně databáze níž.
+        if (FinanceCategory::where('gallery_space_id', $space->id)->where('name', $data['name'])->where('kind', $data['kind'])->exists()) {
+            throw ValidationException::withMessages(['name' => 'Kategorie „'.$data['name'].'“ už v prostoru je.']);
+        }
+
+        try {
+            FinanceCategory::create($data + [
+                'gallery_space_id' => $space->id,
+                'sort_order' => (int) FinanceCategory::where('gallery_space_id', $space->id)->max('sort_order') + 10,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw ValidationException::withMessages(['name' => 'Kategorie „'.$data['name'].'“ už v prostoru je.']);
+        }
 
         return response()->json(['categories' => $this->kategorie($space)], 201);
     }

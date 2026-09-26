@@ -89,12 +89,18 @@ class SlucovaniService
      */
     private function slijLimity(int $zId, int $doId): void
     {
-        $stare = DB::table('budget_category_limits')->where('finance_category_id', $zId)->get();
+        /*
+         * Zamčeno na dobu celého sloučení (běží uvnitř `DB::transaction`
+         * v `kategorie()`) — bez zámku by souběžná úprava limitu mezi tímhle
+         * čtením a zápisem níž zmizela: přepsala by ji hodnota přečtená dřív.
+         */
+        $stare = DB::table('budget_category_limits')->where('finance_category_id', $zId)->lockForUpdate()->get();
 
         foreach ($stare as $radek) {
             $cilovy = DB::table('budget_category_limits')
                 ->where('budget_id', $radek->budget_id)
                 ->where('finance_category_id', $doId)
+                ->lockForUpdate()
                 ->first();
 
             if ($cilovy === null) {
@@ -157,6 +163,18 @@ class SlucovaniService
         $nahled = $this->nahledUctu($space, $z, $do);
 
         DB::transaction(function () use ($space, $z, $do) {
+            /*
+             * Zámek na oba účty, v pevném pořadí podle id (řadí ho `orderBy`).
+             *
+             * Bez něj by dvě sloučení do stejného cílového účtu naráz přečetla
+             * stejný `opening_balance` a druhé by ho přepsalo bez prvního
+             * přírůstku — peníze z jednoho sloučení by zmizely. Pevné pořadí
+             * zabrání uváznutí, kdyby šly dva merge proti sobě.
+             */
+            $zamceno = Wallet::whereIn('id', [$z->id, $do->id])->orderBy('id')->lockForUpdate()->get()->keyBy('id');
+            $z = $zamceno[$z->id];
+            $do = $zamceno[$do->id];
+
             DB::table('transactions')->where('gallery_space_id', $space->id)
                 ->where('wallet_from_id', $z->id)->update(['wallet_from_id' => $do->id]);
 

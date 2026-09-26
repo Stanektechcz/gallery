@@ -188,11 +188,34 @@ class TripIntelligenceController extends Controller
         return response()->json(['advisor' => $snapshot, 'automation' => ['limits_applied' => $limitsApplied, 'calendar_tasks' => $tasks]]);
     }
 
+    /**
+     * Cíl spoření na cestu — založí, nebo upraví.
+     *
+     * `updateOrInsert` dřív bral `saved_amount ?? 0` při každém uložení a psal
+     * i `created_at` na update. Kdo jen posunul cílovou částku bez pole
+     * `saved_amount` (formulář ho neposílá vždycky), přišel o to, co bylo
+     * uspořené — a cíl vypadal, že vznikl znovu při každé úpravě.
+     */
     public function upsertSavingsGoal(Request $request, int $tripId): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
         $data = $request->validate(['target_amount' => 'required|numeric|min:0|max:999999999', 'saved_amount' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'target_date' => 'nullable|date', 'monthly_contribution' => 'nullable|numeric|min:0|max:999999999']);
-        DB::table('trip_savings_goals')->updateOrInsert(['trip_id' => $tripId], $data + ['saved_amount' => $data['saved_amount'] ?? 0, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'created_at' => now(), 'updated_at' => now()]);
+
+        $existuje = DB::table('trip_savings_goals')->where('trip_id', $tripId)->exists();
+
+        $zmeny = $data + ['currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'updated_at' => now()];
+
+        if (array_key_exists('saved_amount', $data)) {
+            $zmeny['saved_amount'] = $data['saved_amount'];
+        } elseif (! $existuje) {
+            $zmeny['saved_amount'] = 0;
+        }
+
+        if ($existuje) {
+            DB::table('trip_savings_goals')->where('trip_id', $tripId)->update($zmeny);
+        } else {
+            DB::table('trip_savings_goals')->insert($zmeny + ['trip_id' => $tripId, 'created_at' => now()]);
+        }
 
         return response()->json(DB::table('trip_savings_goals')->where('trip_id', $tripId)->first());
     }

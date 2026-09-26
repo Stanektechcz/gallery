@@ -21,6 +21,7 @@ use App\Services\Obsah\Finance;
 use App\Services\Obsah\FinanceRozbory;
 use App\Support\Cas;
 use App\Support\SpaceContext;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -581,7 +582,22 @@ class FinanceAkceController extends Controller
                 );
                 $kategorie->is_active = true;
                 $kategorie->deleted_at = null;
-                $kategorie->save();
+
+                try {
+                    $kategorie->save();
+                } catch (UniqueConstraintViolationException) {
+                    /*
+                     * Souběh dvou „Zvednout obálku" naráz.
+                     *
+                     * `firstOrNew` napřed přečte, pak se teprve zapisuje —
+                     * mezi tím může tutéž kategorii založit druhý požadavek.
+                     * `unique(gallery_space_id, name, kind)` to na obou
+                     * discích ohlídá; tady se to jen dohledá znovu místo 500.
+                     */
+                    $kategorie = FinanceCategory::withoutGlobalScope(SpaceContext::SCOPE)
+                        ->where('gallery_space_id', $prostor->id)->where('name', 'Obálka pro sebe')->where('kind', 'expense')
+                        ->firstOrFail();
+                }
                 $zalozena = true;
             }
 
