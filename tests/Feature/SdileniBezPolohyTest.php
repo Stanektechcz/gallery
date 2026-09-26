@@ -169,8 +169,9 @@ class SdileniBezPolohyTest extends TestCase
      * Telefon zapisuje polohu do metadat souboru (u iPhonu `ISO6709`) a ffmpeg
      * je do kopie bez `-map_metadata -1` přenáší. Spustit ffmpeg v testu nejde
      * (na stroji nemusí být), takže se kontroluje samotný příkaz — obě větve,
-     * hardwarová i softwarová. Program je podvržený (`Process::fake()`),
-     * hardwarový pokus selže, aby proběhl i náhradní.
+     * hardwarová i softwarová. Program je podvržený (`Process::fake()`):
+     * zkušební snímek kodéru projde (jinak by se hardware vůbec nezkusil),
+     * skutečný hardwarový převod selže, aby proběhl i náhradní.
      */
     public function test_kopie_videa_se_koduje_bez_metadat(): void
     {
@@ -179,6 +180,9 @@ class SdileniBezPolohyTest extends TestCase
         Process::fake(function (PendingProcess $p) use (&$prikazy) {
             if (in_array('-encoders', $p->command, true)) {
                 return Process::result(' V....D h264_qsv   Intel Quick Sync');
+            }
+            if (in_array('lavfi', $p->command, true)) {
+                return Process::result();
             }
             $prikazy[] = $p->command;
 

@@ -118,7 +118,12 @@ najde `deploy.sh` (`echo "$PHP"` po jeho běhu, nebo `which php8.4` apod.):
 kontroluje `crontab -l`, `/etc/cron.d/*`, `/var/spool/cron/*` i aaPanelovský
 `/www/server/cron/*`.
 
-## Systemd queue workers
+## Systemd queue workers (volitelné)
+
+Nutné nejsou — frontu vyprazdňuje plánovač (`queue-drain` pro `high`,
+`default`, `media`, `drive` a `heavy-drain` pro `heavy`). Stálý worker jen
+zkrátí čekání. Stejně jako v cronu musí mířit na PHP >= 8.4.1, ne na
+`/usr/bin/php` (systémové 8.1).
 
 ```ini
 # /etc/systemd/system/gallery-queue@.service
@@ -130,7 +135,7 @@ After=network.target
 User=www-data
 Group=www-data
 WorkingDirectory=/var/www/clients/client10/webXXX/private/gallery-app
-ExecStart=/usr/bin/php artisan queue:work --queue=%i --sleep=3 --tries=3 --max-time=3600
+ExecStart=/www/server/php/84/bin/php artisan queue:work --queue=%i --sleep=3 --tries=3 --max-time=3600 --timeout=3700
 Restart=on-failure
 RestartSec=5
 
@@ -138,17 +143,22 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
+`--timeout=3700` platí pro úlohy bez vlastního `$timeout` (převod videa má
+svých 3600 s a ty mají přednost). `retry_after` fronty je 3900 s, tedy víc
+než nejdelší úloha — jinak by si ji vzal druhý worker, zatímco první ještě
+převádí. Vynucení časových limitů potřebuje v CLI PHP `pcntl`
+(`gallery:doctor` to hlásí).
+
 Spuštění workers:
 
 ```bash
 systemctl enable gallery-queue@high
-systemctl enable gallery-queue@uploads
 systemctl enable gallery-queue@media
 systemctl enable gallery-queue@drive
 systemctl enable gallery-queue@default
-systemctl enable gallery-queue@low
+systemctl enable gallery-queue@heavy
 
-systemctl start gallery-queue@{high,uploads,media,drive,default,low}
+systemctl start gallery-queue@{high,media,drive,default,heavy}
 ```
 
 ## PHP-FPM pool

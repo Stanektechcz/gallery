@@ -22,6 +22,13 @@ return [
     // a převod musí skončit dřív, než ji worker zabije.
     'video_transcode_timeout' => (int) env('VIDEO_TRANSCODE_TIMEOUT', 3000),
 
+    // Kodér obrazu pro kopii videa k přehrávání. "auto" nechá službu vyzkoušet
+    // hardwarové kodéry skutečným zkušebním snímkem a vybrat první funkční
+    // (viz `VideoProcessingService::selectVideoEncoder()`); jakákoli jiná
+    // hodnota se použije napřímo a žádný proces se přitom nespouští — pro
+    // server, kde je hardwarový kodér ověřený předem.
+    'video_encoder' => env('VIDEO_ENCODER', 'auto'),
+
     'media_temp_disk' => env('MEDIA_TEMP_DISK', 'local'),
     'media_variants_disk' => env('MEDIA_VARIANTS_DISK', 'public'),
 

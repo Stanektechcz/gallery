@@ -172,12 +172,40 @@ Schedule::command('gallery:doctor --no-interaction')
  * `queue:work` jen `default`, zatímco náhledy, převody a zrcadlení na Disk
  * chodí na `media`, `drive` a `high`. Ten incident s 2 371 úlohami byl přesně
  * tenhle nedobraný zbytek. Pořadí je pořadí přednosti.
+ *
+ * `heavy` (převod videa, vývoz, ruční spuštění úlohy) tu záměrně chybí —
+ * má vlastní `heavy-drain` níž. `--max-time` hlídá jen mezi úlohami, ne
+ * uprostřed jedné: hodinový převod videa `withoutOverlapping(10)` přežil,
+ * ale zámek (600 s) vypršel dávno předtím, než doběhl, takže `schedule:finish`
+ * ho `forceRelease()`oval a každých pět minut naskočil další běh vedle
+ * prvního — až šest workerů nad stejnou frontou. Zámek je proto 1200 s:
+ * 280 s `--max-time` plus nejdelší úloha, která na `queue-drain` ještě zůstala
+ * (`UploadDriveChunkJob`, `GenerateImageVariantsJob`, obě 600 s), s rezervou.
+ * Hlídá `tests/Feature/FrontaTest.php`.
  */
 Schedule::command('queue:work --queue=high,default,media,drive --stop-when-empty --max-time=280 --tries=3 --no-interaction')
     ->everyFiveMinutes()
-    ->withoutOverlapping(10)
+    ->withoutOverlapping(20)
     ->runInBackground()
     ->name('queue-drain');
+
+/*
+ * Dlouhé úlohy odděleně od `queue-drain`.
+ *
+ * Převod videa (`GenerateVideoCompatibilityVariantJob`, přes hodinu), vývoz
+ * (`GenerateExportJob`) a ruční spuštění úlohy z administrace
+ * (`SpustPlanovanouUlohu`) měly společný zámek s krátkými úlohami na `media`,
+ * `drive` a `default` — jedna hodinová úloha ten zámek dřív nebo později
+ * přežila a `queue-drain` se rozeběhl znovu vedle sebe. `--max-jobs=1`
+ * místo `--max-time`: proces má vzít nejvýš jednu úlohu a skončit, ne čekat
+ * na časový limit uprostřed převodu. Zámek (70 min) musí být delší než
+ * nejdelší `$timeout` na téhle frontě (3600 s) s rezervou na uložení kopie.
+ */
+Schedule::command('queue:work --queue=heavy --max-jobs=1 --stop-when-empty --tries=3 --no-interaction')
+    ->everyFiveMinutes()
+    ->withoutOverlapping(70)
+    ->runInBackground()
+    ->name('heavy-drain');
 
 Schedule::command('gallery:rebuild-albums')
     ->hourly()

@@ -163,6 +163,7 @@ class PlanovaneUlohy
         // „Queue drain" a „Drive changes" — jediné anglické řádky na obrazovce.
         'memories' => 'Vzpomínky na dnešek',
         'queue-drain' => 'Vyprázdnění fronty',
+        'heavy-drain' => 'Vyprázdnění dlouhých úloh',
         'drive-changes' => 'Změny z Disku',
         'daily-status' => 'Denní přehled',
         'mirror-backlog' => 'Kopie originálů do cloudu',

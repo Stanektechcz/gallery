@@ -30,7 +30,16 @@ class SpustPlanovanouUlohu implements ShouldQueue
 
     public int $tries = 1;
 
-    public function __construct(private readonly string $nazev) {}
+    public function __construct(private readonly string $nazev)
+    {
+        // `heavy`, ne `default` — ruční spuštění typicky trefí zálohu, zrcadlení
+        // na cloud nebo úklid koše, tedy přesně ty dlouhé úlohy, kvůli kterým
+        // `heavy-drain` v `routes/console.php` vznikl. Na `default` by táhla
+        // krátký zámek hlavního `queue-drain` s sebou. `Queueable::$queue` už
+        // vlastnost definuje bez typu — vlastní deklarace s typem by s ní
+        // kolidovala, proto se nastavuje tady, ne jako property.
+        $this->onQueue('heavy');
+    }
 
     public function handle(PlanovaneUlohy $ulohy): void
     {

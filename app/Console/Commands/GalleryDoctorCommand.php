@@ -194,6 +194,24 @@ class GalleryDoctorCommand extends Command
             'WARN',
         );
 
+        /*
+         * Bez `pcntl_async_signals`/`pcntl_signal` Laravel nemá jak vynutit
+         * `$timeout` úlohy — `queue:work` posílá SIGALRM přes `pcntl_alarm()`
+         * a bez signálů zaseknutá úloha běží dál, dokud ji nezabije něco jiného.
+         * Ffmpeg/ffprobe/exiftool mají vlastní strop v `Program::spust()`,
+         * takže na ně tohle nesahá — hlídá jen zbytek fronty (ruční úlohy,
+         * webhooky, importy). Windows i některé sdílené hostingy CLI SAPI
+         * pcntl vůbec nemá — proto varování, ne chyba.
+         */
+        $pcntlChybi = ! function_exists('pcntl_async_signals') || ! function_exists('pcntl_signal')
+            || in_array('pcntl_async_signals', $zakazane, true) || in_array('pcntl_signal', $zakazane, true);
+
+        $this->check(
+            'pcntl_async_signals dostupné — bez něj `$timeout` úlohy nikdo nevynutí',
+            ! $pcntlChybi,
+            'WARN',
+        );
+
         $binaries = [
             'ffmpeg' => [config('gallery.ffmpeg_path', '/usr/bin/ffmpeg'), ['-version']],
             'ffprobe' => [config('gallery.ffprobe_path', '/usr/bin/ffprobe'), ['-version']],

@@ -89,8 +89,12 @@ class GenerateVideoPosterJob implements ShouldQueue
                 }
             }
 
-            // Generate compatibility variant
-            GenerateVideoCompatibilityVariantJob::dispatch($media->id)->onQueue('media');
+            // Generate compatibility variant. Vlastní fronta `heavy`: převod trvá
+            // desítky minut a na `media` (a tedy pod hlavním zámkem `queue-drain`,
+            // který dřív očekával jen krátké úlohy) by přeskočil `withoutOverlapping`
+            // hlavního vyprázdnění a spustil ho znovu vedle sebe — viz `heavy-drain`
+            // v `routes/console.php`.
+            GenerateVideoCompatibilityVariantJob::dispatch($media->id)->onQueue('heavy');
 
             // Continue to Drive upload
             InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');

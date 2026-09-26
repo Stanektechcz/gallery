@@ -36,7 +36,10 @@ class ExportController extends Controller
         // Dispatch export job
         $jobId = (string) Str::uuid();
         Cache::put("export_owner_{$jobId}", $request->user()->id, now()->addHour());
-        GenerateExportJob::dispatch($request->user()->id, $data, $jobId, $prostor)->onQueue('default');
+        // `heavy`, ne `default`: vývoz může běžet hodinu (`GenerateExportJob::$timeout`)
+        // a na frontě, kterou vyprazdňuje hlavní `queue-drain` s krátkým stropem,
+        // by táhl zámek proti souběhu s sebou — viz `heavy-drain` v `routes/console.php`.
+        GenerateExportJob::dispatch($request->user()->id, $data, $jobId, $prostor)->onQueue('heavy');
 
         return response()->json(['job_id' => $jobId, 'status' => 'queued'], 202);
     }

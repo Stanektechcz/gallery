@@ -6,6 +6,7 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Support\Program;
 use Illuminate\Contracts\Process\ProcessResult;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -24,6 +25,9 @@ class VideoProcessingService
 
     /** `ffmpeg -encoders` jen vypíše seznam. */
     private const LIMIT_KODERU = 30;
+
+    /** Zkušební snímek pro ověření hardwarového kodéru — desetina vteřiny černého obrazu. */
+    private const LIMIT_ZKOUSKY_KODERU = 20;
 
     /**
      * Přebalení bez překódování (`-c copy`) — rychlost dá disk, ne procesor.
@@ -44,8 +48,16 @@ class VideoProcessingService
     /** Kratší zbytek stropu už na softwarový pokus nestačí — radši nic než useknuté video. */
     private const NEJKRATSI_POKUS = 60;
 
-    /** Hardwarové kodéry v pořadí přednosti; bez nich libx264. */
-    private const HARDWAROVE_KODERY = ['h264_qsv', 'h264_vaapi', 'h264_nvenc'];
+    /**
+     * Hardwarové kodéry v pořadí přednosti; bez nich libx264.
+     *
+     * `h264_vaapi` tu záměrně chybí: potřebuje ještě `-vaapi_device` a
+     * `hwupload` ve filtrech (`prikazKopie()` je nesestavuje), takže by ho
+     * automatická volba vybrala a pokaždé nechala spadnout na libx264 —
+     * distribuční ffmpeg ho v `-encoders` vypisuje, i když žádné zařízení
+     * nemá. Kdo ho chce, nastaví `VIDEO_ENCODER=h264_vaapi` ručně.
+     */
+    private const HARDWAROVE_KODERY = ['h264_nvenc', 'h264_qsv'];
 
     /** Značky, pod kterými telefony zapisují polohu (Android, iPhone). */
     private const ZNACKY_POLOHY = ['location', 'location-eng', 'com.apple.quicktime.location.iso6709'];
@@ -183,14 +195,22 @@ class VideoProcessingService
 
         @mkdir(dirname($tmpPath), 0755, true);
 
+        // Krátký klip (pod ~4 s, typicky Live Photo nebo krátké video z telefonu)
+        // na 2. vteřině nemá co zachytit — ffmpeg skončí bez snímku a video
+        // dostane SVG náhradu, přestože obraz má. Známá délka proto strop
+        // sníží na polovinu; když se ani tak nic nezachytí, druhý pokus je
+        // na 0. vteřině (první snímek, který má úplně každé video).
+        $trvaniS = $mediaItem->duration_ms ? $mediaItem->duration_ms / 1000 : null;
+        $cas = $trvaniS !== null ? min($timeSeconds, $trvaniS / 2) : $timeSeconds;
+
         // Seek before opening the input. This avoids decoding a whole long
         // recording just to produce its preview.
-        $vysledek = Program::spust(
-            [...$this->ffmpeg(), '-ss', (string) $timeSeconds, '-i', $sourcePath, '-vframes', '1', '-q:v', '2', $tmpPath],
-            self::LIMIT_PLAKATU,
-            'ffmpeg (plakát videa)',
-            ['media_id' => $mediaItem->id],
-        );
+        $vysledek = $this->zachytSnimek($sourcePath, $cas, $tmpPath, $mediaItem->id);
+
+        if (! $this->vzniklo($vysledek, $tmpPath) && $cas > 0) {
+            @unlink($tmpPath);
+            $vysledek = $this->zachytSnimek($sourcePath, 0, $tmpPath, $mediaItem->id);
+        }
 
         if (! $this->vzniklo($vysledek, $tmpPath)) {
             // Po vypršení času nebo pádu může zbýt napůl zapsaný JPEG.
@@ -377,6 +397,15 @@ SVG;
 
     /**
      * Select the best available video encoder.
+     *
+     * `gallery.video_encoder` jiné než `auto` se použije napřímo a nic se
+     * nespouští — pro server, kde je hardwarový kodér ověřený předem.
+     * `auto` vybírá mezi kodéry, které `ffmpeg -encoders` vypíše, jenže
+     * distribuční ffmpeg je vypíše i bez hardwaru za nimi — první v pořadí
+     * pak spolehlivě spadl a video dostalo libx264 se zbytečným varováním
+     * u každého převodu. Verdikt (i ten „žádný nefunguje") se drží týden
+     * v cache podle cesty k ffmpeg, aby se zkušební snímek nespouštěl znovu
+     * u každé instance služby.
      */
     public function selectVideoEncoder(): string
     {
@@ -384,6 +413,21 @@ SVG;
             return $this->koder;
         }
 
+        $nastaveno = trim((string) config('gallery.video_encoder', 'auto'));
+        if ($nastaveno !== '' && $nastaveno !== 'auto') {
+            return $this->koder = $nastaveno;
+        }
+
+        return $this->koder = Cache::remember(
+            'gallery:video-encoder:v1:'.md5($this->ffmpegPath),
+            now()->addDays(7),
+            fn () => $this->zjistiFunkcniKoder(),
+        );
+    }
+
+    /** Kandidáti z `ffmpeg -encoders`, ověření skutečným zkušebním převodem; první, který doopravdy funguje. */
+    private function zjistiFunkcniKoder(): string
+    {
         // Seznam jednou a přečtený v PHP. Dřív to byly tři běhy
         // `ffmpeg -encoders | grep …` — a `exec` ani roura na serveru nejdou.
         // Řádek seznamu: ` V....D h264_nvenc   NVIDIA NVENC H.264 encoder`.
@@ -392,7 +436,32 @@ SVG;
 
         $dostupne = array_intersect(self::HARDWAROVE_KODERY, $shody[1]);
 
-        return $this->koder = reset($dostupne) ?: 'libx264';
+        foreach ($dostupne as $kandidat) {
+            if ($this->koderOpravduFunguje($kandidat)) {
+                return $kandidat;
+            }
+        }
+
+        return 'libx264';
+    }
+
+    /**
+     * Skutečně zakóduje jeden černý snímek — jen výpis v `-encoders` neznamená
+     * funkční hardware (chybějící zařízení, ovladač, oprávnění).
+     */
+    private function koderOpravduFunguje(string $koder): bool
+    {
+        $vysledek = Program::spust(
+            [
+                $this->ffmpegPath, '-hide_banner', '-loglevel', 'error',
+                '-f', 'lavfi', '-i', 'color=c=black:s=256x256:d=0.1',
+                '-frames:v', '1', '-c:v', $koder, '-f', 'null', '-',
+            ],
+            self::LIMIT_ZKOUSKY_KODERU,
+            "ffmpeg (zkouška kodéru {$koder})",
+        );
+
+        return $vysledek !== null && $vysledek->successful();
     }
 
     /**
@@ -485,6 +554,17 @@ SVG;
                 @unlink($tmp);
             }
         }
+    }
+
+    /** Jeden snímek na zadaném čase — společné pro první pokus i opakování na 0. vteřině. */
+    private function zachytSnimek(string $sourcePath, float $cas, string $tmpPath, int $mediaId): ?ProcessResult
+    {
+        return Program::spust(
+            [...$this->ffmpeg(), '-ss', (string) $cas, '-i', $sourcePath, '-vframes', '1', '-q:v', '2', $tmpPath],
+            self::LIMIT_PLAKATU,
+            'ffmpeg (plakát videa)',
+            ['media_id' => $mediaId],
+        );
     }
 
     /** ffmpeg s volbami pro běh bez člověka: nečte vstup z terminálu, do stderr píše jen chyby. */
