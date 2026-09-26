@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Tests\Concerns\SchemaMimoTransakce;
 use Tests\TestCase;
 
 /**
@@ -25,17 +26,21 @@ use Tests\TestCase;
  * Bez obalové transakce: SQLite uvnitř transakce vypnutí cizích klíčů
  * ignoruje, a obnova je potřebuje vypnout. Proto ani `RefreshDatabase`
  * (transakce), ani `DatabaseMigrations` (po testu vrací migrace a jedna
- * starší se na SQLite vrátit nedá) — každý test si databázi postaví sám.
+ * starší se na SQLite vrátit nedá) — každý test si databázi postaví sám
+ * (`SchemaMimoTransakce`). Ta po testu i přinutí další `RefreshDatabase`
+ * postavit schéma znovu: na SQLite `:memory:` měl tenhle test databázi
+ * vlastní, na MySQL je sdílená a jeho uživatelé a alba by v ní zůstali.
  */
 class ZalohaDatabazeTest extends TestCase
 {
+    use SchemaMimoTransakce;
+
     private const SLEDOVANE = ['users', 'gallery_spaces', 'gallery_space_user', 'albums', 'tags', 'couple_states'];
 
     protected function setUp(): void
     {
         parent::setUp();
 
-        $this->artisan('migrate:fresh');
         Storage::fake('local');
     }
 

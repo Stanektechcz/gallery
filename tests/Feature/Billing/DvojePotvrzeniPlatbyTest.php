@@ -13,12 +13,9 @@ use App\Services\Billing\CheckoutService;
 use App\Services\Billing\InvoiceService;
 use Carbon\CarbonImmutable;
 use Database\Seeders\BillingCatalogSeeder;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -95,26 +92,8 @@ class DvojePotvrzeniPlatbyTest extends TestCase
         Invoice::create($this->faktura('20260099'));
     }
 
-    /**
-     * Migrace s unikátním indexem nesmí spadnout na starých dvojicích a nesmí
-     * je mazat — faktura je daňový doklad. Index v tom případě prostě nevznikne.
-     */
-    public function test_migrace_indexu_preskoci_existujici_duplicity_a_nic_nesmaze(): void
-    {
-        Schema::table('invoices', fn (Blueprint $table) => $table->dropUnique('invoices_payment_id_unique'));
-        DB::table('invoices')->insert([$this->faktura('20260001'), $this->faktura('20260002')]);
-
-        $migrace = require database_path('migrations/2026_09_25_090000_invoices_payment_id_unique.php');
-        $migrace->up();
-
-        $this->assertSame(2, Invoice::count());
-        $this->assertFalse(Schema::hasIndex('invoices', 'invoices_payment_id_unique'));
-
-        // Bez duplicit index vznikne.
-        DB::table('invoices')->where('number', '20260002')->update(['payment_id' => null]);
-        $migrace->up();
-        $this->assertTrue(Schema::hasIndex('invoices', 'invoices_payment_id_unique'));
-    }
+    // Migrace unikátního indexu na starých dvojicích: FakturaJenJednouMigraceTest
+    // (mění schéma, proto mimo transakci `RefreshDatabase`).
 
     /** @return array<string, mixed> */
     private function faktura(string $cislo): array

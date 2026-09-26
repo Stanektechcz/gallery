@@ -1,0 +1,187 @@
+# Testy na SQLite i na MySQL.
+#
+# Vývoj i testy běží na SQLite (:memory:), provoz na MySQL 8 (utf8mb4,
+# utf8mb4_unicode_ci, strict). Celá třída chyb se na SQLite neukáže vůbec:
+# délka textu, porovnávání emoji a diakritiky v unikátních indexech, syntaxe
+# FULLTEXT, řetězce místo čísel z SUM(), DDL uvnitř transakce testu. Proto
+# druhá úloha pouští stejnou sadu proti skutečné MySQL.
+#
+# Úlohy jsou dvě samostatné, ne matice s prázdnou službou: prázdný `image`
+# služby není zdokumentované chování a na MySQL úloha potřebuje vlastní env.
+
+name: Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: tests-${{ github.ref }}
+  # Běh na main se nepřerušuje — každý commit na main má mít svůj výsledek.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sqlite:
+    name: PHPUnit (SQLite)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          # config/database.php používá Pdo\Mysql::ATTR_SSL_CA — to je až PHP 8.4.
+          php-version: '8.4'
+          extensions: mbstring, dom, xml, xmlreader, xmlwriter, simplexml, curl, openssl, fileinfo, iconv, zip, zlib, gd, exif, intl, bcmath, gmp, sodium, pdo_sqlite, sqlite3, pdo_mysql, :imagick
+          ini-values: memory_limit=2G
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer cache directory
+        id: composer-cache
+        shell: bash
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.4-
+
+      - name: Minimal environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Jen klíč. `.env.example` nese produkční hodnoty (MySQL, fronty,
+          # adresy) — ty do testů nepatří; zbytek dodá phpunit.xml.
+          printf 'APP_KEY=base64:%s\n' "$(openssl rand -base64 32)" > .env
+          mkdir -p storage/app/private storage/app/public storage/framework/cache/data \
+            storage/framework/sessions storage/framework/testing storage/framework/views \
+            storage/logs bootstrap/cache build
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Check committed frontend build
+        shell: bash
+        run: |
+          # Stránky čtou Vite manifest; build je v repozitáři, Node tu neběží.
+          test -f public/build/manifest.json || { echo "::error::public/build/manifest.json chybí"; exit 1; }
+
+      - name: Run PHPUnit
+        run: php -d memory_limit=2G vendor/bin/phpunit --log-junit build/junit-sqlite.xml
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: junit-sqlite
+          path: build/junit-sqlite.xml
+          retention-days: 14
+          if-no-files-found: warn
+
+  mysql:
+    name: PHPUnit (MySQL 8.0)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    # Zahořovací období: sada se na MySQL dosud nikdy nespustila a první běhy
+    # odhalí chyby, které SQLite schová. Než se opraví, nesmí červená MySQL
+    # blokovat main ani pull requesty; výsledek je vidět v běhu i v JUnit
+    # artefaktu. Až bude MySQL zelená, `continue-on-error` odstranit.
+    continue-on-error: true
+
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: testing
+        ports:
+          - 3306:3306
+        # Data v paměti: databáze je na jedno použití a disk runneru je pomalý.
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -uroot -proot"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=10
+          --tmpfs /var/lib/mysql
+
+    # Přebije <env> v phpunit.xml: ty nemají force="true", takže hodnota
+    # z prostředí úlohy vyhraje.
+    env:
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: testing
+      DB_USERNAME: root
+      DB_PASSWORD: root
+
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v5
+
+      - name: Set up PHP 8.4
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, xml, xmlreader, xmlwriter, simplexml, curl, openssl, fileinfo, iconv, zip, zlib, gd, exif, intl, bcmath, gmp, sodium, pdo_sqlite, sqlite3, pdo_mysql, :imagick
+          ini-values: memory_limit=2G
+          coverage: none
+          tools: composer:v2
+
+      - name: Composer cache directory
+        id: composer-cache
+        shell: bash
+        run: echo "dir=$(composer config cache-files-dir)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.composer-cache.outputs.dir }}
+          key: composer-${{ runner.os }}-php8.4-${{ hashFiles('composer.lock') }}
+          restore-keys: composer-${{ runner.os }}-php8.4-
+
+      - name: Minimal environment
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'APP_KEY=base64:%s\n' "$(openssl rand -base64 32)" > .env
+          mkdir -p storage/app/private storage/app/public storage/framework/cache/data \
+            storage/framework/sessions storage/framework/testing storage/framework/views \
+            storage/logs bootstrap/cache build
+
+      - name: Install Composer dependencies
+        run: composer install --no-interaction --no-progress --prefer-dist
+
+      - name: Check committed frontend build
+        shell: bash
+        run: |
+          test -f public/build/manifest.json || { echo "::error::public/build/manifest.json chybí"; exit 1; }
+
+      - name: MySQL server settings
+        shell: bash
+        run: |
+          # Do logu, s čím se testovalo — při rozdílu proti provozu je to první otázka.
+          mysql --host=127.0.0.1 --port=3306 --user=root --password=root --table \
+            -e 'SELECT VERSION(), @@GLOBAL.sql_mode, @@character_set_server, @@collation_server, @@time_zone'
+
+      - name: Run PHPUnit
+        run: php -d memory_limit=2G vendor/bin/phpunit --log-junit build/junit-mysql.xml
+
+      - name: Upload JUnit report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: junit-mysql
+          path: build/junit-mysql.xml
+          retention-days: 14
+          if-no-files-found: warn

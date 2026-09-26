@@ -8,7 +8,6 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -61,24 +60,7 @@ class PlanningExpansionTest extends TestCase
         $this->getJson("/api/v1/calendar/partner-rules/{$rule['uuid']}/preview")->assertOk()->assertJsonPath('notice', 'Náhled nic automaticky nesdílí.');
     }
 
-    public function test_planning_screen_dependencies_degrade_safely_when_an_optional_migration_is_not_yet_present(): void
-    {
-        Schema::dropIfExists('event_templates');
-        Schema::dropIfExists('travel_wishlist_items');
-        Schema::dropIfExists('travel_wishlists');
-        Schema::dropIfExists('decision_poll_votes');
-        Schema::dropIfExists('decision_poll_options');
-        Schema::dropIfExists('decision_polls');
-
-        $this->getJson('/api/v1/calendar/templates')->assertOk()->assertExactJson([]);
-        $this->getJson('/api/v1/calendar/wishlists')->assertOk()->assertExactJson([]);
-        $this->getJson('/api/v1/calendar/polls')->assertOk()->assertExactJson([]);
-        $this->postJson('/api/v1/calendar/templates', ['gallery_space_id' => $this->space->id, 'title' => 'Víkend'])->assertStatus(503);
-
-        Schema::dropIfExists('calendar_event_exceptions');
-        $this->postJson('/api/v1/calendar/events', ['gallery_space_id' => $this->space->id, 'title' => 'Bez výjimek', 'starts_at' => now()->addWeek()->toDateTimeString(), 'recurrence_rule' => ['frequency' => 'weekly']])->assertCreated();
-        $this->getJson('/api/v1/calendar/events')->assertOk();
-    }
+    // Chybějící volitelné tabulky: PlanningBezVolitelnychTabulekTest (mění schéma, proto mimo transakci).
 
     public function test_emergency_card_is_available_only_to_trip_space_members(): void
     {

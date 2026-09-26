@@ -7,11 +7,10 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\User;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Tests\Concerns\SelhavajiciTabulka;
 use Tests\TestCase;
 
 /**
@@ -23,6 +22,7 @@ use Tests\TestCase;
 class MediaVeStavuTest extends TestCase
 {
     use RefreshDatabase;
+    use SelhavajiciTabulka;
 
     private User $adri;
 
@@ -133,14 +133,15 @@ class MediaVeStavuTest extends TestCase
      * se uložil tak jako tak, takže při dalším požadavku nebylo co zapsat.
      * Obrazovka dál ukazovala srdíčko, které v databázi nikdy nebylo.
      *
-     * Chyba databáze se napodobuje odstraněním tabulky — to je na přechodné
-     * chybě jediné, co jde v testu spolehlivě zopakovat.
+     * Chyba databáze se napodobuje tabulkou, na které každý dotaz spadne
+     * (`SelhavajiciTabulka`). Dřív se tabulka zahodila a založila znovu — na
+     * MySQL to transakci testu potvrdilo a tabulka se vrátila bez cizích klíčů.
      */
     public function test_neuspesny_zapis_se_zopakuje_pri_dalsim_pozadavku(): void
     {
         $foto = $this->fotka();
 
-        Schema::drop('user_favorites');
+        $this->rozbijTabulku('user_favorites');
 
         $this->actingAs($this->adri)
             ->patchJson('/api/state', ['data' => ['favs' => [$foto->uuid => true], 'grid' => 'big']])
@@ -153,7 +154,7 @@ class MediaVeStavuTest extends TestCase
         // A nese autora: srdíčka jsou každého vlastní, dluh leží ve sdíleném stavu.
         $this->assertSame([$foto->uuid => true], (array) $this->stav()->dluh()['favs:'.$this->adri->id]);
 
-        $this->obnovOblibene();
+        $this->opravTabulku('user_favorites');
 
         // Další požadavek už o srdíčku vůbec nemluví, a přece se zapíše.
         $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['sort' => 'asc']])->assertOk();
@@ -212,17 +213,6 @@ class MediaVeStavuTest extends TestCase
     private function stav(): CoupleState
     {
         return CoupleState::where('couple_id', $this->prostor->id)->sole();
-    }
-
-    private function obnovOblibene(): void
-    {
-        Schema::create('user_favorites', function (Blueprint $tabulka) {
-            $tabulka->id();
-            $tabulka->foreignId('user_id');
-            $tabulka->foreignId('media_item_id');
-            $tabulka->timestamp('created_at')->nullable();
-            $tabulka->unique(['user_id', 'media_item_id']);
-        });
     }
 
     private function fotka(array $navic = []): MediaItem

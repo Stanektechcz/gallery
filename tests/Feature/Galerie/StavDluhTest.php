@@ -6,11 +6,10 @@ use App\Models\CoupleState;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
-use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Tests\Concerns\SelhavajiciTabulka;
 use Tests\TestCase;
 
 /**
@@ -27,6 +26,7 @@ use Tests\TestCase;
 class StavDluhTest extends TestCase
 {
     use RefreshDatabase;
+    use SelhavajiciTabulka;
 
     private User $adri;
 
@@ -131,9 +131,10 @@ class StavDluhTest extends TestCase
     {
         $foto = $this->fotka();
 
-        Schema::drop('user_favorites');
+        // Napodobená chyba, ne zahozená tabulka — viz `SelhavajiciTabulka`.
+        $this->rozbijTabulku('user_favorites');
         $this->actingAs($this->adri)->patchJson('/api/state', ['data' => ['favs' => [$foto->uuid => true]]])->assertOk();
-        $this->obnovOblibene();
+        $this->opravTabulku('user_favorites');
 
         $this->actingAs($this->maki)->patchJson('/api/state', ['data' => ['grid' => 'big']])->assertOk();
 
@@ -156,17 +157,6 @@ class StavDluhTest extends TestCase
     private function stav(): CoupleState
     {
         return CoupleState::where('couple_id', $this->prostor->id)->sole();
-    }
-
-    private function obnovOblibene(): void
-    {
-        Schema::create('user_favorites', function (Blueprint $tabulka) {
-            $tabulka->id();
-            $tabulka->foreignId('user_id');
-            $tabulka->foreignId('media_item_id');
-            $tabulka->timestamp('created_at')->nullable();
-            $tabulka->unique(['user_id', 'media_item_id']);
-        });
     }
 
     private function fotka(): MediaItem
