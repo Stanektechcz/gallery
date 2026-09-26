@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Galerie;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Support\OtiskySkriptu;
+use App\Support\PolitikaObsahu;
 use App\Support\TrasyPrototypu;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
@@ -82,7 +84,15 @@ class PrototypController extends Controller
             // Uložit ho do sdílené cache by znamenalo poslat cizí token cizímu
             // člověku; service worker si ho drží sám a jen jako zálohu pro offline.
             ->header('Cache-Control', 'private, no-cache, must-revalidate')
-            ->header('Vary', 'Accept-Encoding, User-Agent');
+            ->header('Vary', 'Accept-Encoding, User-Agent')
+            /*
+             * Vlastní politika bez `'unsafe-inline'` u skriptů — inline bloky
+             * jen podle otisku, spočítaného z téhož těla, ze kterého je `ETag`.
+             * Nastavuje se před kontrolou 304: prohlížeč si u 304 přepíše
+             * uložené hlavičky a se společnou politikou by uložený dokument
+             * dál běžel s `'unsafe-inline'`. Viz `PolitikaObsahu`.
+             */
+            ->header('Content-Security-Policy', $this->politika($request, $telo));
 
         /*
          * Druhé stažení téhož dokumentu.
@@ -103,6 +113,24 @@ class PrototypController extends Controller
         }
 
         return $this->zabaleno($request, $odpoved, $telo);
+    }
+
+    /**
+     * Politika pro odesílaný dokument.
+     *
+     * Když otisky spočítat nejde (chyba PCRE nad dokumentem), dostane stránka
+     * společnou politiku a do protokolu jde chyba: slabší ochrana do opravy je
+     * menší zlo než aplikace, která se kvůli zablokované hlavičce nespustí.
+     */
+    private function politika(Request $request, string $telo): string
+    {
+        try {
+            return PolitikaObsahu::proPrototyp($request, OtiskySkriptu::z($telo));
+        } catch (\RuntimeException $e) {
+            report($e);
+
+            return PolitikaObsahu::spolecna($request);
+        }
     }
 
     /**
