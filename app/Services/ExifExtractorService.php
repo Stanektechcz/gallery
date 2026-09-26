@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\Program;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
@@ -16,6 +17,9 @@ use Illuminate\Support\Facades\Log;
  */
 class ExifExtractorService
 {
+    /** exiftool čte jen metadata; déle visí jen na rozbitém souboru. */
+    private const LIMIT_EXIFTOOLU = 30;
+
     private string $exiftoolPath;
 
     public function __construct()
@@ -91,34 +95,18 @@ class ExifExtractorService
             return [];
         }
 
-        try {
-            $cmd = [
-                $this->exiftoolPath,
-                '-json',
-                '-n',
-                '-charset',
-                'UTF8',
-                '-struct',
-                $sourcePath,
-            ];
-            $desc = [[0 => 'pipe', 'r'], [1 => 'pipe', 'w'], [2 => 'pipe', 'w']];
-            $proc = proc_open($cmd, $desc, $pipes);
-            if (! is_resource($proc)) {
-                return [];
-            }
+        // Popisovače pro `proc_open` tu byly poskládané špatně
+        // (`[[0 => 'pipe', 'r'], …]`), volání vždy vyhodilo výjimku a metoda
+        // vracela `[]` — panoramata ani Live Photos se tak nikdy nepoznala.
+        $vysledek = Program::spust(
+            [$this->exiftoolPath, '-json', '-n', '-charset', 'UTF8', '-struct', $sourcePath],
+            self::LIMIT_EXIFTOOLU,
+            'exiftool (surový EXIF)',
+            ['file' => basename($sourcePath)],
+        );
+        $raw = $vysledek ? json_decode($vysledek->output(), true) : null;
 
-            fclose($pipes[0]);
-            $stdout = stream_get_contents($pipes[1]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($proc);
-
-            $raw = json_decode($stdout, true);
-
-            return $raw[0] ?? [];
-        } catch (\Throwable) {
-            return [];
-        }
+        return is_array($raw[0] ?? null) ? $raw[0] : [];
     }
 
     // ─── Method 1: exiftool via proc_open ───────────────────────────────────
@@ -132,41 +120,20 @@ class ExifExtractorService
         }
 
         try {
-            // proc_open works even when shell_exec / exec are disabled in php.ini
+            // proc_open works even when shell_exec / exec are disabled in php.ini.
+            // Přes Process kvůli stropu času: zaseknutý exiftool dřív držel
+            // nahrávání i `gallery:exif` donekonečna.
             // Note: NO -G1 (would prefix keys), NO -a (would create arrays for duplicates)
             // -n gives decimal GPS values directly
-            $cmd = [
-                $this->exiftoolPath,
-                '-json',
-                '-n',
-                '-charset',
-                'UTF8',
-                $sourcePath,
-            ];
+            $vysledek = Program::spust(
+                [$this->exiftoolPath, '-json', '-n', '-charset', 'UTF8', $sourcePath],
+                self::LIMIT_EXIFTOOLU,
+                'exiftool',
+                ['file' => basename($sourcePath)],
+            );
+            $stdout = $vysledek?->output();
 
-            $descriptors = [
-                0 => ['pipe', 'r'],
-                1 => ['pipe', 'w'],
-                2 => ['pipe', 'w'],
-            ];
-
-            $proc = proc_open($cmd, $descriptors, $pipes);
-            if (! is_resource($proc)) {
-                return [];
-            }
-
-            fclose($pipes[0]);
-            $stdout = stream_get_contents($pipes[1]);
-            $stderr = stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            $exitCode = proc_close($proc);
-
-            if ($exitCode !== 0 || ! $stdout) {
-                if ($stderr) {
-                    Log::debug('exiftool stderr', ['err' => substr($stderr, 0, 200)]);
-                }
-
+            if (! $stdout) {
                 return [];
             }
 

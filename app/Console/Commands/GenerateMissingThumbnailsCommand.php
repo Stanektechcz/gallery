@@ -7,6 +7,7 @@ use App\Models\StorageConnection;
 use App\Services\Media\ImageVariantService;
 use App\Services\Media\VideoProcessingService;
 use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Support\Program;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -282,8 +283,9 @@ class GenerateMissingThumbnailsCommand extends Command
 
             // Try exiftool
             $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
-            if (file_exists($exiftoolPath)) {
-                $json = shell_exec(escapeshellcmd($exiftoolPath).' -json -n '.escapeshellarg($path).' 2>/dev/null');
+            if (Program::lzeSpustit($exiftoolPath)) {
+                // `shell_exec` je na serveru vypnutý; `proc_open` přes Process ne.
+                $json = Program::spust([$exiftoolPath, '-json', '-n', $path], 30, 'exiftool (gallery:thumbnails)', ['media_id' => $media->id])?->output();
                 if ($json) {
                     $data = json_decode($json, true)[0] ?? [];
                     if (! empty($data['DateTimeOriginal'])) {

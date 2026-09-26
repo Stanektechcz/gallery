@@ -199,10 +199,12 @@ class ShareController extends Controller
                      * Originál jen tam, kde nic menšího není — stránka by jinak
                      * neměla co ukázat. S vypnutým stahováním se jinak nevydává.
                      * U odkazu bez data a místa nikdy: nese EXIF i se souřadnicemi.
+                     * Plakát videa je taky „něco menšího" — jinak starší video
+                     * bez `thumbnail` posílalo originál i s polohou z telefonu.
                      */
                     ->filter(fn ($v) => in_array($v->type, self::NAHLEDY_STRANKY, true)
                         || ($v->type === 'original' && ! $link->hide_gps
-                            && $m->variants->whereIn('type', ['thumbnail', 'small', 'medium'])->isEmpty()))
+                            && $m->variants->whereIn('type', self::NAHLEDY_STRANKY)->isEmpty()))
                     ->map(fn ($v) => ['type' => $v->type, 'url' => $v->url, 'width' => $v->width, 'height' => $v->height])
                     ->values(),
             ])

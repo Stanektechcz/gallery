@@ -6,8 +6,11 @@ use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\SharedLink;
 use App\Models\User;
+use App\Services\Media\VideoProcessingService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Process\PendingProcess;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Inertia\Testing\AssertableInertia as Assert;
@@ -128,6 +131,26 @@ class SdileniBezPolohyTest extends TestCase
                 ->where('media.0.variants', fn ($varianty) => collect($varianty)->pluck('type')->all() === ['video_poster']));
     }
 
+    /**
+     * Video bez kopie k přehrávání: stránka dostane plakát, ne originál.
+     *
+     * Originál smí na stránku jen tam, kde není nic menšího. Plakát videa se
+     * za „menší" nepočítal — starší video s plakátem, ale bez `thumbnail`,
+     * tak posílalo hostovi originál (s polohou z telefonu) i u odkazu
+     * s vypnutým stahováním.
+     */
+    public function test_video_s_plakatem_nevyda_original(): void
+    {
+        $video = $this->fotka(['original' => 'VIDEO-S-POLOHOU', 'video_poster' => 'PLAKAT'], 'video');
+        $odkaz = $this->odkaz($video, bezPolohy: false);
+        $odkaz->update(['allow_download' => false]);
+
+        $this->get("/s/{$odkaz->token}")
+            ->assertOk()
+            ->assertInertia(fn (Assert $stranka) => $stranka
+                ->where('media.0.variants', fn ($varianty) => collect($varianty)->pluck('type')->all() === ['video_poster']));
+    }
+
     /** Ani velká kopie fotky na stránku nepatří — stránka kreslí náhled. */
     public function test_stranka_vyda_jen_nahledy(): void
     {
@@ -146,17 +169,30 @@ class SdileniBezPolohyTest extends TestCase
      * Telefon zapisuje polohu do metadat souboru (u iPhonu `ISO6709`) a ffmpeg
      * je do kopie bez `-map_metadata -1` přenáší. Spustit ffmpeg v testu nejde
      * (na stroji nemusí být), takže se kontroluje samotný příkaz — obě větve,
-     * hardwarová i softwarová.
+     * hardwarová i softwarová. Program je podvržený (`Process::fake()`),
+     * hardwarový pokus selže, aby proběhl i náhradní.
      */
     public function test_kopie_videa_se_koduje_bez_metadat(): void
     {
-        $zdroj = (string) file_get_contents(app_path('Services/Media/VideoProcessingService.php'));
-        preg_match_all("/'%s -y -i %s[^']*-movflags \\+faststart[^']*'/", $zdroj, $prikazy);
+        config(['gallery.ffmpeg_path' => PHP_BINARY, 'gallery.ffprobe_path' => PHP_BINARY]);
+        $prikazy = [];
+        Process::fake(function (PendingProcess $p) use (&$prikazy) {
+            if (in_array('-encoders', $p->command, true)) {
+                return Process::result(' V....D h264_qsv   Intel Quick Sync');
+            }
+            $prikazy[] = $p->command;
 
-        $this->assertCount(2, $prikazy[0], 'Čekal jsem dva příkazy pro kopii videa (hardwarový a náhradní).');
-        foreach ($prikazy[0] as $prikaz) {
-            $this->assertStringContainsString('-map_metadata -1', $prikaz);
-            $this->assertStringContainsString('-map_chapters -1', $prikaz);
+            return Process::result(exitCode: 1);
+        });
+        $video = $this->fotka(['original' => 'VIDEO-S-POLOHOU'], 'video');
+
+        app(VideoProcessingService::class)->generateCompatibilityVariant($video, '/data/video.mov');
+
+        $this->assertCount(2, $prikazy, 'Čekal jsem dva příkazy pro kopii videa (hardwarový a náhradní).');
+        foreach ($prikazy as $prikaz) {
+            $radek = implode(' ', $prikaz);
+            $this->assertStringContainsString('-map_metadata -1', $radek);
+            $this->assertStringContainsString('-map_chapters -1', $radek);
         }
     }
 

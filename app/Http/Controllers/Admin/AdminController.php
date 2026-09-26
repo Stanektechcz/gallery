@@ -10,6 +10,7 @@ use App\Models\StorageConnection;
 use App\Models\User;
 use App\Notifications\InvitationNotification;
 use App\Services\Billing\EntitlementService;
+use App\Support\Program;
 use App\Support\Provozovatel;
 use App\Support\SpaceContext;
 use Illuminate\Http\RedirectResponse;
@@ -135,8 +136,10 @@ class AdminController extends Controller
                 'free_gb' => round(disk_free_space(storage_path()) / 1024 / 1024 / 1024, 1),
             ],
             'binaries' => [
-                'ffmpeg' => is_executable(config('gallery.ffmpeg_path', '/usr/bin/ffmpeg')),
-                'exiftool' => is_executable(config('gallery.exiftool_path', '/usr/bin/exiftool')),
+                // `is_executable()` pod `open_basedir` webového serveru shodilo
+                // celou stránku zdraví; mimo povolené adresáře se nezkoumá.
+                'ffmpeg' => Program::lzeSpustit((string) config('gallery.ffmpeg_path', '/usr/bin/ffmpeg')),
+                'exiftool' => Program::lzeSpustit((string) config('gallery.exiftool_path', '/usr/bin/exiftool')),
             ],
             'queue' => [
                 'pending' => DB::table('jobs')->count(),

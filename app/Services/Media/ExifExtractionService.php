@@ -3,11 +3,15 @@
 namespace App\Services\Media;
 
 use App\Support\Cas;
+use App\Support\Program;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 
 class ExifExtractionService
 {
+    /** exiftool čte hlavičky i u velkého videa za zlomek vteřiny; déle visí jen na rozbitém souboru. */
+    private const LIMIT_EXIFTOOLU = 30;
+
     private string $exiftoolPath;
 
     public function __construct()
@@ -17,7 +21,8 @@ class ExifExtractionService
 
     public function isAvailable(): bool
     {
-        return is_executable($this->exiftoolPath);
+        // Pod `open_basedir` webového serveru `is_executable()` hází výjimku — viz `Program::lzeSpustit()`.
+        return Program::lzeSpustit($this->exiftoolPath);
     }
 
     /**
@@ -29,8 +34,10 @@ class ExifExtractionService
             return $this->fallbackExtract($filePath);
         }
 
-        $cmd = escapeshellcmd($this->exiftoolPath).' -json -n '.escapeshellarg($filePath);
-        $output = shell_exec($cmd);
+        // Přes `proc_open` a polem argumentů: `shell_exec` je na serveru vypnutý
+        // a EXIF z nahrávek (datum, GPS, fotoaparát) tak tiše chyběl.
+        $vysledek = Program::spust([$this->exiftoolPath, '-json', '-n', $filePath], self::LIMIT_EXIFTOOLU, 'exiftool', ['path' => $filePath]);
+        $output = $vysledek?->output();
 
         if (! $output) {
             return [];
@@ -355,8 +362,10 @@ class ExifExtractionService
         $sidecarPath = $mediaPath.'.xmp';
         $args = [];
 
+        // Hodnoty bez `escapeshellarg`: argumenty jdou programu přímo, bez
+        // shellu, a uvozovky by se do XMP zapsaly doslova (`'léto'`).
         if (isset($metadata['description'])) {
-            $args[] = '-Description='.escapeshellarg($metadata['description']);
+            $args[] = '-Description='.$metadata['description'];
         }
         if (isset($metadata['rating'])) {
             $args[] = '-Rating='.(int) $metadata['rating'];
@@ -367,7 +376,7 @@ class ExifExtractionService
         }
         if (! empty($metadata['tags'])) {
             foreach ($metadata['tags'] as $tag) {
-                $args[] = '-Subject+='.escapeshellarg($tag);
+                $args[] = '-Subject+='.$tag;
             }
         }
 
@@ -375,14 +384,11 @@ class ExifExtractionService
             return true;
         }
 
-        $cmd = escapeshellcmd($this->exiftoolPath)
-            .' '.implode(' ', $args)
-            .' -o '.escapeshellarg($sidecarPath)
-            .' '.escapeshellarg($mediaPath)
-            .' 2>/dev/null';
-
-        exec($cmd, $out, $code);
-
-        return $code === 0;
+        return Program::spust(
+            [$this->exiftoolPath, ...$args, '-o', $sidecarPath, $mediaPath],
+            self::LIMIT_EXIFTOOLU,
+            'exiftool (XMP sidecar)',
+            ['path' => $mediaPath],
+        ) !== null;
     }
 }

@@ -2,6 +2,7 @@
 
 namespace App\Services\Media;
 
+use App\Support\Program;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -12,6 +13,9 @@ use Illuminate\Support\Facades\Log;
  */
 class MediaFormatService
 {
+    /** Vytažení vloženého JPEG z RAW — jen čtení a kopie bajtů. */
+    private const LIMIT_EXIFTOOLU = 30;
+
     // ─── Supported formats ─────────────────────────────────────────────────
 
     public const IMAGE_EXTENSIONS = [
@@ -116,40 +120,32 @@ class MediaFormatService
      */
     public function extractRawPreview(string $rawPath): ?string
     {
-        if (! function_exists('proc_open')) {
-            return null;
-        }
+        // Nastavená cesta, ne `exiftool` z PATH: pod PHP-FPM bývá PATH
+        // osekaná a všude jinde v aplikaci platí `EXIFTOOL_PATH`.
+        $exiftool = (string) config('gallery.exiftool_path', '/usr/bin/exiftool');
 
-        $tmpJpeg = tempnam(sys_get_temp_dir(), 'raw_preview_').'.jpg';
-
-        // Try JpgFromRaw first (embedded full-size JPEG), then PreviewImage
+        // Try JpgFromRaw first (embedded full-size JPEG), then PreviewImage.
+        // `-b` píše binární JPEG na stdout.
         foreach (['-JpgFromRaw', '-PreviewImage'] as $tag) {
-            $cmd = ['exiftool', $tag, '-b', '-w', '%d%f_preview.jpg', $rawPath];
-
-            // Alternatively, write directly to stdout
-            $cmd2 = ['exiftool', $tag, '-b', $rawPath];
-            $desc = [['pipe', 'r'], ['pipe', 'w'], ['pipe', 'w']];
-            $proc = proc_open($cmd2, $desc, $pipes);
-
-            if ($proc === false) {
-                continue;
-            }
-
-            $data = stream_get_contents($pipes[1]);
-            $error = stream_get_contents($pipes[2]);
-            fclose($pipes[1]);
-            fclose($pipes[2]);
-            proc_close($proc);
+            $data = Program::spust([$exiftool, $tag, '-b', $rawPath], self::LIMIT_EXIFTOOLU, "exiftool {$tag}", ['path' => $rawPath])?->output();
 
             if ($data && strlen($data) > 1000) {
-                file_put_contents($tmpJpeg, $data);
+                // `tempnam()` soubor sám založí; s příponou `.jpg` je to jiný
+                // soubor, takže prázdný původní se hned smaže.
+                $zaklad = tempnam(sys_get_temp_dir(), 'raw_preview_');
+                if ($zaklad === false) {
+                    return null;
+                }
+                @unlink($zaklad);
+                $tmpJpeg = $zaklad.'.jpg';
+                if (file_put_contents($tmpJpeg, $data) === false) {
+                    return null;
+                }
                 Log::info("RAW preview extracted via {$tag}", ['path' => $rawPath, 'size' => strlen($data)]);
 
                 return $tmpJpeg;
             }
         }
-
-        @unlink($tmpJpeg);
 
         return null;
     }

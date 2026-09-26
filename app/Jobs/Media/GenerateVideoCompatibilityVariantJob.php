@@ -27,7 +27,17 @@ class GenerateVideoCompatibilityVariantJob implements ShouldQueue
 
     public int $tries = 3;
 
-    public int $timeout = 1800; // 30 minutes for large videos
+    /**
+     * Hodina na převod dlouhého videa z telefonu.
+     *
+     * Samotný ffmpeg má vlastní strop (`VideoProcessingService::STROP_PREVODU`,
+     * 3300 s) — skončí dřív, než úlohu zabije worker, a po sobě uklidí. Dřív
+     * tu bylo 1800 s a převod žádný strop neměl: dlouhé video worker zabil
+     * uprostřed zápisu a ffmpeg běžel dál bez dozoru. `retry_after` databázové
+     * fronty (3900 s) musí zůstat delší, jinak si převod vezme druhý worker
+     * vedle prvního — hlídá `tests/Feature/FrontaTest.php`.
+     */
+    public int $timeout = 3600;
 
     public function __construct(private readonly int $mediaItemId) {}
 

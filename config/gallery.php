@@ -14,6 +14,14 @@ return [
     'ffprobe_path' => env('FFPROBE_PATH', '/usr/bin/ffprobe'),
     'exiftool_path' => env('EXIFTOOL_PATH', '/usr/bin/exiftool'),
 
+    // Kolik vteřin smí trvat převod jednoho videa na kopii k přehrávání
+    // (hardwarový pokus i softwarový náhradní dohromady). Čtyřminutové 4K
+    // z telefonu převádí slabší server softwarově klidně deset minut; výchozích
+    // 3000 s (50 min) stačí i na dlouhé záznamy. Víc než 3300 s služba nepustí —
+    // úloha (`GenerateVideoCompatibilityVariantJob::$timeout`) má 3600 s
+    // a převod musí skončit dřív, než ji worker zabije.
+    'video_transcode_timeout' => (int) env('VIDEO_TRANSCODE_TIMEOUT', 3000),
+
     'media_temp_disk' => env('MEDIA_TEMP_DISK', 'local'),
     'media_variants_disk' => env('MEDIA_VARIANTS_DISK', 'public'),
 

@@ -4,14 +4,58 @@ namespace App\Services\Media;
 
 use App\Models\MediaItem;
 use App\Models\MediaVariant;
+use App\Support\Program;
+use Illuminate\Contracts\Process\ProcessResult;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
+/**
+ * ffmpeg a ffprobe se spouštějí přes `Program::spust()` — `proc_open`, pole
+ * argumentů, vlastní strop času. `exec`/`shell_exec` jsou na serveru vypnuté
+ * a video s nimi tiše zůstávalo bez náhledu, údajů i kopie pro prohlížeč.
+ */
 class VideoProcessingService
 {
+    /** ffprobe čte jen hlavičky; déle trvá jen soubor, který je rozbitý nebo na mrtvém disku. */
+    private const LIMIT_SONDY = 60;
+
+    /** Jeden snímek s `-ss` před `-i` — ani 4K video nedekóduje celé. */
+    private const LIMIT_PLAKATU = 120;
+
+    /** `ffmpeg -encoders` jen vypíše seznam. */
+    private const LIMIT_KODERU = 30;
+
+    /**
+     * Přebalení bez překódování (`-c copy`) — rychlost dá disk, ne procesor.
+     * Kopie k přehrávání má nejvýš 5 Mb/s, i hodinová je pod 2,5 GB.
+     */
+    private const LIMIT_PREBALENI = 600;
+
+    /**
+     * Strop pro převod, ať je v konfiguraci cokoli.
+     *
+     * `GenerateVideoCompatibilityVariantJob::$timeout` je 3600 s. Převod musí
+     * skončit dřív, než úlohu zabije worker — jinak zůstane ffmpeg běžet
+     * a dočasný soubor napůl zapsaný. Pět minut rezervy je na uložení kopie
+     * na disk. Hlídá `tests/Feature/Media/VideoPresProcesTest.php`.
+     */
+    public const STROP_PREVODU = 3300;
+
+    /** Kratší zbytek stropu už na softwarový pokus nestačí — radši nic než useknuté video. */
+    private const NEJKRATSI_POKUS = 60;
+
+    /** Hardwarové kodéry v pořadí přednosti; bez nich libx264. */
+    private const HARDWAROVE_KODERY = ['h264_qsv', 'h264_vaapi', 'h264_nvenc'];
+
+    /** Značky, pod kterými telefony zapisují polohu (Android, iPhone). */
+    private const ZNACKY_POLOHY = ['location', 'location-eng', 'com.apple.quicktime.location.iso6709'];
+
     private string $ffmpegPath;
 
     private string $ffprobePath;
+
+    /** Vybraný kodér — seznam se čte jednou za život instance, ne před každým převodem. */
+    private ?string $koder = null;
 
     public function __construct()
     {
@@ -21,7 +65,9 @@ class VideoProcessingService
 
     public function isAvailable(): bool
     {
-        return is_executable($this->ffmpegPath) && is_executable($this->ffprobePath);
+        // Ne `is_executable()` napřímo: pod `open_basedir` webového serveru
+        // hází varování → výjimku a nahrávání z prohlížeče pak ffmpeg vynechalo.
+        return Program::lzeSpustit($this->ffmpegPath) && Program::lzeSpustit($this->ffprobePath);
     }
 
     /**
@@ -33,18 +79,28 @@ class VideoProcessingService
             return [];
         }
 
-        $cmd = escapeshellcmd($this->ffprobePath)
-            .' -v quiet -print_format json -show_streams -show_format '
-            .escapeshellarg($path);
-
-        $output = shell_exec($cmd);
-        if (! $output) {
-            return [];
-        }
-
-        $data = json_decode($output, true);
+        $data = $this->sonda($path, 'ffprobe');
 
         return is_array($data) ? $this->metadataZeSondy($data) : [];
+    }
+
+    /**
+     * Výstup `ffprobe -show_format -show_streams` jako pole, nebo `null`.
+     *
+     * `-v error` místo `-v quiet`: stdout zůstane čistý JSON, a když sonda
+     * selže, v logu je důvod.
+     */
+    private function sonda(string $path, string $popis): ?array
+    {
+        $vysledek = Program::spust(
+            [$this->ffprobePath, '-v', 'error', '-print_format', 'json', '-show_streams', '-show_format', $path],
+            self::LIMIT_SONDY,
+            $popis,
+            ['path' => $path],
+        );
+        $data = $vysledek ? json_decode($vysledek->output(), true) : null;
+
+        return is_array($data) ? $data : null;
     }
 
     /**
@@ -129,17 +185,16 @@ class VideoProcessingService
 
         // Seek before opening the input. This avoids decoding a whole long
         // recording just to produce its preview.
-        $cmd = sprintf(
-            '%s -y -ss %s -i %s -vframes 1 -q:v 2 %s 2>/dev/null',
-            escapeshellcmd($this->ffmpegPath),
-            escapeshellarg((string) $timeSeconds),
-            escapeshellarg($sourcePath),
-            escapeshellarg($tmpPath)
+        $vysledek = Program::spust(
+            [...$this->ffmpeg(), '-ss', (string) $timeSeconds, '-i', $sourcePath, '-vframes', '1', '-q:v', '2', $tmpPath],
+            self::LIMIT_PLAKATU,
+            'ffmpeg (plakát videa)',
+            ['media_id' => $mediaItem->id],
         );
 
-        exec($cmd, $out, $exitCode);
-
-        if ($exitCode !== 0 || ! file_exists($tmpPath)) {
+        if (! $this->vzniklo($vysledek, $tmpPath)) {
+            // Po vypršení času nebo pádu může zbýt napůl zapsaný JPEG.
+            @unlink($tmpPath);
             Log::warning("FFmpeg poster generation failed for media #{$mediaItem->id}");
 
             return null;
@@ -248,46 +303,60 @@ SVG;
         // je jinak do kopie přenese — kopii přitom dostává i sdílená stránka.
         // Otočení z telefonu ffmpeg při překódování rovnou použije na snímky
         // (autorotate je výchozí), takže o ně kopie bez metadat nepřijde.
+        //
+        // Obě větve sdílí jeden strop (`rozpocetPrevodu()`): softwarový pokus
+        // dostane jen to, co z něj zbylo. Dohromady se tak vejdou pod
+        // `$timeout` úlohy a worker ji nezabije uprostřed zápisu.
         $filter = "scale=w='min(1920,iw)':h='min(1080,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2";
-        $cmd = sprintf(
-            '%s -y -i %s -map 0:v:0 -map 0:a? -map_metadata -1 -map_chapters -1 -vf %s -c:v %s -preset fast -b:v 4M -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
-            escapeshellcmd($this->ffmpegPath),
-            escapeshellarg($sourcePath),
-            escapeshellarg($filter),
-            $encoder,
-            escapeshellarg($tmpPath)
-        );
+        $rozpocet = $this->rozpocetPrevodu();
+        $zacatek = microtime(true);
+        $kontext = ['media_id' => $mediaItem->id];
 
-        exec($cmd, $out, $exitCode);
-
-        if ($exitCode !== 0 || ! file_exists($tmpPath)) {
-            // Hardware encoders occasionally advertise themselves but reject
-            // one source format. A software H.264 retry is slower to create
-            // yet guarantees a playable result instead of a permanently
-            // stuttering original.
-            @unlink($tmpPath);
-            $cmd = sprintf(
-                '%s -y -i %s -map 0:v:0 -map 0:a? -map_metadata -1 -map_chapters -1 -vf %s -c:v libx264 -preset veryfast -crf 24 -maxrate 5M -bufsize 10M -pix_fmt yuv420p -c:a aac -b:a 128k -movflags +faststart %s 2>/dev/null',
-                escapeshellcmd($this->ffmpegPath),
-                escapeshellarg($sourcePath),
-                escapeshellarg($filter),
-                escapeshellarg($tmpPath)
+        try {
+            $vysledek = Program::spust(
+                $this->prikazKopie($sourcePath, $filter, ['-c:v', $encoder, '-preset', 'fast', '-b:v', '4M'], $tmpPath),
+                $rozpocet,
+                "ffmpeg (kopie videa, {$encoder})",
+                $kontext,
             );
-            exec($cmd, $out, $exitCode);
-            if ($exitCode !== 0 || ! file_exists($tmpPath)) {
-                Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}");
 
-                return null;
+            if (! $this->vzniklo($vysledek, $tmpPath)) {
+                // Hardware encoders occasionally advertise themselves but reject
+                // one source format. A software H.264 retry is slower to create
+                // yet guarantees a playable result instead of a permanently
+                // stuttering original.
+                @unlink($tmpPath);
+                $zbyva = $rozpocet - (int) ceil(microtime(true) - $zacatek);
+                if ($zbyva < self::NEJKRATSI_POKUS) {
+                    Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}: no time left for the libx264 retry");
+
+                    return null;
+                }
+
+                $vysledek = Program::spust(
+                    $this->prikazKopie($sourcePath, $filter, ['-c:v', 'libx264', '-preset', 'veryfast', '-crf', '24'], $tmpPath),
+                    $zbyva,
+                    'ffmpeg (kopie videa, libx264)',
+                    $kontext,
+                );
+                if (! $this->vzniklo($vysledek, $tmpPath)) {
+                    Log::warning("FFmpeg compat variant failed for media #{$mediaItem->id}");
+
+                    return null;
+                }
             }
-        }
 
-        $path = "{$dir}/video_compat.mp4";
-        $stream = fopen($tmpPath, 'rb');
-        $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
-        if (is_resource($stream)) {
-            fclose($stream);
+            $path = "{$dir}/video_compat.mp4";
+            $stream = fopen($tmpPath, 'rb');
+            $stored = $stream && Storage::disk('public')->put($path, $stream, 'public');
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
+        } finally {
+            // Po selhání i po vypršení času zbývá napůl zapsaný soubor, který
+            // by jinak ležel v `storage/app/temp` do dalšího úklidu.
+            @unlink($tmpPath);
         }
-        @unlink($tmpPath);
 
         if (! $stored) {
             Log::error("Compatible video could not be stored for media #{$mediaItem->id}", ['path' => $path]);
@@ -311,26 +380,147 @@ SVG;
      */
     public function selectVideoEncoder(): string
     {
-        // Try Intel Quick Sync
-        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_qsv', $out);
-        if (! empty($out)) {
-            return 'h264_qsv';
+        if ($this->koder !== null) {
+            return $this->koder;
         }
 
-        // Try VAAPI
-        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_vaapi', $out);
-        if (! empty($out)) {
-            return 'h264_vaapi';
+        // Seznam jednou a přečtený v PHP. Dřív to byly tři běhy
+        // `ffmpeg -encoders | grep …` — a `exec` ani roura na serveru nejdou.
+        // Řádek seznamu: ` V....D h264_nvenc   NVIDIA NVENC H.264 encoder`.
+        $vysledek = Program::spust([$this->ffmpegPath, '-hide_banner', '-encoders'], self::LIMIT_KODERU, 'ffmpeg -encoders');
+        preg_match_all('/^\s*V\S{5}\s+(\S+)/m', $vysledek?->output() ?? '', $shody);
+
+        $dostupne = array_intersect(self::HARDWAROVE_KODERY, $shody[1]);
+
+        return $this->koder = reset($dostupne) ?: 'libx264';
+    }
+
+    /**
+     * Kolik vteřin smí trvat převod jednoho videa (oba pokusy dohromady).
+     *
+     * Z `gallery.video_transcode_timeout`, ale nikdy přes `STROP_PREVODU`:
+     * přehnané číslo v `.env` by jinak vrátilo zabíjení úlohy uprostřed převodu.
+     */
+    public function rozpocetPrevodu(): int
+    {
+        $nastaveno = (int) config('gallery.video_transcode_timeout', 3000);
+
+        return max(self::NEJKRATSI_POKUS, min($nastaveno, self::STROP_PREVODU));
+    }
+
+    /**
+     * Nese soubor v metadatech polohu? `null`, když se to nepodařilo zjistit.
+     *
+     * Telefon ji zapisuje do metadat kontejneru i stopy: Android `location`
+     * (a `location-eng`), iPhone `com.apple.quicktime.location.ISO6709`.
+     */
+    public function nesePolohu(string $path): ?bool
+    {
+        $data = $this->sonda($path, 'ffprobe (poloha)');
+        if ($data === null) {
+            return null;
         }
 
-        // Try NVENC
-        exec(escapeshellcmd($this->ffmpegPath).' -encoders 2>/dev/null | grep h264_nvenc', $out);
-        if (! empty($out)) {
-            return 'h264_nvenc';
+        $vsechnyTagy = [$data['format']['tags'] ?? []];
+        foreach ($data['streams'] ?? [] as $stopa) {
+            $vsechnyTagy[] = is_array($stopa) ? ($stopa['tags'] ?? []) : [];
         }
 
-        // Software fallback
-        return 'libx264';
+        foreach ($vsechnyTagy as $tagy) {
+            foreach (is_array($tagy) ? array_keys($tagy) : [] as $klic) {
+                if (in_array(strtolower((string) $klic), self::ZNACKY_POLOHY, true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Přebalí kopii videa bez metadat (bez překódování) a vymění ji na místě.
+     *
+     * Dočasný soubor leží ve stejném adresáři, takže `rename()` je na témž
+     * disku atomický: přehrávač, který si kopii zrovna stahuje, dostane
+     * celou starou, nebo celou novou — nikdy půlku. Před výměnou se nová
+     * kopie ještě jednou prozkoumá; když polohu nese dál, nic se nemění.
+     */
+    public function odstranPolohu(string $path): bool
+    {
+        $tmp = dirname($path).'/.'.pathinfo($path, PATHINFO_FILENAME).'.bez-polohy.mp4';
+        @unlink($tmp);
+
+        try {
+            $vysledek = Program::spust(
+                [...$this->ffmpeg(), '-i', $path, '-map', '0', '-map_metadata', '-1', '-map_chapters', '-1',
+                    '-c', 'copy', '-movflags', '+faststart', $tmp],
+                self::LIMIT_PREBALENI,
+                'ffmpeg (kopie videa bez polohy)',
+                ['path' => $path],
+            );
+            if (! $this->vzniklo($vysledek, $tmp)) {
+                return false;
+            }
+            if ($this->nesePolohu($tmp) !== false) {
+                Log::warning('Přebalená kopie videa pořád nese polohu, nechávám původní', ['path' => $path]);
+
+                return false;
+            }
+
+            // Stejná práva jako měl původní soubor — webový server ho musí dál číst.
+            $prava = @fileperms($path);
+            if ($prava !== false) {
+                @chmod($tmp, $prava & 0777);
+            }
+
+            if (! @rename($tmp, $path)) {
+                Log::warning('Kopii videa bez polohy nešlo přesunout na místo původní', ['path' => $path]);
+
+                return false;
+            }
+
+            return true;
+        } finally {
+            if (is_file($tmp)) {
+                @unlink($tmp);
+            }
+        }
+    }
+
+    /** ffmpeg s volbami pro běh bez člověka: nečte vstup z terminálu, do stderr píše jen chyby. */
+    private function ffmpeg(): array
+    {
+        return [$this->ffmpegPath, '-y', '-nostdin', '-hide_banner', '-loglevel', 'error'];
+    }
+
+    /**
+     * Příkaz pro kopii k přehrávání; liší se jen volbami kodéru obrazu.
+     *
+     * @param  list<string>  $obraz  `-c:v …` a jeho nastavení
+     */
+    private function prikazKopie(string $zdroj, string $filtr, array $obraz, string $cil): array
+    {
+        return [
+            ...$this->ffmpeg(),
+            '-i', $zdroj,
+            '-map', '0:v:0', '-map', '0:a?',
+            '-map_metadata', '-1', '-map_chapters', '-1',
+            '-vf', $filtr,
+            ...$obraz,
+            '-maxrate', '5M', '-bufsize', '10M',
+            '-pix_fmt', 'yuv420p',
+            '-c:a', 'aac', '-b:a', '128k',
+            '-movflags', '+faststart',
+            $cil,
+        ];
+    }
+
+    /** Program doběhl a po sobě nechal neprázdný soubor. */
+    private function vzniklo(?ProcessResult $vysledek, string $soubor): bool
+    {
+        clearstatcache(true, $soubor);
+
+        return $vysledek !== null && is_file($soubor) && filesize($soubor) > 0;
     }
 
     private function parseFrameRate(string $frStr): ?float

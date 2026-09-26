@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\MediaItem;
 use App\Models\StorageConnection;
 use App\Services\Media\MazaniFotek;
+use App\Support\Program;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,8 +54,10 @@ class RecoveryController extends Controller
         $exiftoolPath = config('gallery.exiftool_path', '/usr/bin/exiftool');
         $ffmpegPath = config('gallery.ffmpeg_path', '/usr/bin/ffmpeg');
 
-        $exiftoolOk = function_exists('proc_open') && @file_exists($exiftoolPath);
-        $ffmpegOk = function_exists('proc_open') && @file_exists($ffmpegPath);
+        // Pod `open_basedir` webu `file_exists` na /usr/bin vrací false, i když
+        // program je a běží — stránka pak hlásila chybějící nástroje, které fungují.
+        $exiftoolOk = function_exists('proc_open') && Program::lzeSpustit($exiftoolPath);
+        $ffmpegOk = function_exists('proc_open') && Program::lzeSpustit($ffmpegPath);
         $imagickOk = extension_loaded('imagick');
         $gdOk = extension_loaded('gd');
 
