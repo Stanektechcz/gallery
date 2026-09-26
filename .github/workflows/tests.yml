@@ -93,11 +93,10 @@ jobs:
     name: PHPUnit (MySQL 8.0)
     runs-on: ubuntu-24.04
     timeout-minutes: 45
-    # Zahořovací období: sada se na MySQL dosud nikdy nespustila a první běhy
-    # odhalí chyby, které SQLite schová. Než se opraví, nesmí červená MySQL
-    # blokovat main ani pull requesty; výsledek je vidět v běhu i v JUnit
-    # artefaktu. Až bude MySQL zelená, `continue-on-error` odstranit.
-    continue-on-error: true
+    # Povinná stejně jako SQLite. Zahořovací `continue-on-error` skončil
+    # 27. 9. 2026: první běh našel 57 chyb, z toho tři skutečné na produkci
+    # (párování plateb s cestou, výdaj cesty s datem z prohlížeče, částky
+    # jako text), druhý prošel celý. Chyba jen na MySQL teď zastaví main.
 
     services:
       mysql:
