@@ -710,13 +710,23 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
             ->get(['id', 'uuid'])->keyBy('id') : collect();
         $this->zjistiNahledy(array_keys($snimky->all()));
 
-        return array_map(function (array $r) use ($jmena, $popisy, $snimky, $dnes) {
+        /*
+         * Jméno souboru jen u toho, co není v trezoru.
+         *
+         * Záznam o nahrání nese jméno i u fotky, kterou někdo do trezoru
+         * přesunul až potom — přehled by ho vypsal i se zamčeným trezorem.
+         */
+        $vTrezoru = $media ? DB::table('media_items')->whereIn('id', $media)
+            ->where('is_hidden', true)->pluck('id')->flip() : collect();
+
+        return array_map(function (array $r) use ($jmena, $popisy, $snimky, $vTrezoru, $dnes) {
             $z = $r['z'];
             $kdo = $jmena[(int) $z->user_id] ?? 'Někdo';
             $co = $popisy[$z->action];
+            $soubor = str_starts_with($z->action, 'media.') && $vTrezoru->has($z->subject_id) ? null : $r['soubor'];
             $text = $r['n'] > 1
                 ? $kdo.' · '.$co.' ('.$this->pocet($r['n'], 'soubor', 'soubory', 'souborů').')'
-                : $kdo.' · '.$co.($r['soubor'] ? ' '.$r['soubor'] : '');
+                : $kdo.' · '.$co.($soubor ? ' '.$soubor : '');
             $snimek = $snimky[$z->subject_id] ?? null;
 
             return [

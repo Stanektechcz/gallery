@@ -5,6 +5,7 @@ namespace App\Console\Commands;
 use App\Models\AuditLog;
 use App\Models\MediaItem;
 use App\Services\ExifExtractorService;
+use App\Services\Media\MediaPurger;
 use App\Support\SpaceContext;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
@@ -17,6 +18,11 @@ class RebuildExifCommand extends Command
         {--opravdu : Sirotky z `--clean-orphans` opravdu smaže (jinak jen výpis)}';
 
     protected $description = 'Re-extract EXIF (GPS, date, camera) from local files using Imagick/exiftool';
+
+    public function __construct(private readonly MediaPurger $mazani)
+    {
+        parent::__construct();
+    }
 
     public function handle(): int
     {
@@ -118,18 +124,24 @@ class RebuildExifCommand extends Command
      *
      * Navíc se mazalo bez zkoušky nanečisto, bez potvrzení a bez zápisu do
      * protokolu. Výchozí chování je proto výpis; smaže se až s `--opravdu`.
+     *
+     * Položka s **kopií v cloudu** (`drive_file_id` nebo varianta `cloud_copy`)
+     * se nemaže nikdy, jen se vypíše jako obnovitelná. Chybějící originál tu
+     * umí způsobit i nepřipojený nebo špatně nastavený disk — a smazání přes
+     * `MediaPurger` by pak zařadilo mazání i té kopie v cloudu, která je v tu
+     * chvíli jediná, co zbylo.
      */
     private function cleanOrphans(): void
     {
         $opravdu = (bool) $this->option('opravdu');
         $sirotku = 0;
+        $obnovitelne = 0;
 
         MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
-            ->whereNull('drive_file_id')
             // Rozdělaná položka nemá být čím posuzovaná.
             ->whereNotIn('storage_status', ['uploading', 'processing'])
             ->with('variants')
-            ->each(function (MediaItem $media) use ($opravdu, &$sirotku) {
+            ->each(function (MediaItem $media) use ($opravdu, &$sirotku, &$obnovitelne) {
                 $original = $media->variants->firstWhere('type', 'original');
 
                 // Bez varianty originálu se nedá říct, že soubor chybí — jen
@@ -150,25 +162,47 @@ class RebuildExifCommand extends Command
                     return;
                 }
 
+                // Jméno z trezoru ani do výpisu — výstup příkazu končí v logu
+                // (stejně jako u `gallery:purge-trash`).
+                $jmeno = $media->is_hidden ? '(trezor)' : $media->original_filename;
+
+                if ($media->drive_file_id || $media->variants->contains('type', 'cloud_copy')) {
+                    $obnovitelne++;
+                    $this->line("  Obnovitelné z cloudu: #{$media->id} {$jmeno}");
+
+                    return;
+                }
+
                 $sirotku++;
-                $this->line('  '.($opravdu ? 'Mažu' : 'Smazal bych').": #{$media->id} {$media->original_filename}");
+                $this->line('  '.($opravdu ? 'Mažu' : 'Smazal bych').": #{$media->id} {$jmeno}");
 
                 if (! $opravdu) {
                     return;
                 }
 
-                AuditLog::record('media.orphan.purged', $media, [
+                // Jméno jen mimo trezor: přehled „Dnes" jména z protokolu vypisuje.
+                AuditLog::record('media.orphan.purged', $media, ($media->is_hidden ? [] : [
                     'filename' => $media->original_filename,
+                ]) + [
                     'duvod' => 'soubor originálu na disku chybí',
                 ]);
 
-                $media->variants()->delete();
+                // Přes `MediaPurger`, ne vlastní mazání: jedno místo pro soubory,
+                // náhledy a složku nahrávání. Kopie v cloudu tu už být nemůže.
+                $this->mazani->purge($media);
                 $media->forceDelete();
             });
 
         $this->info($opravdu
             ? "Smazáno {$sirotku} položek bez souboru."
             : "Ke smazání: {$sirotku} položek. Spusťte s `--opravdu`, ať se to provede.");
+
+        if ($obnovitelne > 0) {
+            // Příkaz, který by originál z cloudu stáhl zpět, zatím není —
+            // proto aspoň kam se podívat a co nedělat.
+            $this->warn("Obnovitelné z cloudu (nesmazáno): {$obnovitelne} — originál chybí jen na serveru, kopie v cloudu je. "
+                .'Nejdřív zkontrolujte připojení disku serveru a stránku Obnova (/recovery); soubor stáhněte z cloudu zpět ručně.');
+        }
     }
 
     private function extractExif(string $sourcePath, string $exiftoolPath): array

@@ -44,6 +44,32 @@ class DriveConnectionResolver
     }
 
     /**
+     * Disk, na kterém originál položky nejspíš leží — kvůli jeho smazání.
+     *
+     * Stejný okruh jako při nahrávání (dvojice prostoru, autor napřed), ale bez
+     * podmínky zdravého spojení a kořenové složky. Soubor na Disku zůstává, i když
+     * spojení zrovna hlásí chybu; smazání se zaznamená a úloha ho zkusí znovu,
+     * až se spojení obnoví. Dřív se zdravé spojení hledalo přes všechny prostory,
+     * kde je vlastník členem — i přes Disk hosta — a v chybě se nesmazalo nic.
+     */
+    public function forPurge(int $spaceId, ?int $preferredUserId = null): ?StorageConnection
+    {
+        $memberIds = $this->dvojice($spaceId);
+
+        if (! $memberIds) {
+            return null;
+        }
+
+        return StorageConnection::query()
+            ->where('provider', 'google_drive')
+            ->whereIn('owner_user_id', $memberIds)
+            ->orderByRaw('CASE WHEN owner_user_id = ? THEN 0 ELSE 1 END', [$preferredUserId ?? 0])
+            ->orderByRaw('CASE WHEN connection_status = ? THEN 0 ELSE 1 END', [StorageConnection::STATUS_HEALTHY])
+            ->orderByDesc('last_successful_request_at')
+            ->first();
+    }
+
+    /**
      * Účty, jejichž Disk smí nést originály prostoru: vlastník a členové
      * s rolí dvojice.
      *

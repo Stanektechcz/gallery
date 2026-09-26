@@ -194,6 +194,33 @@ class ObsahDnesTest extends TestCase
         $this->assertNull($nahledy[0], 'Fotka v trezoru nemá náhled.');
     }
 
+    /**
+     * Aktivita nevypíše jméno fotky, která je teď v trezoru.
+     *
+     * Záznam o nahrání nese jméno i u fotky přesunuté do trezoru až potom —
+     * přehled by ho ukázal i se zamčeným trezorem.
+     */
+    public function test_aktivita_nevypise_jmeno_fotky_v_trezoru(): void
+    {
+        $bezna = $this->fotka();
+        $vTrezoru = $this->fotka(['is_hidden' => true]);
+
+        foreach ([[$bezna, 'more.jpg', '09'], [$vTrezoru, 'pas.jpg', '13']] as [$m, $jmeno, $hodina]) {
+            DB::table('audit_logs')->insert([
+                'user_id' => $this->adri->id, 'gallery_space_id' => $this->prostor->id,
+                'action' => 'media.upload', 'subject_type' => 'MediaItem',
+                'subject_id' => $m->id, 'payload' => json_encode(['filename' => $jmeno]),
+                'created_at' => '2026-09-16 '.$hodina.':00:00',
+            ]);
+        }
+
+        $texty = array_column($this->getJson('/api/data/dnes')->assertOk()->json('data.DNES.aktivita'), 1);
+
+        $this->assertCount(2, $texty);
+        $this->assertStringNotContainsString('pas.jpg', $texty[0]);
+        $this->assertStringContainsString('more.jpg', $texty[1]);
+    }
+
     /** Návrh na album je jen tam, kde opravdu leží hromada fotek bez alba. */
     public function test_navrh_alba_z_fotek_bez_alba(): void
     {

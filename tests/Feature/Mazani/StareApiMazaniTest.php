@@ -302,6 +302,24 @@ class StareApiMazaniTest extends TestCase
         $this->assertNull($this->radek($fotka->id));
     }
 
+    /** Ani starý web, ani koš v1 nepíšou jméno souboru z trezoru do protokolu. */
+    public function test_trvale_smazani_skryte_nezapise_jmeno_do_protokolu(): void
+    {
+        [$vlastnik, , , $prostor] = $this->dvojiceSHostem();
+        $pres1 = $this->fotka($prostor, $vlastnik, 'tajna-v1.jpg', ['is_hidden' => true, 'trashed_at' => now()]);
+        $presWeb = $this->fotka($prostor, $vlastnik, 'tajna-web.jpg', ['is_hidden' => true, 'trashed_at' => now()]);
+
+        $this->sOdemcenymTrezorem($vlastnik)->deleteJson('/api/v1/trash/'.$pres1->uuid.'/purge')->assertOk();
+        $this->sOdemcenymTrezorem($vlastnik)->deleteJson('/media/'.$presWeb->uuid.'/purge')->assertOk();
+
+        $zaznamy = AuditLog::where('action', 'media.purge')->get();
+        $this->assertEqualsCanonicalizing([$pres1->id, $presWeb->id], $zaznamy->pluck('subject_id')->all());
+
+        foreach ($zaznamy as $zaznam) {
+            $this->assertArrayNotHasKey('filename', (array) $zaznam->payload);
+        }
+    }
+
     public function test_vysypani_kose_se_zamcenym_trezorem_necha_skryte_i_nesmazane(): void
     {
         [$vlastnik, , , $prostor] = $this->dvojiceSHostem();

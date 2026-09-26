@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
@@ -171,6 +172,31 @@ class KosTest extends TestCase
         $this->assertNull(MediaItem::find($fotka->id));
         $this->assertNull(MediaItem::withTrashed()->find($fotka->id));
         $this->assertDatabaseHas('audit_logs', ['action' => 'media.purge']);
+    }
+
+    /**
+     * Jméno souboru z trezoru nepatří do protokolu.
+     *
+     * Přehled „Dnes" jména z protokolu vypisuje — i se zamčeným trezorem.
+     * Trvalé smazání fotky z trezoru tak prozradilo, co v trezoru bylo. Stejně
+     * jako noční úklid koše: bez jména, předmět (id) zůstává.
+     */
+    public function test_trvale_odstraneni_z_trezoru_nezapise_jmeno(): void
+    {
+        $bezna = $this->fotka(['trashed_at' => now()], 1);
+        $trezor = $this->fotka(['trashed_at' => now(), 'is_hidden' => true, 'original_filename' => 'pas-a-obcanka.jpg'], 2);
+
+        $this->postJson('/api/kos/odstranit', ['id' => $bezna->uuid])->assertOk();
+        $this->withSession($this->odemcenyTrezor($this->adri))
+            ->postJson('/api/kos/odstranit', ['id' => $trezor->uuid])
+            ->assertOk();
+
+        $zaznamTrezoru = AuditLog::where('action', 'media.purge')->where('subject_id', $trezor->id)->sole();
+        $this->assertArrayNotHasKey('filename', (array) $zaznamTrezoru->payload);
+        $this->assertSame('MediaItem', $zaznamTrezoru->subject_type);
+
+        $zaznamBezne = AuditLog::where('action', 'media.purge')->where('subject_id', $bezna->id)->sole();
+        $this->assertSame('IMG_1.jpg', $zaznamBezne->payload['filename'] ?? null, 'Mimo trezor jméno zůstává.');
     }
 
     /** Vyprázdnění smaže všechno v koši a nic mimo něj. */

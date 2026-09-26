@@ -108,7 +108,9 @@ class KosController extends Controller
 
         $jmeno = $polozka->original_filename;
 
-        AuditLog::record('media.purge', $polozka, ['filename' => $jmeno]);
+        // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
+        // jména z protokolu vypisuje i se zamčeným trezorem. Předmět (id) zůstává.
+        AuditLog::record('media.purge', $polozka, $polozka->is_hidden ? [] : ['filename' => $jmeno]);
         $this->mazani->purge($polozka);
         // `forceDelete`, ne `delete`: model má soft delete, takže by po
         // „trvale odstraněno" zůstal řádek s `deleted_at` — bez souborů,

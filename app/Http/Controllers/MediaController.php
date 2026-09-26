@@ -352,7 +352,9 @@ class MediaController extends Controller
             'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
         );
 
-        AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
+        // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
+        // jména z protokolu vypisuje i se zamčeným trezorem. Předmět (id) zůstává.
+        AuditLog::record('media.purge', $media, $media->is_hidden ? [] : ['filename' => $media->original_filename]);
         // Tatáž služba jako koš prototypu i `TrashController` — jinak by se
         // tu dalo zapomenout na kopii na Disku.
         app(MediaPurger::class)->purge($media);

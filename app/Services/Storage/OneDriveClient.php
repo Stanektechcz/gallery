@@ -21,6 +21,11 @@ class OneDriveClient
 
     private const ROOT = 'https://graph.microsoft.com/v1.0/me/drive/root:';
 
+    private const ITEMS = 'https://graph.microsoft.com/v1.0/me/drive/items';
+
+    /** Odkaz na kopii podle id položky v Graphu, ne podle cesty — viz `odkazNaNahrane()`. */
+    public const PREDPONA_ID = 'id:';
+
     /** Graph wants an upload session above 4 MB; this refuses rather than sending a truncated file. */
     private const SIMPLE_UPLOAD_LIMIT = 4 * 1024 * 1024;
 
@@ -75,13 +80,9 @@ class OneDriveClient
             return ['ok' => false, 'error' => $connection->last_error_message ?? 'Přístup se nepodařilo obnovit.'];
         }
 
-        // Each segment encoded separately: encoding the whole path would escape the
-        // slashes that make it a path.
-        $encoded = implode('/', array_map('rawurlencode', explode('/', ltrim($remotePath, '/'))));
-
         $response = Http::withToken($token)
             ->withBody($contents, 'application/octet-stream')
-            ->put(self::ROOT.'/'.$encoded.':/content?@microsoft.graph.conflictBehavior=rename');
+            ->put(self::ROOT.'/'.$this->zakodujCestu($remotePath).':/content?@microsoft.graph.conflictBehavior=rename');
 
         if ($response->failed()) {
             $reason = (string) $response->json('error.message', 'Nahrání do OneDrive selhalo.');
@@ -96,11 +97,71 @@ class OneDriveClient
             return ['ok' => false, 'error' => $reason];
         }
 
-        return ['ok' => true, 'path' => $response->json('name') ?? $remotePath, 'size' => $response->json('size')];
+        return ['ok' => true, 'path' => $this->odkazNaNahrane($response->json(), $remotePath), 'size' => $response->json('size')];
+    }
+
+    /**
+     * Smaže jeden soubor — po trvalém smazání fotky v galerii.
+     *
+     * Graph položku přesune do koše OneDrivu (obnovitelná jako u Disku
+     * a Dropboxu). 404 je úspěch: soubor tam už není a opakovat to nemá smysl.
+     *
+     * `$ref` je, co uložilo nahrání: `id:…` u nových kopií, u starších jen jméno
+     * souboru (dřív se ukládalo jen `name`) — to se složí se složkou prostoru.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function delete(StorageConnection $connection, string $ref): array
+    {
+        $token = $this->refresher->accessToken($connection);
+        if (! $token) {
+            return ['ok' => false, 'error' => $connection->last_error_message ?? 'Přístup se nepodařilo obnovit.'];
+        }
+
+        $adresa = str_starts_with($ref, self::PREDPONA_ID)
+            ? self::ITEMS.'/'.rawurlencode(substr($ref, strlen(self::PREDPONA_ID)))
+            : self::ROOT.'/'.$this->zakodujCestu(str_contains($ref, '/') ? $ref : $this->folderFor($connection).'/'.$ref);
+
+        $response = Http::withToken($token)->delete($adresa);
+
+        if ($response->successful() || $response->status() === 404) {
+            return ['ok' => true];
+        }
+
+        return ['ok' => false, 'error' => (string) $response->json('error.message', 'OneDrive odpověděl HTTP '.$response->status().'.')];
     }
 
     public function folderFor(StorageConnection $connection): string
     {
         return '/MAKI Gallery/prostor-'.$connection->gallery_space_id;
+    }
+
+    /**
+     * Jak kopii najít znovu.
+     *
+     * Id položky, ne jméno: Graph při kolizi jméno přejmenuje („x 1.jpg")
+     * a uživatel může soubor v OneDrivu přesunout — id přežije obojí. Dřív se
+     * ukládalo jen `name`, takže smazat kopii nešlo ani podle cesty.
+     *
+     * @param  array<string, mixed>|null  $odpoved
+     */
+    private function odkazNaNahrane(?array $odpoved, string $remotePath): string
+    {
+        if (filled($odpoved['id'] ?? null)) {
+            return self::PREDPONA_ID.$odpoved['id'];
+        }
+
+        return filled($odpoved['name'] ?? null)
+            ? rtrim(dirname($remotePath), '/').'/'.$odpoved['name']
+            : $remotePath;
+    }
+
+    /**
+     * Každý díl zvlášť: zakódovat celou cestu by zakódovalo i lomítka, která
+     * z ní dělají cestu.
+     */
+    private function zakodujCestu(string $cesta): string
+    {
+        return implode('/', array_map('rawurlencode', explode('/', ltrim($cesta, '/'))));
     }
 }

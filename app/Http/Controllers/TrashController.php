@@ -74,7 +74,9 @@ class TrashController extends Controller
         $space = $this->prostorSpravce($request);
         $media = $this->vKosi($space)->where('uuid', $uuid)->firstOrFail();
 
-        AuditLog::record('media.purge', $media, ['filename' => $media->original_filename]);
+        // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
+        // jména z protokolu vypisuje i se zamčeným trezorem. Předmět (id) zůstává.
+        AuditLog::record('media.purge', $media, $media->is_hidden ? [] : ['filename' => $media->original_filename]);
 
         $this->deleteMediaFiles($media);
         // `forceDelete`, ne `delete`: soft delete by nechal řádek bez souborů,

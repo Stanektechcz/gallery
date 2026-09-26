@@ -70,7 +70,10 @@ class VaultController extends Controller
             return response()->json(['message' => 'Trezor je uzamčený.'], 423);
         }
         $media->update(['is_hidden' => ! $media->is_hidden]);
-        AuditLog::record($media->is_hidden ? 'vault.add' : 'vault.remove', $media, ['filename' => $media->original_filename]);
+        // Bez jména souboru: přehled „Dnes" jména z protokolu vypisuje i se
+        // zamčeným trezorem, takže by prozradil, co se právě schovalo. Předmět
+        // (id položky) zůstává — jako u trvalého smazání.
+        AuditLog::record($media->is_hidden ? 'vault.add' : 'vault.remove', $media);
 
         return response()->json(['is_hidden' => $media->is_hidden]);
     }

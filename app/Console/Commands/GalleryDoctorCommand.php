@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Http\Controllers\Auth\PasswordResetController;
+use App\Models\CloudCopyDeletion;
 use App\Models\StorageConnection;
 use App\Models\SystemSetting;
 use Illuminate\Console\Command;
@@ -37,6 +38,7 @@ class GalleryDoctorCommand extends Command
         $this->checkScheduler();
         $this->checkThumbnailCoverage();
         $this->checkWebServer();
+        $this->checkCloudCopyDeletions();
         $this->checkGoogleDrive();
 
         // Summary
@@ -624,6 +626,34 @@ class GalleryDoctorCommand extends Command
             }
         } catch (\Throwable $e) {
             $this->check('Drive backup coverage could not be read ('.$e->getMessage().')', false, 'WARN');
+        }
+    }
+
+    /**
+     * Kopie v cloudu, které se po trvalém smazání nepodařilo odstranit.
+     *
+     * Fotka, kterou dvojice společně smazala, jinak tiše leží dál v Dropboxu
+     * nebo na Disku a nikdo se to nedozví — úloha to po posledním pokusu vzdá
+     * a víc neřekne. Čekající záznam, na který den nikdo nesáhl, znamená, že
+     * fronta `drive` nejede, nebo se úloha nezařadila (`CloudCopyDeletion::visi`).
+     */
+    private function checkCloudCopyDeletions(): void
+    {
+        $this->section('Mazání kopií v cloudu');
+
+        try {
+            $selhalo = CloudCopyDeletion::where('status', CloudCopyDeletion::STATUS_FAILED)->count();
+            $visi = CloudCopyDeletion::query()->visi()->count();
+
+            $this->check(
+                $selhalo + $visi === 0
+                    ? 'Mazání kopií v cloudu: nic nevisí'
+                    : "Mazání kopií v cloudu: {$selhalo} selhalo, {$visi} čeká déle než den — přehled: php artisan gallery:cloud-mazani, zkusit znovu: php artisan gallery:cloud-mazani --znovu",
+                $selhalo + $visi === 0,
+                'WARN',
+            );
+        } catch (\Throwable $e) {
+            $this->check('Mazání kopií v cloudu nejde přečíst ('.$e->getMessage().')', false, 'WARN');
         }
     }
 

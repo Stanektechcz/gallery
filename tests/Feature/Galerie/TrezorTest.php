@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\User;
@@ -199,6 +200,69 @@ class TrezorTest extends TestCase
         $fotka->update(['gallery_space_id' => $rodina->id]);
 
         $this->getJson('/api/v1/media/'.$fotka->uuid.'/comments')->assertStatus(423);
+    }
+
+    /**
+     * Přesun do trezoru a z něj nepíše jméno souboru do protokolu.
+     *
+     * Přehled „Dnes" jména z protokolu vypisuje i se zamčeným trezorem, takže
+     * `vault.add` s názvem souboru prozradil, co se právě schovalo. Předmět
+     * (id položky) zůstává, jako u trvalého smazání.
+     */
+    public function test_presun_do_trezoru_nezapise_jmeno_do_protokolu(): void
+    {
+        $fotka = $this->schovanaFotka('rodny-list.jpg');
+        $fotka->update(['is_hidden' => false]);
+
+        $this->actingAs($this->adri)
+            ->postJson('/vault/media/'.$fotka->uuid.'/toggle')
+            ->assertOk()
+            ->assertJsonPath('is_hidden', true);
+
+        $this->actingAs($this->adri)
+            ->withSession($this->odemcenyTrezor($this->adri))
+            ->postJson('/vault/media/'.$fotka->uuid.'/toggle')
+            ->assertOk()
+            ->assertJsonPath('is_hidden', false);
+
+        $zaznamy = AuditLog::whereIn('action', ['vault.add', 'vault.remove'])->orderBy('id')->get();
+        $this->assertSame(['vault.add', 'vault.remove'], $zaznamy->pluck('action')->all());
+
+        foreach ($zaznamy as $zaznam) {
+            $this->assertSame($fotka->id, (int) $zaznam->subject_id);
+            $this->assertArrayNotHasKey('filename', (array) $zaznam->payload);
+        }
+    }
+
+    /**
+     * Starší záznamy přesunu do trezoru přijdou o jméno souboru.
+     *
+     * Nové už ho nenesou; migrace dočistí ty dřívější. Ostatní klíče i záznamy
+     * jiných akcí zůstávají, jak byly.
+     */
+    public function test_starsi_zaznamy_prijdou_o_jmena_z_trezoru(): void
+    {
+        $zapis = fn (string $akce, ?array $data) => DB::table('audit_logs')->insertGetId([
+            'action' => $akce,
+            'subject_type' => MediaItem::class,
+            'subject_id' => 1,
+            'payload' => $data === null ? null : json_encode($data),
+            'created_at' => now(),
+        ]);
+
+        $pridani = $zapis('vault.add', ['filename' => 'rodny-list.jpg']);
+        $odebrani = $zapis('vault.remove', ['filename' => 'pas.jpg', 'via' => 'test']);
+        $nahrani = $zapis('media.upload', ['filename' => 'vylet.jpg']);
+        $prazdny = $zapis('vault.add', null);
+
+        (require database_path('migrations/2026_09_29_120000_trezor_bez_jmen_v_protokolu.php'))->up();
+
+        $payload = fn (int $id) => DB::table('audit_logs')->where('id', $id)->value('payload');
+
+        $this->assertNull($payload($pridani));
+        $this->assertSame(['via' => 'test'], json_decode((string) $payload($odebrani), true));
+        $this->assertSame(['filename' => 'vylet.jpg'], json_decode((string) $payload($nahrani), true));
+        $this->assertNull($payload($prazdny));
     }
 
     /** Uzavření z galerie platí i ve starém rozhraní — jinak by se obešlo tudy. */

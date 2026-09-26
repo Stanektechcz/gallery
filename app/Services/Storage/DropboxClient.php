@@ -24,6 +24,8 @@ class DropboxClient
 
     private const UPLOAD = 'https://content.dropboxapi.com/2/files/upload';
 
+    private const DELETE = 'https://api.dropboxapi.com/2/files/delete_v2';
+
     /** Dropbox switches to a chunked protocol above 150 MB; this refuses rather than truncates. */
     private const SIMPLE_UPLOAD_LIMIT = 140 * 1024 * 1024;
 
@@ -110,6 +112,40 @@ class DropboxClient
         }
 
         return ['ok' => true, 'path' => $response->json('path_lower'), 'size' => $response->json('size')];
+    }
+
+    /**
+     * Smaže jeden soubor — po trvalém smazání fotky v galerii.
+     *
+     * Dropbox ho přesune mezi smazané soubory, odkud jde ještě zhruba měsíc
+     * obnovit; stejně jako koš na Disku a v OneDrivu. Soubor, který tam už není
+     * (`path_lookup/not_found`), je smazaný — opakovat to nemá smysl.
+     *
+     * Stav připojení se tu nepřepisuje na chybu: nepovedené mazání se zkusí
+     * znovu a nemá kvůli němu svítit „Dropbox nefunguje" u nahrávání.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function delete(StorageConnection $connection, string $remotePath): array
+    {
+        $token = $this->refresher->accessToken($connection);
+        if (! $token) {
+            return ['ok' => false, 'error' => $connection->last_error_message ?? 'Přístup se nepodařilo obnovit.'];
+        }
+
+        $response = Http::withToken($token)->post(self::DELETE, ['path' => $remotePath]);
+
+        if ($response->successful()) {
+            return ['ok' => true];
+        }
+
+        $souhrn = (string) $response->json('error_summary', '');
+
+        if ($response->status() === 409 && str_starts_with($souhrn, 'path_lookup/not_found')) {
+            return ['ok' => true];
+        }
+
+        return ['ok' => false, 'error' => $souhrn !== '' ? $souhrn : 'Dropbox odpověděl HTTP '.$response->status().'.'];
     }
 
     /**

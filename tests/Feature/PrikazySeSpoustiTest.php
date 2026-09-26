@@ -27,6 +27,7 @@ class PrikazySeSpoustiTest extends TestCase
      * @var array<string, string>
      */
     private const RUCNE = [
+        'gallery:cloud-mazani' => 'opakování mazání kopií v cloudu až po opravě připojení — rozhoduje člověk, na kterého upozorní doktor',
         'gallery:exif' => 'jednorázová oprava metadat; s --clean-orphans maže, takže ho plánovač pouštět nemá',
         'gallery:exif-diagnostics' => 'diagnostika při hledání příčiny',
         'gallery:import' => 'hromadný import ze složky, spouští člověk',

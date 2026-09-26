@@ -137,7 +137,7 @@ class WebDavClient
         }
 
         $base = rtrim($credentials['url'], '/');
-        $target = $base.'/'.implode('/', array_map('rawurlencode', explode('/', ltrim($remotePath, '/'))));
+        $target = $this->adresaSouboru($base, $remotePath);
 
         try {
             // The folder has to exist first; WebDAV will not make one on the way. MKCOL on a
@@ -164,9 +164,55 @@ class WebDavClient
         return ['ok' => true, 'path' => $remotePath, 'size' => strlen($contents)];
     }
 
+    /**
+     * Smaže jeden soubor — po trvalém smazání fotky v galerii.
+     *
+     * Adresa se posuzuje znovu jako u nahrání (`pozadavek`): mazání posílá
+     * přihlašovací údaje na adresu, kterou zadal zákazník. 404 je úspěch —
+     * soubor tam už není. Jestli skončí v koši, rozhoduje server úložiště
+     * (Nextcloud ho do koše dá, holý WebDAV ne).
+     *
+     * Stav připojení se nepřepisuje na chybu: nepovedené mazání se zkusí znovu
+     * a nemá kvůli němu svítit „úložiště nefunguje" u nahrávání.
+     *
+     * @return array{ok: bool, error?: string}
+     */
+    public function delete(StorageConnection $connection, string $remotePath): array
+    {
+        $credentials = $this->credentials($connection);
+        if (! $credentials) {
+            return ['ok' => false, 'error' => 'Přihlašovací údaje se nepodařilo přečíst.'];
+        }
+
+        $http = $this->pozadavek($credentials, self::LIMIT_DOTAZU);
+        if (! $http) {
+            return ['ok' => false, 'error' => self::HLASKA_ADRESA];
+        }
+
+        try {
+            $response = $http->delete($this->adresaSouboru(rtrim($credentials['url'], '/'), $remotePath));
+        } catch (\Throwable $e) {
+            Log::info('WebDAV: smazání se nepodařilo', ['error' => $e::class]);
+
+            return ['ok' => false, 'error' => 'Úložiště se nepodařilo zastihnout.'];
+        }
+
+        if ($response->successful() || $response->status() === 404) {
+            return ['ok' => true];
+        }
+
+        return ['ok' => false, 'error' => 'Smazání selhalo (HTTP '.$response->status().').'];
+    }
+
     public function folderFor(StorageConnection $connection): string
     {
         return 'MAKI Gallery/prostor-'.$connection->gallery_space_id;
+    }
+
+    /** Každý díl cesty zvlášť, aby se nezakódovala lomítka. */
+    private function adresaSouboru(string $base, string $remotePath): string
+    {
+        return $base.'/'.implode('/', array_map('rawurlencode', explode('/', ltrim($remotePath, '/'))));
     }
 
     /** Creates each level in turn; a level that exists answers 405 and is stepped over. */
