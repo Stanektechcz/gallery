@@ -16,8 +16,10 @@ class TripTravelController extends Controller
     public function choices(Request $request, int $tripId): JsonResponse
     {
         $this->trip($request, $tripId);
+        $choices = DB::table('trip_travel_choices')->where('trip_id', $tripId)->latest()->get()
+            ->each(fn (object $choice) => $this->castChoice($choice));
 
-        return response()->json(DB::table('trip_travel_choices')->where('trip_id', $tripId)->latest()->get());
+        return response()->json($choices);
     }
 
     public function bookingSearch(Request $request, int $tripId): JsonResponse
@@ -80,7 +82,15 @@ class TripTravelController extends Controller
     {
         $id = DB::table('trip_travel_choices')->insertGetId(['uuid' => (string) Str::uuid(), 'trip_id' => $trip->id, 'created_by' => $userId, 'trip_route_variant_id' => $variantId, 'trip_activity_id' => $activityId, 'trip_expense_id' => $expenseId, 'kind' => $kind, 'provider' => $data['provider'] ?? null, 'title' => $data['title'], 'source_url' => $data['source_url'] ?? null, 'amount' => $data['amount'] ?? null, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'is_selected' => $selected, 'details' => json_encode($data['details'] ?? array_filter(['reference' => $data['reference'] ?? null, 'checkin' => $data['checkin'] ?? null, 'checkout' => $data['checkout'] ?? null])), 'created_at' => now(), 'updated_at' => now()]);
 
-        return DB::table('trip_travel_choices')->find($id);
+        return $this->castChoice(DB::table('trip_travel_choices')->find($id));
+    }
+
+    /** `trip_travel_choices.amount` je `decimal(12,2)` — na MySQL by jinak dorazilo jako řetězec. */
+    private function castChoice(object $choice): object
+    {
+        $choice->amount = $choice->amount !== null ? (float) $choice->amount : null;
+
+        return $choice;
     }
 
     /**

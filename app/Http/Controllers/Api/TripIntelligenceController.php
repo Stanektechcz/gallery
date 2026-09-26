@@ -45,7 +45,10 @@ class TripIntelligenceController extends Controller
         $packing = DB::table('trip_packing_items')->where('trip_id', $tripId);
         $unpackedEssentials = DB::table('trip_packing_items as item')->leftJoin('users as assignee', 'assignee.id', '=', 'item.assigned_to')->where('item.trip_id', $tripId)->where('item.is_essential', true)->where('item.is_packed', false)->get(['item.id', 'item.title', 'item.category', 'item.assigned_to', 'assignee.name as assignee_name']);
 
-        return response()->json(['trip' => $trip, 'budget' => $budget, 'budget_advisor' => $budgetAdvisor->snapshot($trip), 'preparation' => $preparation->snapshot($trip), 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => DB::table('trip_settlements')->where('trip_id', $tripId)->get(), 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'assigned' => (clone $packing)->whereNotNull('assigned_to')->count(), 'unassigned_essentials' => (clone $packing)->where('is_essential', true)->whereNull('assigned_to')->where('is_packed', false)->count(), 'unpacked_essentials' => $unpackedEssentials], 'vehicle' => $this->vehicleSummary($tripId)]);
+        $settlements = DB::table('trip_settlements')->where('trip_id', $tripId)->get()
+            ->each(fn (object $settlement) => $settlement->amount = (float) $settlement->amount);
+
+        return response()->json(['trip' => $trip, 'budget' => $budget, 'budget_advisor' => $budgetAdvisor->snapshot($trip), 'preparation' => $preparation->snapshot($trip), 'documents' => $documents, 'expired_documents' => $expired, 'time_conflicts' => $conflicts, 'settlements' => $settlements, 'packing' => ['total' => (clone $packing)->count(), 'packed' => (clone $packing)->where('is_packed', true)->count(), 'assigned' => (clone $packing)->whereNotNull('assigned_to')->count(), 'unassigned_essentials' => (clone $packing)->where('is_essential', true)->whereNull('assigned_to')->where('is_packed', false)->count(), 'unpacked_essentials' => $unpackedEssentials], 'vehicle' => $this->vehicleSummary($tripId)]);
     }
 
     public function upsertBudgetLimit(Request $request, int $tripId): JsonResponse
@@ -53,8 +56,10 @@ class TripIntelligenceController extends Controller
         $trip = $this->trip($request->user(), $tripId);
         $data = $request->validate(['category' => 'required|in:transport,accommodation,food,activities,insurance,other', 'amount' => 'required|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'warn_percent' => 'nullable|integer|between:1,100']);
         DB::table('trip_budget_limits')->updateOrInsert(['trip_id' => $tripId, 'category' => $data['category']], ['amount' => $data['amount'], 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'warn_percent' => $data['warn_percent'] ?? 80, 'created_at' => now(), 'updated_at' => now()]);
+        $limit = DB::table('trip_budget_limits')->where('trip_id', $tripId)->where('category', $data['category'])->first();
+        $limit->amount = (float) $limit->amount;
 
-        return response()->json(DB::table('trip_budget_limits')->where('trip_id', $tripId)->where('category', $data['category'])->first());
+        return response()->json($limit);
     }
 
     public function storeDocument(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
@@ -414,7 +419,10 @@ class TripIntelligenceController extends Controller
     {
         $this->trip($request->user(), $tripId);
 
-        return response()->json(['items' => DB::table('trip_vehicle_costs')->where('trip_id', $tripId)->orderByDesc('occurred_on')->orderByDesc('id')->get(), 'summary' => $this->vehicleSummary($tripId)]);
+        $items = DB::table('trip_vehicle_costs')->where('trip_id', $tripId)->orderByDesc('occurred_on')->orderByDesc('id')->get()
+            ->each(fn (object $cost) => $this->castVehicleCost($cost));
+
+        return response()->json(['items' => $items, 'summary' => $this->vehicleSummary($tripId)]);
     }
 
     public function storeVehicleCost(Request $request, int $tripId, TripPreparationTimelineService $preparation): JsonResponse
@@ -426,7 +434,7 @@ class TripIntelligenceController extends Controller
             $preparation->sync($trip);
         }
 
-        return response()->json(DB::table('trip_vehicle_costs')->find($id), 201);
+        return response()->json($this->castVehicleCost(DB::table('trip_vehicle_costs')->find($id)), 201);
     }
 
     public function updateVehicleCost(Request $request, int $tripId, int $costId, TripPreparationTimelineService $preparation): JsonResponse
@@ -442,7 +450,7 @@ class TripIntelligenceController extends Controller
             $preparation->sync($trip);
         }
 
-        return response()->json(DB::table('trip_vehicle_costs')->find($cost->id));
+        return response()->json($this->castVehicleCost(DB::table('trip_vehicle_costs')->find($cost->id)));
     }
 
     public function destroyVehicleCost(Request $request, int $tripId, int $costId, TripPreparationTimelineService $preparation): JsonResponse
@@ -570,5 +578,18 @@ class TripIntelligenceController extends Controller
         $fuel = $items->where('type', 'fuel');
 
         return ['total' => $total, 'distance_km' => $distance, 'fuel_liters' => (float) $fuel->sum('liters'), 'cost_per_km' => $distance > 0 ? round($total / $distance, 2) : null, 'expired_vignettes' => $items->where('type', 'vignette')->filter(fn ($item) => $item->valid_until && $item->valid_until < Cas::dnes()->toDateString())->values()];
+    }
+
+    /**
+     * `trip_vehicle_costs.amount`/`liters`/`distance_km` jsou `decimal` — na
+     * MySQL by jinak dorazily jako řetězec, viz {@see castExpense()} v CalendarPlanningController.
+     */
+    private function castVehicleCost(object $cost): object
+    {
+        $cost->amount = (float) $cost->amount;
+        $cost->liters = $cost->liters !== null ? (float) $cost->liters : null;
+        $cost->distance_km = $cost->distance_km !== null ? (float) $cost->distance_km : null;
+
+        return $cost;
     }
 }

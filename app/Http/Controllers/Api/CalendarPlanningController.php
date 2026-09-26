@@ -915,7 +915,7 @@ class CalendarPlanningController extends Controller
         }
         $id = DB::table('trip_expenses')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $user->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'state' => $data['state'] ?? 'actual', 'created_at' => now(), 'updated_at' => now()]);
 
-        return response()->json(DB::table('trip_expenses')->find($id), 201);
+        return response()->json($this->castExpense(DB::table('trip_expenses')->find($id)), 201);
     }
 
     public function updateExpense(Request $request, int $tripId, int $expenseId, TripPartnerFinanceService $finance): JsonResponse
@@ -961,7 +961,7 @@ class CalendarPlanningController extends Controller
         }
         DB::table('trip_expenses')->where('id', $expenseId)->update($data + ['updated_at' => now()]);
 
-        return response()->json(DB::table('trip_expenses')->find($expenseId));
+        return response()->json($this->castExpense(DB::table('trip_expenses')->find($expenseId)));
     }
 
     public function tripPlanning(Request $request, int $tripId): JsonResponse
@@ -970,10 +970,11 @@ class CalendarPlanningController extends Controller
         $expenses = DB::table('trip_expenses')->where('trip_id', $tripId)->latest('occurred_at')->latest('id')->get()->map(function ($expense) {
             $expense->split = json_decode($expense->split ?: '[]', true) ?: [];
 
-            return $expense;
+            return $this->castExpense($expense);
         });
         $sharedExpenses = Schema::hasTable('shared_expenses')
             ? DB::table('shared_expenses')->where('trip_id', $tripId)->latest('occurred_at')->latest('id')->get(['uuid', 'title', 'category', 'amount', 'currency', 'occurred_at', 'source'])
+                ->each(fn (object $shared) => $shared->amount = (float) $shared->amount)
             : collect();
         $totals = $expenses->groupBy('state')->map(fn ($rows) => $rows->sum('amount'));
         $sharedActual = $sharedExpenses->where('currency', strtoupper($trip->currency ?? 'CZK'))->sum('amount');
@@ -983,7 +984,8 @@ class CalendarPlanningController extends Controller
             'shared_expenses' => $sharedExpenses,
             'totals' => ['planned' => (float) ($totals['planned'] ?? 0), 'actual' => (float) ($totals['actual'] ?? 0) + (float) $sharedActual, 'budget' => (float) ($trip->budget ?? 0), 'currency' => $trip->currency ?? 'CZK'],
             'members' => DB::table('gallery_space_user as membership')->join('users', 'users.id', '=', 'membership.user_id')->where('membership.gallery_space_id', $trip->gallery_space_id)->orderBy('users.name')->get(['users.id', 'users.name']),
-            'route_variants' => DB::table('trip_route_variants')->where('trip_id', $tripId)->latest()->get(),
+            'route_variants' => DB::table('trip_route_variants')->where('trip_id', $tripId)->latest()->get()
+                ->each(fn (object $variant) => $this->castRouteVariant($variant)),
         ]);
     }
 
@@ -1007,7 +1009,7 @@ class CalendarPlanningController extends Controller
         $data = $request->validate(['title' => 'required|string|max:255', 'strategy' => 'nullable|in:fastest,cheapest,scenic,low-carbon,custom', 'transport_modes' => 'nullable|array|max:10', 'estimated_minutes' => 'nullable|integer|min:0|max:10080', 'estimated_cost' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'data' => 'nullable|array']);
         $id = DB::table('trip_route_variants')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $request->user()->id, 'strategy' => $data['strategy'] ?? 'custom', 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'created_at' => now(), 'updated_at' => now()]);
 
-        return response()->json(DB::table('trip_route_variants')->find($id), 201);
+        return response()->json($this->castRouteVariant(DB::table('trip_route_variants')->find($id)), 201);
     }
 
     public function selectRouteVariant(Request $request, int $tripId, int $variantId): JsonResponse
@@ -1018,7 +1020,7 @@ class CalendarPlanningController extends Controller
             DB::table('trip_route_variants')->where('trip_id', $tripId)->where('id', $variantId)->update(['is_selected' => true, 'updated_at' => now()]);
         });
 
-        return response()->json(DB::table('trip_route_variants')->where('trip_id', $tripId)->where('id', $variantId)->firstOrFail());
+        return response()->json($this->castRouteVariant(DB::table('trip_route_variants')->where('trip_id', $tripId)->where('id', $variantId)->firstOrFail()));
     }
 
     public function timeCapsules(Request $request): JsonResponse
@@ -1814,5 +1816,24 @@ class CalendarPlanningController extends Controller
         foreach ($event->participants()->where('users.id', '!=', $actor->id)->get() as $user) {
             $user->notify(new GalleryNotification($type, $message, '/calendar/events/'.$event->uuid, '📅'));
         }
+    }
+
+    /**
+     * `trip_expenses.amount` je `decimal(12,2)` — na MySQL by jinak dorazilo
+     * jako řetězec ("1200.00") a prototyp by částky sčítal jako text.
+     */
+    private function castExpense(object $expense): object
+    {
+        $expense->amount = (float) $expense->amount;
+
+        return $expense;
+    }
+
+    /** `trip_route_variants.estimated_cost` je `decimal(12,2)`, viz {@see castExpense()}. */
+    private function castRouteVariant(object $variant): object
+    {
+        $variant->estimated_cost = $variant->estimated_cost !== null ? (float) $variant->estimated_cost : null;
+
+        return $variant;
     }
 }

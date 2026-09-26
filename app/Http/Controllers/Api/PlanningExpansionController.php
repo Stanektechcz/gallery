@@ -115,7 +115,8 @@ class PlanningExpansionController extends Controller
         }
         $lists = DB::table('travel_wishlists')->whereIn('gallery_space_id', $this->spaceIds($request->user()))->latest()->get();
         foreach ($lists as $list) {
-            $list->items = DB::table('travel_wishlist_items')->where('wishlist_id', $list->id)->where('status', 'open')->orderBy('priority')->get();
+            $list->items = DB::table('travel_wishlist_items')->where('wishlist_id', $list->id)->where('status', 'open')->orderBy('priority')->get()
+                ->each(fn (object $item) => $this->castWishlistItem($item));
         }
 
         return response()->json($lists);
@@ -140,7 +141,7 @@ class PlanningExpansionController extends Controller
         $data = $request->validate(['title' => 'required|string|max:255', 'notes' => 'nullable|string|max:5000', 'category' => 'nullable|in:place,food,experience,stay,photo,other', 'season' => 'nullable|string|max:32', 'priority' => 'nullable|integer|between:1,5', 'estimated_cost' => 'nullable|numeric|min:0|max:999999999', 'currency' => 'nullable|string|size:3', 'estimated_minutes' => 'nullable|integer|min:0|max:10080', 'latitude' => 'nullable|numeric|between:-90,90', 'longitude' => 'nullable|numeric|between:-180,180']);
         $id = DB::table('travel_wishlist_items')->insertGetId($data + ['wishlist_id' => $list->id, 'created_by' => $request->user()->id, 'category' => $data['category'] ?? 'place', 'priority' => $data['priority'] ?? 3, 'currency' => strtoupper($data['currency'] ?? 'CZK'), 'status' => 'open', 'created_at' => now(), 'updated_at' => now()]);
 
-        return response()->json(DB::table('travel_wishlist_items')->find($id), 201);
+        return response()->json($this->castWishlistItem(DB::table('travel_wishlist_items')->find($id)), 201);
     }
 
     public function wishlistSuggestions(Request $request, string $uuid): JsonResponse
@@ -161,7 +162,10 @@ class PlanningExpansionController extends Controller
             return ['date' => $date->toDateString(), 'available' => ! $busy];
         })->filter(fn ($slot) => $slot['available'])->values();
 
-        return response()->json(['items' => DB::table('travel_wishlist_items')->where('wishlist_id', $list->id)->where('status', 'open')->orderBy('priority')->get(), 'free_weekends' => $freeWeekends]);
+        $items = DB::table('travel_wishlist_items')->where('wishlist_id', $list->id)->where('status', 'open')->orderBy('priority')->get()
+            ->each(fn (object $item) => $this->castWishlistItem($item));
+
+        return response()->json(['items' => $items, 'free_weekends' => $freeWeekends]);
     }
 
     /** Turn a wish into one shared calendar plan, without creating a disconnected copy of it. */
@@ -502,5 +506,16 @@ class PlanningExpansionController extends Controller
     private function write(Request $request): void
     {
         abort_if($request->user()->read_only_mode, 403, 'V režimu pouze pro čtení nelze společné plánování měnit.');
+    }
+
+    /**
+     * `travel_wishlist_items.estimated_cost` je `decimal(12,2)` — na MySQL by
+     * jinak dorazilo jako řetězec ("500.00") a prototyp by částky sčítal jako text.
+     */
+    private function castWishlistItem(object $item): object
+    {
+        $item->estimated_cost = $item->estimated_cost !== null ? (float) $item->estimated_cost : null;
+
+        return $item;
     }
 }
