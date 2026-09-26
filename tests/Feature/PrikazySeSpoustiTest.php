@@ -38,6 +38,7 @@ class PrikazySeSpoustiTest extends TestCase
         'gallery:sync-drive' => 'ruční srovnání s Diskem, když se něco rozešlo',
         'gallery:thumbnails' => 'dogenerování náhledů po opravě',
         'gallery:ucet' => 'správa účtu z příkazové řádky',
+        'gallery:videa-bez-polohy' => 'jednorázové přebalení starších kopií videa bez polohy; bez --provest jen počítá',
         'gallery:videos' => 'dogenerování převodů videa',
         'rozpocet:regensburg' => 'jednorázový import konkrétního výletu',
     ];
