@@ -192,19 +192,20 @@ class RecoveryController extends Controller
             [
                 'key' => 'screenshots', 'label' => 'Screenshoty', 'icon' => '📱',
                 'count' => (clone $base)->where(fn ($query) => $query->where('original_filename', 'like', '%screenshot%')->orWhere('original_filename', 'like', '%screen shot%'))->count(),
-                'bytes' => (clone $base)->where(fn ($query) => $query->where('original_filename', 'like', '%screenshot%')->orWhere('original_filename', 'like', '%screen shot%'))->sum('size_bytes'),
+                // `(int)`: `sum()` je v MySQL DECIMAL a z PDO přijde řetězec, na SQLite číslo.
+                'bytes' => (int) (clone $base)->where(fn ($query) => $query->where('original_filename', 'like', '%screenshot%')->orWhere('original_filename', 'like', '%screen shot%'))->sum('size_bytes'),
                 'reason' => 'Názvy souborů odpovídají screenshotům; před úklidem je vždy zkontrolujte.', 'action' => '/search?q=screenshot',
             ],
             [
                 'key' => 'large_videos', 'label' => 'Velká videa', 'icon' => '🎬',
                 'count' => (clone $base)->where('media_type', 'video')->where('size_bytes', '>=', 500 * 1024 * 1024)->count(),
-                'bytes' => (clone $base)->where('media_type', 'video')->where('size_bytes', '>=', 500 * 1024 * 1024)->sum('size_bytes'),
+                'bytes' => (int) (clone $base)->where('media_type', 'video')->where('size_bytes', '>=', 500 * 1024 * 1024)->sum('size_bytes'),
                 'reason' => 'Videa větší než 500 MB mají největší dopad na úložiště.', 'action' => '/search?media_type=video&sort_by=size_bytes',
             ],
             [
                 'key' => 'unorganized', 'label' => 'Nezařazené', 'icon' => '📥',
                 'count' => (clone $base)->whereNull('primary_album_id')->whereDoesntHave('albums')->count(),
-                'bytes' => (clone $base)->whereNull('primary_album_id')->whereDoesntHave('albums')->sum('size_bytes'),
+                'bytes' => (int) (clone $base)->whereNull('primary_album_id')->whereDoesntHave('albums')->sum('size_bytes'),
                 'reason' => 'Položky nejsou v žádném albu; můžete je roztřídit nebo archivovat.', 'action' => '/inbox',
             ],
             [

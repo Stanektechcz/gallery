@@ -16,6 +16,7 @@ use App\Models\SharedTodo;
 use App\Models\Tag;
 use App\Services\Search\EntityMatcher;
 use App\Services\Search\QueryInterpreter;
+use App\Support\FulltextDotaz;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -94,8 +95,15 @@ class SearchController extends Controller
         $q = $interpreted['text'];
         if ($q && strlen(trim($q)) >= 2) {
             $query->where(function ($textQuery) use ($q) {
-                if (DB::connection()->getDriverName() === 'mysql') {
-                    $textQuery->whereFullText('search_text', $q, ['mode' => 'boolean']);
+                // Holý text by v booleovském režimu nesl operátory (`@` z e-mailu
+                // = chyba syntaxe InnoDB) a krátká slova, která v indexu nejsou.
+                // Když z něj bezpečný dotaz nevznikne, hledá se jako na SQLite.
+                $fulltext = DB::connection()->getDriverName() === 'mysql'
+                    ? FulltextDotaz::zBooleovskeho($q)
+                    : null;
+
+                if ($fulltext !== null) {
+                    $textQuery->whereFullText('search_text', $fulltext, ['mode' => 'boolean']);
                 } else {
                     $textQuery->where('search_text', 'like', "%{$q}%");
                 }

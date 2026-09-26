@@ -20,7 +20,8 @@ class StorageRiskController extends Controller
         // Operator view: counts cover the whole installation, not just this admin's spaces.
         $onDrive = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->whereNotNull('drive_file_id');
         $originalsOnDrive = $onDrive()->count();
-        $totalOriginalSize = $onDrive()->sum('size_bytes');
+        // MySQL vrací SUM() jako DECIMAL, tedy řetězec z PDO — stránka čeká číslo bajtů.
+        $totalOriginalSize = (int) $onDrive()->sum('size_bytes');
         $pendingUploads = UploadSession::whereIn('status', ['pending', 'assembling'])->count();
         $failedUploads = UploadSession::where('status', 'failed')->count();
 

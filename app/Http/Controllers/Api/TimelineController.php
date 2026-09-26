@@ -265,6 +265,10 @@ class TimelineController extends Controller
                 SUM(CASE WHEN media_type='video' THEN 1 ELSE 0 END) as videos")
             ->groupByRaw($daySql)
             ->orderBy('day')
+            // SUM() vrací v MySQL DECIMAL a PDO z něj dělá řetězec: kalendář by
+            // dostal `"photos": "3"` a `a + b` v prohlížeči by skládalo text.
+            // SQLite vrací čísla, proto to v testech nikdy nebylo vidět.
+            ->withCasts(['day' => 'integer', 'total' => 'integer', 'photos' => 'integer', 'videos' => 'integer'])
             ->get();
 
         // Attach one thumbnail per day

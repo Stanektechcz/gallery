@@ -85,6 +85,16 @@ class SharedTodoService
         $duration = max(15, (int) ($todo->estimate_minutes ?: 60));
 
         return DB::transaction(function () use ($todo, $actor, $startsAt, $duration) {
+            // Dvojklik nebo oba partneři naráz: kontrola nahoře běží nad kopií
+            // v paměti, takže by obě volání založila vlastní akci i připomínku.
+            // Znovu se proto ptá až pod zámkem řádku.
+            $zamceny = SharedTodo::whereKey($todo->id)->lockForUpdate()->first();
+            if ($zamceny?->calendar_event_id) {
+                $todo->setAttribute('calendar_event_id', $zamceny->calendar_event_id);
+
+                return CalendarEvent::findOrFail($zamceny->calendar_event_id);
+            }
+
             $space = GallerySpace::findOrFail($todo->gallery_space_id);
             $event = $this->calendarEvents->create($space, $actor, [
                 'trip_id' => $todo->trip_id, 'title' => 'Úkol · '.$todo->title, 'description' => $todo->description,
@@ -93,7 +103,19 @@ class SharedTodoService
                 'metadata' => ['kind' => 'shared_todo', 'todo_uuid' => $todo->uuid, 'href' => '/planning#todos'],
             ]);
             if ($todo->remind_at && $todo->remind_at->isFuture()) {
-                DB::table('event_reminders')->insertOrIgnore(['event_id' => $event->id, 'user_id' => $todo->assigned_to ?: $actor->id, 'channel' => 'database', 'remind_at' => $todo->remind_at, 'status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+                /*
+                 * Připomínka jen jednou na (akce, člověk, kanál, čas).
+                 *
+                 * Dřív `insertOrIgnore`, jenže unikát `event_reminder_automation_unique`
+                 * obsahuje `automation_key`, který tu je NULL — a NULL se v unikátu
+                 * nerovná ničemu, takže nededuplikoval nic. Na MySQL navíc IGNORE
+                 * potichu spolkl i jiné chyby (cizí klíč, oříznutí). Teď obyčejný
+                 * zápis po kontrole přirozeného klíče; jiná chyba se ukáže.
+                 */
+                $reminder = ['event_id' => $event->id, 'user_id' => $todo->assigned_to ?: $actor->id, 'channel' => 'database', 'remind_at' => $todo->remind_at];
+                if (! DB::table('event_reminders')->where($reminder)->exists()) {
+                    DB::table('event_reminders')->insert($reminder + ['status' => 'pending', 'created_at' => now(), 'updated_at' => now()]);
+                }
             }
             $todo->update(['calendar_event_id' => $event->id, 'starts_at' => $startsAt]);
 

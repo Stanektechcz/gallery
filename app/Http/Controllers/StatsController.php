@@ -34,7 +34,9 @@ class StatsController extends Controller
         // bez délky se médium počítalo do „S GPS", ale filtr „S polohou" ho nenašel a na
         // mapě nebylo — statistika slibovala něco, co se pak nedalo otevřít.
         $withGps = (clone $base)->whereNotNull('latitude')->whereNotNull('longitude')->count();
-        $totalSize = (clone $base)->sum('size_bytes');
+        // `sum()` i SUM() v `selectRaw` vrací v MySQL DECIMAL, tedy řetězec z PDO;
+        // SQLite vrací číslo. Obrazovka s nimi počítá, proto se převádí tady.
+        $totalSize = (int) (clone $base)->sum('size_bytes');
         $albums = Album::where('gallery_space_id', $space->id)->whereNull('deleted_at')->count();
 
         // Per year
@@ -44,6 +46,7 @@ class StatsController extends Controller
             ->groupByRaw($yearSql)
             ->orderByDesc('year')
             ->limit(10)
+            ->withCasts(['year' => 'integer', 'total' => 'integer', 'photos' => 'integer', 'videos' => 'integer'])
             ->get();
 
         // Per month (current year) — pražský rok, ne UTC serveru, jinak na Nový rok
@@ -54,6 +57,7 @@ class StatsController extends Controller
             ->selectRaw("{$monthSql} as month, COUNT(*) as total")
             ->groupByRaw($monthSql)
             ->orderBy('month')
+            ->withCasts(['month' => 'integer', 'total' => 'integer'])
             ->get()
             ->keyBy('month');
 

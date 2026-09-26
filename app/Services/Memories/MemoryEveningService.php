@@ -21,6 +21,9 @@ use Illuminate\Support\Str;
 
 class MemoryEveningService
 {
+    /** `event_attachments.label` je `string(255)`. */
+    private const DELKA_POPISKU_PRILOHY = 255;
+
     public function __construct(
         private readonly CalendarEventCreationService $calendarEvents,
         private readonly PristupDoGalerie $pristup,
@@ -161,8 +164,24 @@ class MemoryEveningService
             }
             if ($event = CalendarEvent::find($evening->calendar_event_id)) {
                 $event->update(['status' => 'completed', 'album_id' => $album->id]);
+                /*
+                 * Příloha jen jednou na (akce, médium, druh).
+                 *
+                 * `event_attachments` nemá unikátní klíč, takže `insertOrIgnore`
+                 * nededuplikoval nic — jen na MySQL potichu spolkl chyby: popisek
+                 * delší než sloupec (`display_title` pojme 512 znaků, `label` 255)
+                 * se tam oříznul, na SQLite ne. Teď kontrola přirozeného klíče
+                 * v téže transakci a oříznutí výslovně, stejně na obou.
+                 */
                 foreach ($media as $item) {
-                    DB::table('event_attachments')->insertOrIgnore(['event_id' => $event->id, 'media_item_id' => $item->id, 'label' => $item->display_title ?: $item->original_filename, 'kind' => 'memory', 'created_at' => now(), 'updated_at' => now()]);
+                    $priloha = ['event_id' => $event->id, 'media_item_id' => $item->id, 'kind' => 'memory'];
+                    if (DB::table('event_attachments')->where($priloha)->exists()) {
+                        continue;
+                    }
+                    DB::table('event_attachments')->insert($priloha + [
+                        'label' => mb_substr((string) ($item->display_title ?: $item->original_filename), 0, self::DELKA_POPISKU_PRILOHY),
+                        'created_at' => now(), 'updated_at' => now(),
+                    ]);
                 }
             }
             $evening->update(['album_id' => $album->id, 'shared_memory_moment_id' => $momentId, 'status' => 'completed', 'completed_at' => now()]);

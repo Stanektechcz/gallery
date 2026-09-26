@@ -23,6 +23,7 @@ use App\Services\Planning\SharedTodoService;
 use App\Services\Planning\TravelInboxService;
 use App\Services\Taxonomy\UniversalTagService;
 use Carbon\Carbon;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -622,7 +623,7 @@ class WorkspaceAssistantController extends Controller
 
         $response = ['created' => $created, 'plan' => $plan];
         if (! empty($data['request_id']) && Schema::hasTable('assistant_action_receipts')) {
-            DB::table('assistant_action_receipts')->insertOrIgnore([
+            $this->zapisPotvrzeni([
                 'request_id' => $data['request_id'],
                 'gallery_space_id' => $space->id,
                 'user_id' => $user->id,
@@ -1029,5 +1030,25 @@ class WorkspaceAssistantController extends Controller
         $number = (float) str_replace([' ', '. ', ','], ['', '', '.'], trim($value));
 
         return $number > 0 ? $number : null;
+    }
+
+    /**
+     * Potvrzení o provedení pod `request_id` — opakovaný požadavek dostane stejnou odpověď.
+     *
+     * Dřív `insertOrIgnore`. Na MySQL je to `INSERT IGNORE`, který kromě
+     * duplicity spolkne i chybný JSON, oříznutí nebo cizí klíč: potvrzení se
+     * pak potichu nezapsalo a opakovaný požadavek provedl plán podruhé.
+     * Ignoruje se jen duplicita — ta znamená, že souběžný požadavek potvrzení
+     * zapsal první, a to je v pořádku. Každá jiná chyba se ukáže.
+     *
+     * @param  array<string, mixed>  $radek
+     */
+    private function zapisPotvrzeni(array $radek): void
+    {
+        try {
+            DB::table('assistant_action_receipts')->insert($radek);
+        } catch (UniqueConstraintViolationException) {
+            // Potvrzení už leží — zapsal ho souběžný požadavek se stejným `request_id`.
+        }
     }
 }

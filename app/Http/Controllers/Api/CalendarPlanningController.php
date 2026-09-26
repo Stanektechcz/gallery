@@ -1262,7 +1262,9 @@ class CalendarPlanningController extends Controller
 
             return $this->reminderActions->payload($reminder, $viewer ?? $event->creator, (bool) $canSeeHistory);
         })->values()->all();
-        $payload['budget'] = $event->trip_id ? DB::table('trip_expenses')->where('trip_id', $event->trip_id)->selectRaw('state, SUM(amount) as total')->groupBy('state')->pluck('total', 'state') : [];
+        // SUM() je v MySQL DECIMAL a z PDO chodí jako řetězec ("1300.00"); SQLite
+        // vrací číslo. Klient s částkami počítá, proto float na obou.
+        $payload['budget'] = $event->trip_id ? DB::table('trip_expenses')->where('trip_id', $event->trip_id)->selectRaw('state, SUM(amount) as total')->groupBy('state')->pluck('total', 'state')->map(fn ($soucet) => (float) $soucet) : [];
         if ($event->trip_id && Schema::hasTable('shared_expenses')) {
             $currency = DB::table('trips')->where('id', $event->trip_id)->value('currency') ?? 'CZK';
             $payload['budget']['actual'] = (float) ($payload['budget']['actual'] ?? 0) + (float) DB::table('shared_expenses')->where('trip_id', $event->trip_id)->where('currency', $currency)->sum('amount');

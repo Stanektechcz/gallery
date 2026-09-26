@@ -3,12 +3,14 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class GiftBudgetController extends Controller
 {
@@ -39,12 +41,25 @@ class GiftBudgetController extends Controller
         $user = $request->user();
         $scopeKey = $data['scope'] === 'shared' ? 'shared' : 'personal:'.$user->id;
         $now = now();
-        $id = DB::table('gift_budgets')->insertGetId([
-            'uuid' => (string) Str::uuid(), 'gallery_space_id' => $spaceId, 'created_by' => $user->id,
-            'owner_user_id' => $data['scope'] === 'personal' ? $user->id : null, 'scope_key' => $scopeKey,
-            'budget_year' => $data['year'], 'title' => trim($data['title']), 'occasion' => blank($data['occasion'] ?? null) ? null : trim($data['occasion']),
-            'planned_amount' => $data['planned_amount'], 'currency' => strtoupper($data['currency'] ?? 'CZK'), 'created_at' => $now, 'updated_at' => $now,
-        ]);
+
+        /*
+         * Stejný název rozpočtu v témže roce a rozsahu je duplicita — hlídá ji
+         * unikát `gift_budgets_scope_year_title`. Dřív tu padala 500.
+         *
+         * Chytá se výjimka, ne kontroluje předem: jen databáze ví, co je pro ni
+         * „stejné". MySQL (`utf8mb4_unicode_ci`) považuje „Vánoce" a „vanoce" za
+         * totéž, SQLite ne — dotaz `where('title', …)` by na jedné z nich minul.
+         */
+        try {
+            $id = DB::table('gift_budgets')->insertGetId([
+                'uuid' => (string) Str::uuid(), 'gallery_space_id' => $spaceId, 'created_by' => $user->id,
+                'owner_user_id' => $data['scope'] === 'personal' ? $user->id : null, 'scope_key' => $scopeKey,
+                'budget_year' => $data['year'], 'title' => trim($data['title']), 'occasion' => blank($data['occasion'] ?? null) ? null : trim($data['occasion']),
+                'planned_amount' => $data['planned_amount'], 'currency' => strtoupper($data['currency'] ?? 'CZK'), 'created_at' => $now, 'updated_at' => $now,
+            ]);
+        } catch (UniqueConstraintViolationException) {
+            throw $this->duplicitniNazev(trim($data['title']), (int) $data['year']);
+        }
 
         return response()->json(['budget' => $this->payload(DB::table('gift_budgets')->find($id), $this->giftsForYear($spaceId, (int) $data['year']), $user->id)], 201);
     }
@@ -65,7 +80,12 @@ class GiftBudgetController extends Controller
             $data['currency'] = strtoupper($data['currency']);
         }
         unset($data['gallery_space_id']);
-        DB::table('gift_budgets')->where('id', $budget->id)->update($data + ['updated_at' => now()]);
+        // Přejmenování na název, který už v roce a rozsahu je, narazí na týž unikát jako `store()`.
+        try {
+            DB::table('gift_budgets')->where('id', $budget->id)->update($data + ['updated_at' => now()]);
+        } catch (UniqueConstraintViolationException) {
+            throw $this->duplicitniNazev((string) ($data['title'] ?? $budget->title), (int) $budget->budget_year);
+        }
         $updated = DB::table('gift_budgets')->find($budget->id);
 
         return response()->json(['budget' => $this->payload($updated, $this->giftsForYear($spaceId, (int) $updated->budget_year), $request->user()->id)]);
@@ -81,6 +101,14 @@ class GiftBudgetController extends Controller
         DB::table('gift_budgets')->where('id', $budget->id)->delete();
 
         return response()->json(['status' => 'deleted']);
+    }
+
+    /** 422 místo 500, když unikát `gift_budgets_scope_year_title` odmítne název. */
+    private function duplicitniNazev(string $nazev, int $rok): ValidationException
+    {
+        return ValidationException::withMessages([
+            'title' => 'Rozpočet „'.$nazev.'“ na rok '.$rok.' už máte.',
+        ]);
     }
 
     private function spaceId(Request $request, int $spaceId): int
