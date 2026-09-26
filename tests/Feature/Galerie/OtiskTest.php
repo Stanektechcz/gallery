@@ -221,6 +221,49 @@ class OtiskTest extends TestCase
             ->getJson('/api/state')->assertOk();
     }
 
+    /** Token z otisku má stejnou klouzavou platnost jako přihlášení heslem. */
+    public function test_token_z_otisku_ma_platnost(): void
+    {
+        $autentikator = $this->zaregistruj('iPhone Adrian');
+        $this->flushHeaders();
+        $this->freezeTime();
+
+        $this->prihlas($autentikator)->assertOk();
+
+        $token = $this->adri->tokens()->where('name', 'iPhone Adrian')->sole();
+        $this->assertSame(now()->addDays(60)->getTimestamp(), $token->expires_at?->getTimestamp());
+    }
+
+    /**
+     * Úklid prošlých tokenů otisk nesmaže.
+     *
+     * Otisk je na token vázaný jen číslem (`personal_access_token_id`, bez cizího
+     * klíče). Když `gallery:uklid-prihlaseni` smaže přihlášení zařízení, které dva
+     * měsíce nikdo neotevřel, otisk v telefonu dál přihlásí — přihlášení ho
+     * hledá podle účtu a klíče, ne podle tokenu — a naváže se na nový token.
+     */
+    public function test_otisk_prezije_uklid_proslych_tokenu(): void
+    {
+        $autentikator = $this->zaregistruj('iPhone Adrian');
+        $this->flushHeaders();
+        $this->prihlas($autentikator)->assertOk();
+        $stary = $this->adri->tokens()->where('name', 'iPhone Adrian')->sole()->id;
+
+        $this->travel(63)->days();
+        $this->artisan('gallery:uklid-prihlaseni')->assertSuccessful();
+
+        $this->assertFalse($this->adri->tokens()->whereKey($stary)->exists(), 'Prošlý token měl úklid smazat.');
+        $this->assertSame(1, WebauthnCredential::where('user_id', $this->adri->id)->count());
+
+        $novy = $this->prihlas($autentikator)->assertOk()->json('token');
+
+        $this->withHeader('Authorization', 'Bearer '.$novy)->getJson('/api/state')->assertOk();
+        $this->assertSame(
+            $this->adri->tokens()->where('name', 'iPhone Adrian')->sole()->id,
+            WebauthnCredential::where('user_id', $this->adri->id)->sole()->personal_access_token_id,
+        );
+    }
+
     /** Úspěšné přihlášení posune počítadlo podpisů, aby šlo poznat přehrání. */
     public function test_prihlaseni_posune_pocitadlo(): void
     {

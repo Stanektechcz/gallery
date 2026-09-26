@@ -99,7 +99,10 @@ return [
     // Google Cast (optional feature)
     'google_cast_enabled' => env('GOOGLE_CAST_ENABLED', false),
 
-    // Po kolika dnech bez použití přestane platit přihlášení zařízení nebo klíč k API (0 = nikdy).
+    // Po kolika dnech bez použití přestane platit jakýkoli token — klíč k API
+    // i starší přihlášení zařízení bez vlastní platnosti (0 = nikdy). Nová
+    // přihlášení navíc vyprší 60 dní od posledního použití (`PrihlaseniZarizeni`),
+    // takže u nich rozhoduje kratší z obou lhůt.
     'token_idle_days' => (int) env('GALLERY_TOKEN_IDLE_DAYS', 90),
 
     // Invite-only registration

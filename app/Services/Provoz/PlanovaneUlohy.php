@@ -178,6 +178,7 @@ class PlanovaneUlohy
         'variant-cache' => 'Úklid zmenšenin nad limit',
         'protokol-uloh' => 'Úklid protokolu úloh',
         'db-backup' => 'Záloha databáze',
+        'token-prune' => 'Úklid vypršelých přihlášení',
     ];
 
     /** Výraz cronu česky. Pokrývá tvary, které aplikace používá. */

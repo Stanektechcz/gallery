@@ -16,6 +16,7 @@ use App\Services\Automation\AutomationEngine;
 use App\Services\Billing\EntitlementService;
 use App\Services\Obsah\Poskytovatele;
 use App\Support\Cas;
+use App\Support\PrihlaseniZarizeni;
 use App\Support\Tabulky;
 use Illuminate\Console\Events\ScheduledBackgroundTaskFinished;
 use Illuminate\Console\Events\ScheduledTaskFailed;
@@ -25,6 +26,7 @@ use Illuminate\Console\Events\ScheduledTaskStarting;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
+use Laravel\Sanctum\Events\TokenAuthenticated;
 use Laravel\Sanctum\Sanctum;
 
 class AppServiceProvider extends ServiceProvider
@@ -179,5 +181,9 @@ class AppServiceProvider extends ServiceProvider
 
             return $platny && ($dni <= 0 || $naposledy === null || $naposledy->gt(now()->subDays($dni)));
         });
+
+        // Přihlášení zařízení platí šedesát dní od posledního použití — viz
+        // `PrihlaseniZarizeni`. Událost přijde jen s tokenem, který právě prošel.
+        Event::listen(TokenAuthenticated::class, fn (TokenAuthenticated $udalost) => PrihlaseniZarizeni::prodluz($udalost->token));
     }
 }

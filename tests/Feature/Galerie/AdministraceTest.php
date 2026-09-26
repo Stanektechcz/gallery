@@ -12,6 +12,7 @@ use App\Models\ScheduledTaskRun;
 use App\Models\SpaceSubscription;
 use App\Models\User;
 use App\Services\Provoz\AdministraceZasahy;
+use App\Support\PrihlaseniZarizeni;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
@@ -338,6 +339,30 @@ class AdministraceTest extends TestCase
         $this->deleteJson('/api/admin/keys/'.$jeji->accessToken->id)->assertOk();
 
         $this->assertNotNull($jeji->accessToken->fresh()->expires_at);
+    }
+
+    /**
+     * Obnovené přihlášení zařízení je klíč k API, ne přihlášení.
+     *
+     * V seznamu klíčů jsou i tokeny zařízení a „vygenerovat znovu" kopíruje
+     * schopnosti. Se značkou přihlášení by náhrada — bez platnosti, vydaná
+     * z administrace — vypadala jako přihlášení zařízení: po zrušení by ji
+     * `gallery:uklid-prihlaseni` smazal, místo aby zůstala jako zrušený klíč.
+     */
+    public function test_obnovene_prihlaseni_zarizeni_je_klic_k_api(): void
+    {
+        $telefon = PrihlaseniZarizeni::vydej($this->adri, 'Můj telefon');
+
+        $this->postJson('/api/admin/keys/'.$telefon->accessToken->id.'/regenerate')->assertOk();
+
+        $novy = PersonalAccessToken::where('name', 'Můj telefon')->whereNull('expires_at')->sole();
+        $this->assertSame(['*'], $novy->abilities);
+
+        $this->deleteJson('/api/admin/keys/'.$novy->id)->assertOk();
+        $this->travel(30)->days();
+        $this->artisan('gallery:uklid-prihlaseni')->assertSuccessful();
+
+        $this->assertTrue(PersonalAccessToken::findOrFail($novy->id)->zrusen(), 'Zrušený klíč má zůstat v seznamu.');
     }
 
     /**

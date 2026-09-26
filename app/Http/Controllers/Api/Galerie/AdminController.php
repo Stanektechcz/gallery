@@ -17,6 +17,7 @@ use App\Services\Media\MazaniFotek;
 use App\Services\Provoz\AdministraceGalerie;
 use App\Services\Provoz\AdministraceZasahy;
 use App\Services\Provoz\PlanovaneUlohy;
+use App\Support\PrihlaseniZarizeni;
 use App\Support\Provozovatel;
 use App\Support\SpaceContext;
 use App\Support\Trezor;
@@ -241,7 +242,14 @@ class AdminController extends Controller
         // po „vygenerovat znovu" měl partnerův telefon klíč vlastníka galerie
         // a partnerovi by přestal fungovat, aniž by o tom kdo věděl.
         $komu = $stary->tokenable ?? $request->user();
-        $novy = $komu->createToken($stary->name, $stary->abilities ?? ['*']);
+        /*
+         * Bez značky přihlášení: náhrada vydaná z administrace je klíč k API,
+         * i když se obnovoval token zařízení (v seznamu jsou i ty). Se značkou
+         * by po zrušení zmizela úklidem (`gallery:uklid-prihlaseni`), místo aby
+         * zůstala v seznamu jako zrušený klíč.
+         */
+        $schopnosti = array_values(array_diff($stary->abilities ?? ['*'], [PrihlaseniZarizeni::ZNACKA]));
+        $novy = $komu->createToken($stary->name, $schopnosti);
         $novy->accessToken->forceFill(['suffix' => substr($novy->plainTextToken, -4)])->save();
 
         // Starý klíč přestává platit hned — jinak by po „vygenerovat znovu"

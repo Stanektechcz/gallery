@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Notifications\OdberyPush;
+use App\Support\PrihlaseniZarizeni;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -92,8 +93,10 @@ class TokenController extends Controller
         // odemčený tím, kdo tu byl předtím. S novým přihlášením končí — viz `Trezor`.
         Trezor::zamkni($request);
 
+        // Token s klouzavou platností, ne navždy — leží v prohlížeči, kde ho
+        // přečte každý skript ve stránce. Viz `PrihlaseniZarizeni`.
         return response()->json([
-            'token' => $user->createToken($data['device_name'])->plainTextToken,
+            'token' => PrihlaseniZarizeni::vydej($user, $data['device_name'])->plainTextToken,
             'user' => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
         ]);
     }

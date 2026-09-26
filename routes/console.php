@@ -298,6 +298,16 @@ Schedule::command('gallery:zrus-ucty --no-interaction')
     ->withoutOverlapping($zamekMinut)
     ->name('account-deletion');
 
+// Přihlášení zařízení mají klouzavou platnost (60 dní od posledního použití).
+// Bez úklidu by prošlé řádky v `personal_access_tokens` jen rostly — token sám
+// přestane platit, ale tabulka o tom neví a nikdy se nezmenší. Vlastní příkaz,
+// ne `sanctum:prune-expired`: ten by smazal i klíče k API zrušené z administrace,
+// které mají v seznamu zůstat jako zrušené. Maže až 48 h po vypršení.
+Schedule::command('gallery:uklid-prihlaseni --hodin=48 --no-interaction')
+    ->daily()
+    ->withoutOverlapping($zamekMinut)
+    ->name('token-prune');
+
 // ——— Prototyp Galerie ———
 
 // Domluvy, kterým vypršela platnost. Musí běžet na serveru: klient si odpočet

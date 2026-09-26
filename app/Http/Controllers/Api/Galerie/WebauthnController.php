@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\WebauthnCredential;
 use App\Services\Auth\PotvrzeniZamkem;
 use App\Services\Auth\PristupDoGalerie;
+use App\Support\PrihlaseniZarizeni;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -290,7 +291,9 @@ class WebauthnController extends Controller
         // Jedno zařízení = jeden token, stejně jako u přihlášení heslem.
         $jmeno = $zaznam->label ?: 'telefon';
         $user->tokens()->where('name', $jmeno)->delete();
-        $klic = $user->createToken($jmeno);
+        // Stejná klouzavá platnost jako po hesle — otisk je jen jiná cesta
+        // k témuž přihlášení zařízení (`PrihlaseniZarizeni`).
+        $klic = PrihlaseniZarizeni::vydej($user, $jmeno);
 
         // Otisk teď patří novému tokenu; ten předchozí právě zanikl.
         $zaznam->update(['personal_access_token_id' => $klic->accessToken->getKey()]);

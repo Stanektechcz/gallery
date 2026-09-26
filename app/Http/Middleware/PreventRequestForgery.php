@@ -3,8 +3,11 @@
 namespace App\Http\Middleware;
 
 use App\Models\PersonalAccessToken;
+use App\Models\User;
 use Illuminate\Foundation\Http\Middleware\PreventRequestForgery as Zaklad;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Laravel\Sanctum\Sanctum;
 
 /**
  * Ochrana proti cizímu odeslání formuláře — s výjimkou pro klienty, kteří se
@@ -44,6 +47,46 @@ class PreventRequestForgery extends Zaklad
 
         // Ověřuje se, že token existuje — ne jen že hlavička dorazila. Jinak by
         // stačilo poslat „Bearer x" a ochrana by zmizela pro každého.
-        return PersonalAccessToken::findToken($token) !== null;
+        $klic = PersonalAccessToken::findToken($token);
+
+        if ($klic === null) {
+            return false;
+        }
+
+        /*
+         * A že pořád platí. Přihlášení zařízení mají platnost a prošlý řádek
+         * leží v tabulce ještě dva dny, než ho úklid smaže. Strážce Sanctumu se
+         * nejdřív ptá sezení — prošlý token s výjimkou by tak přivezl požadavek
+         * k přihlášenému sezení bez tokenu proti CSRF. Stejná pravidla jako
+         * u strážce: `expires_at` a limit nečinnosti z `AppServiceProvider`.
+         */
+        $platny = $klic->expires_at === null || ! $klic->expires_at->isPast();
+
+        if (is_callable(Sanctum::$accessTokenAuthenticationCallback)) {
+            $platny = (bool) (Sanctum::$accessTokenAuthenticationCallback)($klic, $platny);
+        }
+
+        return $platny && $this->patriPrihlasenemu($klic);
+    }
+
+    /**
+     * A že patří tomu, kdo je přihlášený v sezení — pokud tam někdo je.
+     *
+     * Strážce Sanctumu dá přednost sezení. Cizí platný token (třeba útočníkův
+     * vlastní) přiložený k požadavku s cookie oběti by jinak výjimku dostal
+     * a zápis by proběhl jako oběť, bez tokenu proti CSRF. Prototyp sezení
+     * nezakládá, takže se ho to netýká; staré rozhraní posílá token proti CSRF
+     * samo.
+     */
+    private function patriPrihlasenemu(PersonalAccessToken $klic): bool
+    {
+        $vSezeni = Auth::guard('web')->id();
+
+        if ($vSezeni === null) {
+            return true;
+        }
+
+        return $klic->tokenable_type === (new User)->getMorphClass()
+            && (string) $klic->tokenable_id === (string) $vSezeni;
     }
 }

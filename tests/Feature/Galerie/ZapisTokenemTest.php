@@ -51,6 +51,48 @@ class ZapisTokenemTest extends TestCase
         $this->assertFalse($this->vyjimka($this->pozadavek('Bearer '.$token)));
     }
 
+    /**
+     * Prošlý token výjimku nedostane.
+     *
+     * Přihlášení zařízení má platnost (`PrihlaseniZarizeni`) a prošlý řádek
+     * v tabulce ještě dva dny zůstává, než ho úklid smaže. Sanctum ho nepustí,
+     * jenže strážce se nejdřív ptá sezení — s výjimkou z ochrany by prošlý
+     * token přivezl požadavek k přihlášenému sezení bez tokenu proti CSRF.
+     */
+    public function test_prosly_token_ochranu_neobejde(): void
+    {
+        $token = User::factory()->create()->createToken('telefon', ['*'], now()->subMinute())->plainTextToken;
+
+        $this->assertFalse($this->vyjimka($this->pozadavek('Bearer '.$token)));
+    }
+
+    /**
+     * Cizí token k přihlášenému sezení výjimku nedostane.
+     *
+     * Strážce dá přednost sezení — útočníkův vlastní platný token spolu
+     * s cookie oběti by jinak zápis provedl jako oběť bez tokenu proti CSRF.
+     */
+    public function test_cizi_token_k_prihlasenemu_sezeni_ochranu_neobejde(): void
+    {
+        $obet = User::factory()->create();
+        $cizi = User::factory()->create()->createToken('telefon')->plainTextToken;
+
+        $this->actingAs($obet, 'web');
+
+        $this->assertFalse($this->vyjimka($this->pozadavek('Bearer '.$cizi)));
+    }
+
+    /** Vlastní token k vlastnímu sezení výjimku dostane dál. */
+    public function test_vlastni_token_k_prihlasenemu_sezeni_ochranu_obejde(): void
+    {
+        $uzivatel = User::factory()->create();
+        $token = $uzivatel->createToken('telefon')->plainTextToken;
+
+        $this->actingAs($uzivatel, 'web');
+
+        $this->assertTrue($this->vyjimka($this->pozadavek('Bearer '.$token)));
+    }
+
     public function test_pozadavek_bez_hlavicky_ochranu_neobejde(): void
     {
         $this->assertFalse($this->vyjimka($this->pozadavek(null)));
