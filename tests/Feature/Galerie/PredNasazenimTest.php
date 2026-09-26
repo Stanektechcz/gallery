@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Galerie;
 
+use Illuminate\Support\Facades\File;
 use Tests\TestCase;
 
 /**
@@ -59,6 +60,86 @@ class PredNasazenimTest extends TestCase
     }
 
     /**
+     * Odkaz `public/storage` je teď opačné pravidlo: nesmí existovat vůbec.
+     *
+     * `deploy.sh` ho po nasazení maže — vydával by originály fotek (i z trezoru)
+     * bez přihlášení, mimo `/files`, kde se ověřuje podpis nebo členství.
+     */
+    public function test_existujici_odkaz_na_uloziste_nasazeni_zastavi(): void
+    {
+        $this->produkce();
+
+        // Všechno na disku „existuje" — včetně toho, co existovat nesmí.
+        File::shouldReceive('exists')->andReturn(true);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('Odkaz na úložiště')
+            ->assertFailed();
+    }
+
+    /** `cache.default = array` by ztratilo omezení pokusů i stav trezoru s každým požadavkem. */
+    public function test_mezipamet_array_nasazeni_zastavi(): void
+    {
+        $this->produkce(['cache.default' => 'array']);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('Mezipaměť mimo')
+            ->assertFailed();
+    }
+
+    /** Chybějící MAIL_MAILER (nebo `array`/`log`) je jen varování. */
+    public function test_mailer_bez_dorucovani_je_varovani(): void
+    {
+        $this->produkce(['mail.default' => 'array']);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('k rozmyšlení')
+            ->assertSuccessful();
+    }
+
+    /** Chybějící VAPID klíče je jen varování — push je doplněk, ne nutnost. */
+    public function test_chybejici_vapid_je_varovani(): void
+    {
+        $this->produkce();
+        config(['push.public_key' => null, 'push.private_key' => null, 'push.subject' => null]);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('k rozmyšlení')
+            ->assertSuccessful();
+    }
+
+    /** Jiný jazyk než čeština je jen varování. */
+    public function test_jiny_jazyk_je_varovani(): void
+    {
+        $this->produkce(['app.locale' => 'en']);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('k rozmyšlení')
+            ->assertSuccessful();
+    }
+
+    /** Chybějící e-mail vlastníka je jen varování. */
+    public function test_chybejici_email_vlastnika_je_varovani(): void
+    {
+        $this->produkce();
+        config(['gallery.owner_email' => '']);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('k rozmyšlení')
+            ->assertSuccessful();
+    }
+
+    /** Otevřená registrace je jen varování. */
+    public function test_otevrena_registrace_je_varovani(): void
+    {
+        $this->produkce(['gallery.registration_open' => true]);
+
+        $this->artisan('galerie:pred-nasazenim')
+            ->expectsOutputToContain('k rozmyšlení')
+            ->assertSuccessful();
+    }
+
+    /**
      * Nezašifrované sezení je varování, ne zastavení.
      *
      * Je to skutečná vada, ale ne taková, aby kvůli ní nešlo nasadit opravu
@@ -76,19 +157,29 @@ class PredNasazenimTest extends TestCase
     /** Produkční nastavení tak, jak ho popisuje `.env.example`. */
     private function produkce(array $navic = []): void
     {
+        // `public/storage` u testovacího frameworku nikdy neexistuje, takže rovnou
+        // splňuje invertované pravidlo; kdyby vývojář odkaz omylem vytvořil (např.
+        // `storage:link` na lokále, kde sdílí `public/` s aplikací), test by na to
+        // spolehlivě upadl místo tichého projetí.
         config(array_merge([
             'app.env' => 'production',
             'app.debug' => false,
             'app.key' => 'base64:'.base64_encode(random_bytes(32)),
             'app.url' => 'https://gallery.stanektech.cz',
+            'app.locale' => 'cs',
             'session.secure' => true,
             'session.encrypt' => true,
             'session.driver' => 'database',
             'queue.default' => 'database',
             'logging.channels.stack.level' => 'warning',
+            // Testovací prostředí (phpunit.xml) má `CACHE_STORE=array` a
+            // `MAIL_MAILER=array` — pohodlné pro testy, ale přesně to, co má
+            // tahle kontrola na produkci najít. Produkční výchozí hodnoty se tu
+            // nastavují výslovně, aby „správné nastavení projde" opravdu
+            // zůstalo správné, i když přibude další pravidlo.
+            'cache.default' => 'database',
         ], $navic));
 
-        // Odkaz na úložiště je varování, ne chyba — v testu na něm nezáleží.
         if (! file_exists(public_path('build/manifest.json'))) {
             $this->markTestSkipped('Bez sestaveného rozhraní se tahle kontrola nedá ověřit.');
         }

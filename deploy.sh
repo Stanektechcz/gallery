@@ -17,6 +17,35 @@
 #     COMPOSER_BIN=/cesta/k/composer ./deploy.sh
 set -euo pipefail
 
+# ——— chyba a údržba ———
+#
+# `set -e` zastaví skript na první chybě, ale sám o sobě neřekne nic o tom,
+# v jakém stavu aplikaci nechal. Nejhorší možný konec je ten uprostřed: schéma
+# napůl migrované a `artisan up` spuštěný omylem někým, kdo nevěděl, že se
+# nasazení nedokončilo — právě tak vznikla chyba SQL popsaná v úvodu souboru.
+#
+# `DOLE` říká pasti, jestli už proběhl `artisan down`. Když ano, aplikace musí
+# v údržbě zůstat — půl nasazení nesmí sloužit návštěvníkům. Když ne, chybí
+# ještě míň: nic se nezměnilo a stačí normální selhání.
+DOLE=0
+KROK="příprava"
+
+na_chybu() {
+    local exit_kod=$?
+    echo >&2
+    echo "!!! Nasazení selhalo v kroku: ${KROK} (exit ${exit_kod})" >&2
+
+    if [ "$DOLE" = "1" ]; then
+        echo "!!! Aplikace ZŮSTÁVÁ v režimu údržby — napůl migrovaná aplikace nesmí" >&2
+        echo "!!! obsloužit návštěvníka. Opravte příčinu a spusťte nasazení znovu," >&2
+        echo "!!! nebo aplikaci ručně vraťte nahoru příkazem:" >&2
+        echo "!!!     \"$PHP\" artisan up" >&2
+    fi
+
+    exit "$exit_kod"
+}
+trap na_chybu ERR
+
 # ——— PHP ———
 #
 # Systémové `php` je na tomhle serveru 8.1 a aplikace potřebuje aspoň 8.4.1
@@ -73,6 +102,86 @@ najdi_php() {
     echo "$nejlepsi"
 }
 
+# ——— cron ———
+#
+# `schedule:run` musí běžet každou minutu pod PHP >= 8.4.1 — stejná hranice
+# jako pro `$PHP` výš. Řádka s holým `php` sáhne na systémové 8.1, spadne na
+# `bootstrap/preflight.php` a tiše přestanou chodit připomínky, noční zálohy,
+# úklid koše i fronta: `queue-drain` v `routes/console.php` neběží jako
+# samostatný démon, ale jen jako naplánovaná úloha volaná přes `schedule:run`.
+#
+# Nesmí zastavit nasazení — chybějící/nesprávný cron je věc k opravě na
+# serveru, ne důvod nechat aplikaci v údržbě. Volá se proto vždy s `|| true`
+# kolem každého kroku, který může selhat na oprávněních (root-only crontaby,
+# aaPanel adresář).
+zkontroluj_cron_radek() {
+    local zdroj="$1" radek="$2"
+    local binarka verze
+
+    binarka="$(echo "$radek" | grep -oE '(/[^ ]*/)?php[0-9.]*' | head -n1)"
+
+    if [ -z "$binarka" ]; then
+        echo "  ? ${zdroj}: řádka se schedule:run, ale binárku php v ní nepoznávám:"
+        echo "        ${radek}"
+    elif [ "$binarka" = "php" ]; then
+        echo "  ! ${zdroj}: volá holé \"php\" — poběží pod systémovým PHP (obvykle staré), spadne na preflight:"
+        echo "        ${radek}"
+    elif [ ! -x "$binarka" ]; then
+        echo "  ? ${zdroj}: binárka \"${binarka}\" nejde spustit odsud — nejde ověřit verzi:"
+        echo "        ${radek}"
+    else
+        verze="$(verze_php "$binarka")"
+        if [ "$verze" -lt "$PHP_MIN" ]; then
+            echo "  ! ${zdroj}: ${binarka} je staré ($(popis_php "$binarka")) — potřeba aspoň 8.4.1:"
+            echo "        ${radek}"
+        else
+            echo "  ✓ ${zdroj}: ${binarka} ($(popis_php "$binarka"))"
+        fi
+    fi
+}
+
+zkontroluj_cron() {
+    local nalezeno=0 zdroj radek web_uzivatel
+
+    while IFS= read -r radek; do
+        case "$radek" in
+            \#*) continue ;;
+            *schedule:run*) nalezeno=1; zkontroluj_cron_radek "crontab -l" "$radek" ;;
+        esac
+    done < <(crontab -l 2>/dev/null || true)
+
+    # Root vidí i crontab uživatele, pod kterým běží web server.
+    web_uzivatel="$(stat -c '%U' public/index.php 2>/dev/null || echo '')"
+    if [ "$(id -u)" = "0" ] && [ -n "$web_uzivatel" ]; then
+        while IFS= read -r radek; do
+            case "$radek" in
+                \#*) continue ;;
+                *schedule:run*) nalezeno=1; zkontroluj_cron_radek "crontab -l -u ${web_uzivatel}" "$radek" ;;
+            esac
+        done < <(crontab -l -u "$web_uzivatel" 2>/dev/null || true)
+    fi
+
+    # Systémové cronty a aaPanel (ten drží úlohy jako shellové skripty, ne
+    # v crontab formátu — proto se prohledávají jako obyčejné soubory).
+    for zdroj in /etc/cron.d/* /var/spool/cron/* /var/spool/cron/crontabs/* /www/server/cron/*; do
+        [ -f "$zdroj" ] || continue
+        while IFS= read -r radek; do
+            case "$radek" in
+                \#*) continue ;;
+                *schedule:run*) nalezeno=1; zkontroluj_cron_radek "$zdroj" "$radek" ;;
+            esac
+        done < <(cat "$zdroj" 2>/dev/null || true)
+    done
+
+    if [ "$nalezeno" = "0" ]; then
+        echo "  !!! Nikde jsem nenašel řádku se schedule:run — plánovač pravděpodobně neběží."
+        echo "  !!! Bez něj nechodí připomínky, noční zálohy, úklid koše ani fronta (queue-drain)."
+    fi
+
+    echo "  Doporučená řádka:"
+    echo "      * * * * * $PHP $(pwd)/artisan schedule:run >> /dev/null 2>&1"
+}
+
 PHP="$(najdi_php)"
 
 if [ -z "$PHP" ] || [ ! -x "$PHP" ]; then
@@ -91,12 +200,31 @@ fi
 echo "== PHP =="
 echo "$PHP ($(popis_php "$PHP"))"
 
+# ——— údržba ———
+#
+# Nasazení začíná tím, že aplikace přestane brát návštěvníky — **dřív než
+# `git pull`**, aby nový kód nikdy neběžel proti starému schématu nebo
+# `vendor/`. `--retry=60` posílá `Retry-After: 60`, takže klient (i
+# `galerie-api.js`, viz jeho zpracování chyby zápisu) ví, že se má ozvat znovu
+# za minutu, ne že je to natrvalo.
+#
+# Spuštění, když už aplikace v údržbě je (z předchozího nedokončeného
+# nasazení), musí projít — `artisan down` je bezpečné spustit znovu, jen
+# přepíše týž soubor.
+echo
+echo "== Údržba =="
+KROK="přepnutí do údržby (artisan down)"
+"$PHP" artisan down --retry=60
+DOLE=1
+echo "Aplikace v režimu údržby."
+
 # ——— assety, které vznikají buildem ———
 #
 # `public/build` je verzovaný v gitu: hotové assety přináší `git pull` a server je
 # vyrábět nemusí. Když si je ale někdo přesto přebuildoval, má pracovní strom změněný
 # a `git pull --ff-only` by odmítl. Vyhazují se proto rovnou — autoritativní kopie je
 # ta v gitu.
+KROK="reset public/build před stažením"
 git checkout -- public/build 2>/dev/null || true
 # A soubory, které po buildu zůstaly navíc: vite dává do jména otisk obsahu, takže
 # přebuildováním vzniknou nové soubory vedle starých. Adresář je celý generovaný.
@@ -106,6 +234,7 @@ PRED="$(git rev-parse HEAD)"
 
 echo
 echo "== Stahuji kód a assety =="
+KROK="git pull"
 git pull --ff-only
 
 # ——— závislosti ———
@@ -126,11 +255,15 @@ if ! git diff --quiet "$PRED" HEAD -- composer.lock composer.json; then
 
     if [ -z "$COMPOSER" ]; then
         echo "composer.lock se změnil, ale composer se nenašel — nastavte COMPOSER_BIN." >&2
-        exit 1
+        # Ne `exit 1`: past `ERR` na vlastní `exit` builtin v bashi nereaguje,
+        # takže by zpráva o tom, že aplikace zůstává v údržbě, nikdy nevypsala.
+        # `false` je obyčejný neúspěšný příkaz, na který past ERR reaguje normálně.
+        false
     fi
 
     echo
     echo "== Závislosti (composer.lock se změnil) =="
+    KROK="composer install"
     # Přes `$PHP`, ne přímo: composer je PHAR a sám by se spustil pod systémovým
     # PHP 8.1, které balíčky pro 8.4 odmítne nainstalovat.
     "$PHP" "$COMPOSER" install --no-dev --optimize-autoloader --no-interaction
@@ -141,11 +274,33 @@ else
 fi
 
 echo
+echo "== Veřejný disk =="
+# `public/storage` (odkaz z `artisan storage:link`) vydává originály fotek webovým
+# serverem bez přihlášení — mimo kontrolu aplikace. Soubory chodí přes `/files`,
+# kde se ověřuje podpis nebo členství; přímý odkaz se proto odstraňuje.
+#
+# **Před** kontrolou: `galerie:pred-nasazenim` existující odkaz považuje za vážnou
+# chybu. Kdyby se mazal až za ní, první nasazení na serveru, kde odkaz ještě je,
+# by skončilo v kontrole — s aplikací v údržbě a odkazem pořád na místě.
+# Skutečný adresář (ne odkaz) se nemaže: v něm by mohla být data, a kontrola
+# pak nasazení zastaví, aby se na to podíval člověk.
+KROK="odstranění public/storage"
+if [ -L public/storage ]; then
+    rm public/storage
+    echo "Odkaz public/storage odstraněn — fotky jdou jen přes /files."
+elif [ -e public/storage ]; then
+    echo "public/storage je skutečný adresář, ne odkaz — nemažu ho; kontrola níž nasazení zastaví." >&2
+else
+    echo "Odkaz public/storage není — v pořádku."
+fi
+
+echo
 echo "== Kontrola před nasazením =="
 # `galerie:pred-nasazenim` vrací FAILURE při zapnutém ladění, chybějícím APP_KEY,
 # HTTP adrese, nešifrovaných sezeních, frontě v režimu `sync` nebo chybějícím
 # prototypu. Příkaz existoval a měl vlastní test, jen ho nikdo nespouštěl —
 # takže z brány zbyla věta v dokumentu. Díky `set -e` nasazení opravdu zastaví.
+KROK="kontrola před nasazením (galerie:pred-nasazenim)"
 "$PHP" artisan galerie:pred-nasazenim
 
 echo
@@ -153,10 +308,12 @@ echo "== Záloha před migrací =="
 # Migrace je jediný krok tohoto skriptu, který nejde vzít zpět — a do kola 2ag
 # před ní žádná záloha neběžela (žádná ani nebyla). Když se záloha nepovede,
 # `set -e` nasazení zastaví dřív, než se schéma změní. Obnova: BACKUP_AND_RESTORE.md.
+KROK="záloha (gallery:zaloha)"
 "$PHP" artisan gallery:zaloha
 
 echo
 echo "== Migrace =="
+KROK="migrace (artisan migrate)"
 "$PHP" artisan migrate --force
 
 echo
@@ -171,20 +328,9 @@ echo "== Úpravy fotek ze stavu =="
 "$PHP" artisan gallery:upravy-ze-stavu || true
 
 echo
-echo "== Veřejný disk =="
-# `public/storage` (odkaz z `artisan storage:link`) vydává originály fotek webovým
-# serverem bez přihlášení — mimo kontrolu aplikace. Soubory chodí přes `/files`,
-# kde se ověřuje podpis nebo členství; přímý odkaz se proto odstraňuje.
-if [ -L public/storage ]; then
-    rm public/storage
-    echo "Odkaz public/storage odstraněn — fotky jdou jen přes /files."
-else
-    echo "Odkaz public/storage není — v pořádku."
-fi
-
-echo
 echo "== Čistím cache =="
 # Kód se změnil, takže config, routy i pohledy uložené v cache jsou zastaralé.
+KROK="optimize:clear"
 "$PHP" artisan optimize:clear
 
 # Běžícím workerům se řekne, ať doběhnou a nastartují znovu — jinak by až do
@@ -201,6 +347,7 @@ echo "== Práva a PHP-FPM =="
 # nemuselo hádat mezi `www-data`, `www` a jménem podle panelu.
 WEB_USER="$(stat -c '%U:%G' public/index.php 2>/dev/null || echo '')"
 
+KROK="práva storage/bootstrap-cache"
 if [ -n "$WEB_USER" ] && [ "$(id -u)" = "0" ]; then
     chown -R "$WEB_USER" storage bootstrap/cache
     echo "Vlastník storage a bootstrap/cache: $WEB_USER"
@@ -210,7 +357,10 @@ fi
 
 # Při `opcache.validate_timestamps=0` se nový kód **vůbec** neprojeví, dokud se
 # PHP-FPM nenačte znovu: `route:list` ukazuje novou cestu, ale přes HTTP pořád
-# běží ta stará. Reload je bezpečný, požadavky doběhnou.
+# běží ta stará. Reload je bezpečný, požadavky doběhnou. A dělá se **před**
+# `artisan up`: jinak by opcache ještě chvíli po ukončení údržby podávala
+# starý kód pod novým schématem.
+KROK="reload PHP-FPM"
 if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
     FPM_UNIT="$(systemctl list-units --type=service --no-legend 'php*-fpm.service' 2>/dev/null | awk 'NR==1{print $1}')"
 
@@ -222,6 +372,15 @@ if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
 else
     echo "PHP-FPM nenačítám (nejsem root nebo tu není systemd) — načtěte ho ručně."
 fi
+
+echo
+echo "== Konec údržby =="
+# Až tady — opcache je po reloadu na novém kódu a schéma je migrované, takže
+# první požadavek po `up` už dostane odpověď, se kterou nový kód počítá.
+KROK="ukončení údržby (artisan up)"
+"$PHP" artisan up
+DOLE=0
+echo "Aplikace zase přijímá návštěvníky."
 
 # ——— build assetů ———
 #
@@ -270,6 +429,10 @@ echo "== Ukázková data v databázi =="
 # prototypu („Dune: Part Two", „Máma, Olomouc"), se odstraní až ručně:
 #     "$PHP" artisan gallery:ukazkova-data --smazat
 "$PHP" artisan gallery:ukazkova-data || true
+
+echo
+echo "== Cron (schedule:run) =="
+zkontroluj_cron || true
 
 echo
 echo "Hotovo."

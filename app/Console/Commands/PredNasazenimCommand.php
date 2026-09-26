@@ -2,6 +2,8 @@
 
 namespace App\Console\Commands;
 
+use App\Http\Controllers\Auth\PasswordResetController;
+use App\Services\Notifications\WebPushService;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
 
@@ -139,11 +141,72 @@ class PredNasazenimCommand extends Command
                 true,
             ],
             [
-                'Odkaz na úložiště existuje',
-                File::exists(public_path('storage')),
-                'hlasovky od hostů by se nepřehrály',
+                /*
+                 * Přesný opak toho, co tu stálo dřív.
+                 *
+                 * Pravidlo znělo „odkaz existuje" — jenže `deploy.sh` ho schválně
+                 * odstraňuje: vydává originály fotek (i z trezoru) přímo webovým
+                 * serverem, bez přihlášení, mimo `/files`, kde se ověřuje podpis
+                 * nebo členství. Hlasovky hostů (`HostKomentarController`) na disk
+                 * `public` sice ukládá, ale nikde se z nich nedělá `Storage::url`
+                 * ani jiná veřejná adresa — přehrávají se přes `/files/hlasovky/…`,
+                 * což `MediaFileController::smi()` pustí jen členovi prostoru.
+                 * Odkaz tedy nesmí existovat vůbec.
+                 */
+                'Odkaz na úložiště (public/storage) neexistuje',
+                ! File::exists(public_path('storage')),
+                'vydával by originály fotek i z trezoru bez přihlášení — mimo /files, kde se to hlídá',
+                true,
+            ],
+            [
+                'proc_open dostupné',
+                function_exists('proc_open')
+                    && ! in_array('proc_open', $this->zakazaneFunkce(), true),
+                'plánovač spouští příkazy přes proc_open a stejně tak zpracování videa a EXIF dat — bez něj obojí tiše neudělá nic',
+                false,
+            ],
+            [
+                'MAIL_MAILER posílá poštu ('.config('mail.default').')',
+                PasswordResetController::emailyChodi(),
+                'obnova hesla a pozvánky by nikam nedorazily',
+                false,
+            ],
+            [
+                'Klíče VAPID nastavené (push notifikace)',
+                app(WebPushService::class)->configured(),
+                'push upozornění by se nikdy neodeslala',
+                false,
+            ],
+            [
+                'Mezipaměť mimo `array`',
+                config('cache.default') !== 'array',
+                'omezení počtu pokusů i stav trezoru by se ztrácely s každým požadavkem',
+                true,
+            ],
+            [
+                'Jazyk aplikace cs',
+                config('app.locale') === 'cs',
+                'rozhraní i systémové zprávy by byly anglicky',
+                false,
+            ],
+            [
+                'E-mail vlastníka nastavený',
+                ! empty(config('gallery.owner_email')),
+                'systémová upozornění nemají kam chodit',
+                false,
+            ],
+            [
+                'Registrace zavřená',
+                config('gallery.registration_open') === false,
+                'kdokoli se znalostí adresy by si mohl založit účet',
                 false,
             ],
         ];
+    }
+
+    /** Jména z `disable_functions`, oříznutá o mezery kolem čárek. */
+    private function zakazaneFunkce(): array
+    {
+        return array_filter(array_map('trim', explode(',', (string) ini_get('disable_functions'))));
     }
 }

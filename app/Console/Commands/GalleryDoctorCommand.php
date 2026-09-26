@@ -9,6 +9,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
 
 class GalleryDoctorCommand extends Command
@@ -169,18 +170,65 @@ class GalleryDoctorCommand extends Command
     {
         $this->section('External Binaries');
 
+        /*
+         * Externí programy (ffmpeg, ffprobe, exiftool) i naplánované příkazy
+         * se spouští přes `Process`, tedy přes proc_open. Bez něj tiše selže
+         * i binárka, která leží na disku a je spustitelná — video a EXIF pak
+         * přestanou fungovat beze zprávy, proč. `proc_get_status`
+         * a `proc_terminate` hlídají strop času: bez nich zaseknutý převod
+         * videa nejde ukončit.
+         *
+         * `exec` a `shell_exec` se nekontrolují schválně: aplikace je od
+         * kola 43 nepotřebuje a na produkci jsou vypnuté — varování by
+         * strašilo při každém běhu, aniž by na něm cokoli záviselo.
+         */
+        $zakazane = array_filter(array_map('trim', explode(',', (string) ini_get('disable_functions'))));
+        $vypnute = array_values(array_filter(
+            ['proc_open', 'proc_close', 'proc_get_status', 'proc_terminate'],
+            fn (string $funkce) => ! function_exists($funkce) || in_array($funkce, $zakazane, true),
+        ));
+
+        $this->check(
+            'proc_open povoleno'.($vypnute === [] ? '' : ' — vypnuté: '.implode(', ', $vypnute)),
+            $vypnute === [],
+            'WARN',
+        );
+
         $binaries = [
-            'ffmpeg' => config('gallery.ffmpeg_path', '/usr/bin/ffmpeg'),
-            'ffprobe' => config('gallery.ffprobe_path', '/usr/bin/ffprobe'),
-            'exiftool' => config('gallery.exiftool_path', '/usr/bin/exiftool'),
+            'ffmpeg' => [config('gallery.ffmpeg_path', '/usr/bin/ffmpeg'), ['-version']],
+            'ffprobe' => [config('gallery.ffprobe_path', '/usr/bin/ffprobe'), ['-version']],
+            'exiftool' => [config('gallery.exiftool_path', '/usr/bin/exiftool'), ['-ver']],
         ];
 
-        foreach ($binaries as $name => $path) {
+        foreach ($binaries as $name => [$path, $argumentyVerze]) {
             $exists = file_exists($path) && is_executable($path);
             $this->check("{$name} at {$path}", $exists, 'WARN');
+
+            if ($exists) {
+                $this->checkBinaryRuns($name, $path, $argumentyVerze);
+            }
         }
 
         $this->checkImageFormats();
+    }
+
+    /**
+     * Soubor na disku, který jde spustit, ještě neznamená, že opravdu poběží.
+     *
+     * `is_executable()` čte jen práva souboru; nepozná chybějící sdílenou
+     * knihovnu, špatnou architekturu binárky nebo `disable_functions`
+     * blokující `proc_open`, přes které `Process` binárku vůbec spouští.
+     * V každém z těch případů dřív doktor hlásil ffmpeg jako v pořádku a
+     * první, kdo se to dozvěděl, byl žadatel o zpracované video.
+     */
+    private function checkBinaryRuns(string $name, string $path, array $argumentyVerze): void
+    {
+        try {
+            $vysledek = Process::timeout(5)->run([$path, ...$argumentyVerze]);
+            $this->check("{$name} se opravdu spustí", $vysledek->successful(), 'WARN');
+        } catch (\Throwable $e) {
+            $this->check("{$name} se nespustí: ".$e->getMessage(), false, 'WARN');
+        }
     }
 
     /**

@@ -3,7 +3,9 @@
 ## Produkční server
 
 - Doména: `gallery.stanektech.cz`
-- Webserver: Apache + PHP-FPM 8.3
+- Webserver: Apache + PHP-FPM 8.4.1+ (aplikace vyžaduje aspoň 8.4.1 —
+  `bootstrap/preflight.php` — systémové PHP na tomhle serveru je 8.1;
+  `deploy.sh` si sám najde novější binárku vedle sebe, viz jeho hlavička)
 - Node.js: 24 (jen pro build)
 - Databáze: MySQL/MariaDB
 
@@ -84,9 +86,10 @@ php artisan db:seed --force
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
-    # PHP-FPM
+    # PHP-FPM — socket odpovídá skutečně nainstalované verzi >= 8.4.1, ne
+    # systémovému PHP; zkontrolujte `php -v` dané FPM instalace.
     <FilesMatch \.php$>
-        SetHandler "proxy:unix:/run/php/php8.3-fpm.sock|fcgi://localhost/"
+        SetHandler "proxy:unix:/run/php/php8.4-fpm.sock|fcgi://localhost/"
     </FilesMatch>
 
     # Large file uploads (chunked — nepotřebujeme velký limit)
@@ -99,9 +102,21 @@ php artisan db:seed --force
 
 ## Cron (scheduler)
 
+Holé `php` v cronu spustí systémové PHP 8.1 na tomhle serveru — `artisan`
+pod ním spadne hned na `bootstrap/preflight.php` a tiše přestanou chodit
+připomínky, noční zálohy, úklid koše i fronta (`queue:work` v
+`routes/console.php` běží jen jako naplánovaná úloha přes `schedule:run`,
+ne jako samostatný démon — bez cronu se tedy nezpracuje ani fronta).
+Řádka musí mířit na absolutní cestu k PHP >= 8.4.1, stejnou, jakou si sám
+najde `deploy.sh` (`echo "$PHP"` po jeho běhu, nebo `which php8.4` apod.):
+
 ```cron
-* * * * * www-data php /var/www/clients/client10/webXXX/private/gallery-app/artisan schedule:run >> /dev/null 2>&1
+* * * * * www-data /www/server/php/84/bin/php /var/www/clients/client10/webXXX/private/gallery-app/artisan schedule:run >> /dev/null 2>&1
 ```
+
+`deploy.sh` na konci běhu tuhle řádku (i její nepřítomnost) sám hlásí —
+kontroluje `crontab -l`, `/etc/cron.d/*`, `/var/spool/cron/*` i aaPanelovský
+`/www/server/cron/*`.
 
 ## Systemd queue workers
 
@@ -139,11 +154,11 @@ systemctl start gallery-queue@{high,uploads,media,drive,default,low}
 ## PHP-FPM pool
 
 ```ini
-; /etc/php/8.3/fpm/pool.d/gallery.conf
+; /etc/php/8.4/fpm/pool.d/gallery.conf — verze >= 8.4.1, ne systémové PHP
 [gallery]
 user = www-data
 group = www-data
-listen = /run/php/php8.3-fpm-gallery.sock
+listen = /run/php/php8.4-fpm-gallery.sock
 pm = dynamic
 pm.max_children = 20
 pm.start_servers = 4
@@ -154,6 +169,16 @@ php_admin_value[upload_max_filesize] = 128M
 php_admin_value[post_max_size] = 256M
 php_admin_value[max_execution_time] = 300
 ```
+
+## Nasazení (aktualizace)
+
+Další nasazení jde přes `./deploy.sh` (viz jeho vlastní hlavička pro celé
+pořadí kroků a `PHP_BIN`/`COMPOSER_BIN`). Skript sám přepne aplikaci do
+režimu údržby (`artisan down --retry=60`) ještě před `git pull`, aby nový
+kód nikdy neběžel proti staré databázi nebo `vendor/`, a zpátky ji pustí
+(`artisan up`) až po migraci, vyčištění cache a reloadu PHP-FPM. Když
+nasazení uprostřed selže, aplikace úmyslně zůstane v údržbě — skript řekne,
+v kterém kroku to bylo a jak se dostat zpátky nahoru ručně.
 
 ## Diagnostika po nasazení
 

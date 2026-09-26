@@ -37,8 +37,17 @@ Zadne AI, ML, embeddings, vektorove databaze, rozpoznavani obliceju.
 
 ## Stack
 
-Backend: Laravel (PHP 8.3+), MySQL/MariaDB, database queue
+Backend: Laravel (PHP 8.4.1+), MySQL/MariaDB, database queue
 Frontend: React 19, TypeScript, Inertia.js, Tailwind CSS, Vite, PWA
 Drive: Google Drive API v3, OAuth 2.0 Authorization Code Flow
 Media: Intervention Image, FFmpeg, ExifTool
-Server: ISPConfig, Apache, PHP-FPM 8.3, systemd, cron
+Server: ISPConfig, Apache, PHP-FPM 8.4, systemd, cron
+
+PHP 8.4.1 je skutečné minimum — vynucuje ho `bootstrap/preflight.php` a
+odpovídají mu balíčky zamčené v `composer.lock`. `composer.json` se schválně
+nemění na `"php": "^8.4"`: `deploy.sh` při každé změně `composer.json`
+spouští `composer install` a tam, kde composer na serveru chybí, se nasazení
+zastaví (v režimu údržby). Cronová řádka i PHP-FPM pool proto musí mířit na absolutní
+binárku PHP 8.4, ne na systémové `php` — `deploy.sh` to samo najde a nasazení
+mezitím drží aplikaci v režimu údržby (`artisan down` před `git pull`,
+`artisan up` až po reloadu PHP-FPM).
