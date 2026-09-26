@@ -190,7 +190,10 @@ class ZbyleSeznamyTest extends TestCase
     /** Host k datům aplikace dvojice nedostane nic — ani klíče, ani úlohy, ani účty. */
     public function test_host_neuvidi_klice_ani_ulohy(): void
     {
-        $host = User::factory()->create(['name' => 'Klára', 'role' => 'member']);
+        // „member" ve výčtu users.role není (MySQL řádek odmítne). Host má
+        // schválně „owner" jako každý zaregistrovaný účet — o přístupu musí
+        // rozhodnout role v prostoru, ne tahle.
+        $host = User::factory()->create(['name' => 'Klára', 'role' => 'owner']);
         $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
 
         Sanctum::actingAs($host);

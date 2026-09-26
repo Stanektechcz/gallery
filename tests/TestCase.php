@@ -109,6 +109,38 @@ abstract class TestCase extends BaseTestCase
     }
 
     /**
+     * Totéž co `assertSame`, jen bez ohledu na pořadí klíčů v objektech.
+     *
+     * Sloupec `json` si MySQL ukládá po svém a klíče objektu při čtení vrací
+     * seřazené (napřed podle délky, pak abecedně) — `{"task":…, "min":…}` se
+     * vrátí jako `{"min":…, "task":…}`. SQLite drží text, jak přišel, takže
+     * `assertSame` na přečteném JSONu procházel jen na ní. Pro klienta pořadí
+     * klíčů nic neznamená (stav ze serveru přebírá bez zpětného zápisu).
+     *
+     * Pořadí **seznamů** a typy hodnot se hlídají dál přísně — řadí se jen
+     * klíče asociativních polí.
+     */
+    protected function assertStejneBezPoradiKlicu(mixed $ocekavane, mixed $skutecne, string $zprava = ''): void
+    {
+        $this->assertSame(self::seradKlice($ocekavane), self::seradKlice($skutecne), $zprava);
+    }
+
+    private static function seradKlice(mixed $hodnota): mixed
+    {
+        if (! is_array($hodnota)) {
+            return $hodnota;
+        }
+
+        $serazene = array_map(self::seradKlice(...), $hodnota);
+
+        if (! array_is_list($serazene)) {
+            ksort($serazene, SORT_STRING);
+        }
+
+        return $serazene;
+    }
+
+    /**
      * Hodnota je prázdná až na dno: seznamy a mapy bez položek, texty prázdné,
      * čísla nulová.
      *

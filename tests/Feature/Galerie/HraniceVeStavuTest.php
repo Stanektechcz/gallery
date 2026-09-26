@@ -195,9 +195,10 @@ class HraniceVeStavuTest extends TestCase
 
         $data = (array) $this->actingAs($this->adri)->getJson('/api/state')->assertOk()->json('data');
 
-        $this->assertSame($zatez, $data['mlLoad'] ?? null);
-        $this->assertSame($plan, $data['pausePlan'] ?? null);
-        $this->assertSame($historie, $data['pauseLog'] ?? null);
+        // Stav leží ve sloupci `json` — MySQL klíče položek vrací seřazené.
+        $this->assertStejneBezPoradiKlicu($zatez, $data['mlLoad'] ?? null);
+        $this->assertStejneBezPoradiKlicu($plan, $data['pausePlan'] ?? null);
+        $this->assertStejneBezPoradiKlicu($historie, $data['pauseLog'] ?? null);
     }
 
     /** Zpráva přes stav má stejný strop jako zpráva z chatu a dlouhý odkaz nahrávky nic neshodí. */

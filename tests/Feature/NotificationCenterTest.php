@@ -85,7 +85,8 @@ class NotificationCenterTest extends TestCase
             ->assertJsonPath('quiet_now', true)
             ->json('preferences');
         $this->assertTrue($preferences['browser_notifications']);
-        $this->assertSame(['from' => '22:00', 'to' => '07:00'], $this->owner->fresh()->preferences['quiet_hours']);
+        // `preferences` je sloupec `json` — MySQL klíče vrací seřazené.
+        $this->assertStejneBezPoradiKlicu(['from' => '22:00', 'to' => '07:00'], $this->owner->fresh()->preferences['quiet_hours']);
 
         $this->owner->notify(new GalleryNotification('calendar.task.assigned', 'Skrytý běžný plán.'));
         $this->owner->notify(new GalleryNotification('media.added', 'Skrytá nová fotografie.'));

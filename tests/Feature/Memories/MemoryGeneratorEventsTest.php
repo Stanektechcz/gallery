@@ -93,8 +93,11 @@ class MemoryGeneratorEventsTest extends TestCase
     {
         $this->akce('Výlet na Sněžku');
         $dotazy = [];
-        DB::listen(function ($dotaz) use (&$dotazy) {
-            if (str_contains($dotaz->sql, '"calendar_events"')) {
+        // Jména ohraničí každá databáze jinak — SQLite uvozovkami, MySQL
+        // obrácenými apostrofy. S natvrdo `"` test na MySQL žádný dotaz nenašel.
+        $tabulka = DB::connection()->getQueryGrammar()->wrapTable('calendar_events');
+        DB::listen(function ($dotaz) use (&$dotazy, $tabulka) {
+            if (str_contains($dotaz->sql, $tabulka)) {
                 $dotazy[] = $dotaz->sql;
             }
         });
@@ -103,7 +106,7 @@ class MemoryGeneratorEventsTest extends TestCase
 
         $this->assertNotEmpty($dotazy, 'Dotaz na akce se měl spustit.');
         foreach ($dotazy as $sql) {
-            preg_match_all('/"([a-z_]+)"/', $sql, $shody);
+            preg_match_all('/["`]([a-z_]+)["`]/', $sql, $shody);
             foreach (array_diff(array_unique($shody[1]), ['calendar_events']) as $sloupec) {
                 $this->assertTrue(Schema::hasColumn('calendar_events', $sloupec), "Sloupec calendar_events.{$sloupec} neexistuje: {$sql}");
             }

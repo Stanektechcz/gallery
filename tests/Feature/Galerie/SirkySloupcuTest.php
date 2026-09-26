@@ -146,8 +146,9 @@ class SirkySloupcuTest extends TestCase
         $prehresky = [];
 
         foreach ($this->ciselneSloupce() as [$tabulka, $sloupec, $min, $max]) {
+            $sql = $this->sloupecVSql($sloupec);
             $meze = DB::table($tabulka)
-                ->selectRaw('MIN("'.$sloupec.'") AS nejmene, MAX("'.$sloupec.'") AS nejvic')
+                ->selectRaw("MIN({$sql}) AS nejmene, MAX({$sql}) AS nejvic")
                 ->first();
 
             if ($meze === null || $meze->nejmene === null) {
@@ -227,9 +228,16 @@ class SirkySloupcuTest extends TestCase
     {
         $prehresky = [];
 
+        /*
+         * Šířka `varchar(n)` se v MySQL počítá ve znacích, ale `LENGTH()` tam
+         * vrací bajty — „ř" by se počítalo dvakrát. SQLite žádné `CHAR_LENGTH`
+         * nemá a její `LENGTH()` znaky počítá sama.
+         */
+        $delka = DB::connection()->getDriverName() === 'mysql' ? 'CHAR_LENGTH' : 'LENGTH';
+
         foreach ($this->znakoveSloupce() as [$tabulka, $sloupec, $sirka]) {
             $nejdelsi = (int) DB::table($tabulka)
-                ->selectRaw('MAX(LENGTH("'.$sloupec.'")) AS nejdelsi')
+                ->selectRaw("MAX({$delka}({$this->sloupecVSql($sloupec)})) AS nejdelsi")
                 ->value('nejdelsi');
 
             if ($nejdelsi > $sirka) {
@@ -238,6 +246,20 @@ class SirkySloupcuTest extends TestCase
         }
 
         return $prehresky;
+    }
+
+    /**
+     * Jméno sloupce tak, jak ho ohraničí právě používaná databáze.
+     *
+     * Dřív tu byly natvrdo dvojité uvozovky. SQLite je bere jako jméno
+     * sloupce, MySQL (bez ANSI_QUOTES) jako obyčejný řetězec — test tam měřil
+     * délku slova „media_delete_mode" místo hodnot ve sloupci a hlásil
+     * přetečení, které neexistovalo. Číselná kontrola zase porovnávala text
+     * převedený na nulu, takže na MySQL nehlídala nic.
+     */
+    private function sloupecVSql(string $sloupec): string
+    {
+        return DB::connection()->getQueryGrammar()->wrap($sloupec);
     }
 
     /**

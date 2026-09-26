@@ -157,7 +157,10 @@ class PushPoOdhlaseniTest extends TestCase
         $this->prostor->members()->syncWithoutDetaching([$host->id => ['role' => 'viewer']]);
         $this->maki->forceFill(['is_active' => false])->save();
 
-        $zarizeni = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "push_subscriptions"'))->count();
+        // Jméno tabulky ohraničené tak, jak to dělá právě běžící databáze
+        // (SQLite `"`, MySQL `` ` ``) — natvrdo `"` na MySQL nenašlo nic.
+        $tabulka = 'from '.DB::connection()->getQueryGrammar()->wrapTable('push_subscriptions');
+        $zarizeni = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], $tabulka))->count();
 
         DB::enableQueryLog();
         $this->assertSame(0, app(WebPushService::class)->sendToUser($this->maki->fresh(), ['title' => 'Revize', 'body' => 'x']));

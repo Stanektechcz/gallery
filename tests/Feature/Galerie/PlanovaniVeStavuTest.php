@@ -609,7 +609,8 @@ class PlanovaniVeStavuTest extends TestCase
             ]],
         ]]]])->assertOk();
 
-        $this->assertSame(['frequency' => 'weekly', 'interval' => 1], $u->refresh()->recurrence);
+        // `recurrence` je sloupec `json` — MySQL klíče vrací seřazené.
+        $this->assertStejneBezPoradiKlicu(['frequency' => 'weekly', 'interval' => 1], $u->refresh()->recurrence);
     }
 
     /** Smazaný úkol se zruší, nemaže — „uklidit hotové" nemá být ztráta historie. */

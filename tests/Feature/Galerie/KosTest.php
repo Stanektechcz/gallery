@@ -33,7 +33,10 @@ class KosTest extends TestCase
         parent::setUp();
 
         $this->adri = User::factory()->create(['name' => 'Adrian', 'role' => 'owner']);
-        $this->maki = User::factory()->create(['name' => 'Makinka', 'role' => 'member']);
+        // users.role je výčet (owner/admin/partner/viewer/guest) — „member" v něm
+        // není a MySQL ve striktním režimu takový řádek odmítne. O právech
+        // v prostoru stejně rozhoduje role v gallery_space_members níž.
+        $this->maki = User::factory()->create(['name' => 'Makinka', 'role' => 'partner']);
         $this->prostor = GallerySpace::create(['name' => 'Naše vzpomínky', 'owner_id' => $this->adri->id]);
         $this->prostor->members()->syncWithoutDetaching([
             $this->adri->id => ['role' => 'owner'],

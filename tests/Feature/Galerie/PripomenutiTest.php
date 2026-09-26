@@ -156,7 +156,10 @@ class PripomenutiTest extends TestCase
         config(['push.public_key' => 'x', 'push.private_key' => 'y', 'push.subject' => 'mailto:test@galerie.test']);
         app(NotificationPreferenceService::class)->update($this->maki, ['quiet' => ['enabled' => true, 'from' => '00:00', 'to' => '00:00']]);
 
-        $zarizeni = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "push_subscriptions"'))->count();
+        // Jméno tabulky ohraničené tak, jak to dělá právě běžící databáze
+        // (SQLite `"`, MySQL `` ` ``) — natvrdo `"` na MySQL nenašlo nic.
+        $tabulka = 'from '.DB::connection()->getQueryGrammar()->wrapTable('push_subscriptions');
+        $zarizeni = fn () => collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], $tabulka))->count();
 
         DB::enableQueryLog();
         $this->assertSame(0, app(WebPushService::class)->sendToUser($this->maki->fresh(), ['title' => 'Revize', 'body' => 'x']));

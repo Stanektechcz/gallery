@@ -66,7 +66,8 @@ class PravidlaVeStavuTest extends TestCase
         $this->assertSame('todo.completed', $radek->trigger);
         $this->assertSame('journal.entry', $radek->action);
         $this->assertSame($this->maki->id, $radek->created_by);
-        $this->assertSame(
+        // `conditions` je sloupec `json` — MySQL klíče vrací seřazené.
+        $this->assertStejneBezPoradiKlicu(
             [['field' => 'title', 'operator' => 'contains', 'value' => 'úklid']],
             json_decode($radek->conditions, true),
         );
