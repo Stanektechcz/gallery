@@ -218,6 +218,24 @@ class MediaFileControllerTest extends TestCase
         $this->get($podepsana)->assertOk();
     }
 
+    /**
+     * Podepsaná adresa fotky, jejíž řádek zmizel (`forceDelete`), soubor nevydá.
+     *
+     * Větev s podpisem u chybějícího řádku počítala `! $media?->is_hidden`,
+     * a `! null` je pravda — smazaná fotka tak zůstala podepsanou adresou
+     * dostupná dál, i když v databázi po ní není ani stopa.
+     */
+    public function test_podepsana_adresa_bez_radku_se_nevyda(): void
+    {
+        $media = $this->fotka();
+        Storage::disk('public')->put('media/'.$media->uuid.'/thumbnail.jpg', 'jpeg');
+        $podepsana = MediaVariant::proxyUrl('media/'.$media->uuid.'/thumbnail.jpg');
+
+        $media->forceDelete();
+
+        $this->get($podepsana)->assertNotFound();
+    }
+
     public function test_podepsana_adresa_neplati_pro_jiny_soubor(): void
     {
         $media = $this->fotka();

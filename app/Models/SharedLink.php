@@ -226,4 +226,51 @@ class SharedLink extends Model
 
         return password_verify($password, $this->password_hash);
     }
+
+    /** Klíč v sezení, že heslo k tomuhle odkazu bylo ověřeno. */
+    public function klicOvereni(): string
+    {
+        return "share_verified_{$this->token}";
+    }
+
+    /**
+     * Otisk aktuálního hesla — to, co se ukládá do sezení místo `true`.
+     *
+     * Změna hesla (`SdileniController::update`) přepíše `password_hash`, ale
+     * sezení hostů, kteří odkaz už otevřeli se starým heslem, tím samo
+     * nezneplatní. Otisk se počítá z aktuálního `password_hash`, takže po
+     * změně hesla už žádné dřívější sezení neodpovídá — brána na heslo se
+     * ukáže znovu všem, ne jen novým návštěvníkům.
+     */
+    public function otiskHesla(): string
+    {
+        return hash_hmac('sha256', (string) $this->password_hash, config('app.key'));
+    }
+
+    /**
+     * Je tohle sezení ověřené pro aktuální heslo odkazu?
+     *
+     * Srovnává se přes `hash_equals`, ne `===` — obojí je string a časovací
+     * rozdíl u přímého porovnání by jinak prozradil, kolik znaků otisku sedí.
+     */
+    public function jeOvereno(Request $request): bool
+    {
+        if ($this->password_hash === null) {
+            return true;
+        }
+
+        if (! $request->hasSession()) {
+            return false;
+        }
+
+        $ulozeno = $request->session()->get($this->klicOvereni());
+
+        return is_string($ulozeno) && hash_equals($this->otiskHesla(), $ulozeno);
+    }
+
+    /** Označí tohle sezení jako ověřené pro aktuální heslo odkazu. */
+    public function oznacOvereno(Request $request): void
+    {
+        $request->session()->put($this->klicOvereni(), $this->otiskHesla());
+    }
 }

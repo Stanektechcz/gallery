@@ -213,6 +213,24 @@ class SharedLinkTest extends TestCase
      * Limit na adresu obejde každý, kdo má víc adres (mobilní síť, proxy).
      * Odkaz sám přitom chrání fotky, které dvojice někomu poslala.
      */
+    /**
+     * Heslo na vypršelý odkaz se ani nezkouší — stejná odpověď jako u GET.
+     *
+     * `verify()` dřív u neplatného odkazu (vypršelý, vypnutý, smazaný cíl)
+     * pořád ověřovalo heslo a počítalo pokusy — host tak mohl zkoušet
+     * uhodnout heslo k odkazu, který už dávno nikam nevede.
+     */
+    public function test_heslo_na_vyprsely_odkaz_neprojde_ani_se_nepocita(): void
+    {
+        $odkaz = $this->odkazSHeslem(['expires_at' => now()->subDay()]);
+
+        $this->post("/s/{$odkaz->token}/verify", ['password' => 'tajne-heslo'])
+            ->assertOk()
+            ->assertInertia(fn (Assert $page) => $page->component('Shares/Expired'));
+
+        $this->assertNull(session($odkaz->klicOvereni()));
+    }
+
     public function test_heslo_k_odkazu_ma_limit_na_odkaz(): void
     {
         $odkaz = $this->odkazSHeslem();
@@ -255,6 +273,58 @@ class SharedLinkTest extends TestCase
                 ->post("/s/{$odkaz->token}/verify", ['password' => 'spatne'])
                 ->assertRedirect();
         }
+    }
+
+    /**
+     * Správné heslo obnoví sezení — session fixation zůstává tím starým.
+     *
+     * Bez `regenerate()` si přihlášení jinam v témže prohlížeči (útočník na
+     * sdíleném počítači) mohlo nastrčit vlastní session id předem a po
+     * úspěšném heslu ho zdědit i s ověřením.
+     */
+    public function test_spravne_heslo_obnovi_sezeni(): void
+    {
+        $odkaz = $this->odkazSHeslem();
+
+        $this->get("/s/{$odkaz->token}")->assertOk();
+        $puvodni = $this->app['session']->getId();
+
+        /*
+         * Bez cookie dostane každý požadavek v testu nové náhodné id a změna
+         * by nic nedokazovala. S cookie sezení pokračuje — to potvrzuje první
+         * požadavek; teprve pak má smysl, že ověření hesla id vymění.
+         */
+        $this->withCookie(config('session.cookie'), $puvodni)
+            ->get("/s/{$odkaz->token}")->assertOk();
+        $this->assertSame($puvodni, $this->app['session']->getId());
+
+        $this->withCookie(config('session.cookie'), $puvodni)
+            ->post("/s/{$odkaz->token}/verify", ['password' => 'tajne-heslo'])
+            ->assertRedirect(route('share.show', $odkaz->token));
+
+        $this->assertNotSame($puvodni, $this->app['session']->getId());
+
+        // Ověření uloží otisk aktuálního hesla, ne jen `true` — viz `oznacOvereno()`.
+        $this->assertSame($odkaz->fresh()->otiskHesla(), $this->app['session']->get($odkaz->klicOvereni()));
+    }
+
+    /**
+     * Změna hesla odemčená sezení znovu zamkne.
+     *
+     * `share_verified_{token}` dřív nesl `true` bez ohledu na to, ke kterému
+     * heslu se ověření vztahuje — po změně hesla platilo dál pro každého,
+     * kdo odkaz otevřel dřív.
+     */
+    public function test_zmena_hesla_zamkne_odemcena_sezeni(): void
+    {
+        $odkaz = $this->odkazSHeslem();
+
+        $this->post("/s/{$odkaz->token}/verify", ['password' => 'tajne-heslo'])->assertRedirect();
+        $this->get("/s/{$odkaz->token}")->assertOk()->assertInertia(fn (Assert $page) => $page->component('Shares/Show'));
+
+        $odkaz->update(['password_hash' => bcrypt('nove-heslo')]);
+
+        $this->get("/s/{$odkaz->token}")->assertOk()->assertInertia(fn (Assert $page) => $page->component('Shares/PasswordGate'));
     }
 
     public function test_heslo_k_odkazu_ma_aspon_sest_znaku(): void

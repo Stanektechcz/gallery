@@ -51,7 +51,7 @@ class HostKomentarController extends Controller
 
         // Odkaz chráněný heslem pustí dál až po ověření — jinak by se dalo
         // komentovat to, co si člověk nesmí ani prohlédnout.
-        if ($odkaz->password_hash && ! $request->session()->get("share_verified_{$token}")) {
+        if (! $odkaz->jeOvereno($request)) {
             return response()->json(['ok' => false, 'zprava' => 'Nejdřív heslo k odkazu.'], 403);
         }
 

@@ -164,10 +164,30 @@ class MediaFileController extends Controller
                  * Návrh na smazání (`trash_requested_at`) fotku nepřesouvá: dokud
                  * ho druhý neschválí, je normálně v galerii a adresy platí.
                  */
-                if ($media === null || ($media->trashed_at === null && $media->deleted_at === null)) {
-                    return ! $media?->is_hidden || $this->trezorOdemceny($request);
+                /*
+                 * Chybějící řádek podpisem neprojde vůbec.
+                 *
+                 * `! $media?->is_hidden` je pro `$media === null` vždycky pravda —
+                 * fotka smazaná i s řádkem (`forceDelete`) tak zůstala podepsanou
+                 * adresou dostupná dál, i když v databázi po ní není ani stopa.
+                 */
+                if ($media === null) {
+                    return false;
+                }
+
+                if ($media->trashed_at === null && $media->deleted_at === null) {
+                    return ! $media->is_hidden || $this->trezorOdemceny($request);
                 }
             } else {
+                /*
+                 * Cesta bez uuid: podpis sám stačí.
+                 *
+                 * `MediaVariant::proxyUrl`, jediné místo, které `media.file`
+                 * vydává, podepisuje jen `media/{uuid}/…` a `variants/{uuid}/…`
+                 * — jiný tvar cesty tudíž nikdy neponese platný podpis
+                 * z aplikace. Test na video přehrávání (`video-uuid` jako
+                 * testovací název) tuhle větev používá záměrně.
+                 */
                 return true;
             }
         }

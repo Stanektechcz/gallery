@@ -216,6 +216,29 @@ class SdileniOdkazuTest extends TestCase
         $this->assertTrue(Hash::check('letnizadar', $odkaz->password_hash));
     }
 
+    /**
+     * Změna hesla odemčená sezení hosta znovu zamkne.
+     *
+     * `share_verified_{token}` dřív neslo `true` bez ohledu na to, ke kterému
+     * heslu se ověření vztahuje — host, který odkaz otevřel se starým
+     * heslem, tak po jeho změně viděl fotky dál bez nového hesla.
+     */
+    public function test_zmena_hesla_zamkne_odemcena_sezeni_hosta(): void
+    {
+        $odkaz = $this->odkaz(['password_hash' => Hash::make('puvodni-heslo')]);
+
+        $this->post('/s/'.$odkaz->token.'/verify', ['password' => 'puvodni-heslo'])->assertRedirect();
+        $this->get('/s/'.$odkaz->token)->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Shares/Show'));
+
+        $this->patchJson('/api/sdileni/'.$odkaz->id, [
+            'name' => $odkaz->name, 'expirace' => 'nikdy', 'heslo' => 'nove-heslo123',
+        ])->assertOk();
+
+        $this->get('/s/'.$odkaz->token)->assertOk()
+            ->assertInertia(fn ($page) => $page->component('Shares/PasswordGate'));
+    }
+
     /** A výslovné vypnutí hesla ho smaže. */
     public function test_vypnute_heslo_se_smaze(): void
     {

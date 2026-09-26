@@ -140,7 +140,7 @@ class ShareController extends Controller
             return Inertia::render('Shares/Expired');
         }
 
-        if ($link->password_hash && ! session("share_verified_{$token}")) {
+        if (! $link->jeOvereno($request)) {
             return Inertia::render('Shares/PasswordGate', ['token' => $token]);
         }
 
@@ -263,9 +263,20 @@ class ShareController extends Controller
             ->all();
     }
 
-    public function verify(Request $request, string $token): RedirectResponse
+    public function verify(Request $request, string $token): Response|RedirectResponse
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
+
+        /*
+         * Odkaz, který už nikam nevede, heslo ani nezkouší.
+         *
+         * `isAccessibleFor` se dřív kontrolovalo jen na `show()` (GET). Sem,
+         * na `verify()`, se dalo poslat heslo pořád — i k odkazu vypršelému,
+         * vypnutému nebo se smazaným cílem — a počítat pokusy proti němu.
+         */
+        if (! $link->isAccessibleFor($link->jeZapoctenoV($request))) {
+            return Inertia::render('Shares/Expired');
+        }
 
         /*
          * Počítadlo na odkaz, ne na adresu.
@@ -291,7 +302,16 @@ class ShareController extends Controller
         }
 
         RateLimiter::clear($klic);
-        session(["share_verified_{$token}" => true]);
+
+        /*
+         * Nové sezení, ne jen nový příznak.
+         *
+         * Bez `regenerate()` by útočník na sdíleném počítači mohl hostovi
+         * předem nastrčit vlastní session id (fixace) a po zadání hesla by
+         * ho zdědil i s ověřením.
+         */
+        $request->session()->regenerate();
+        $link->oznacOvereno($request);
 
         return redirect()->route('share.show', $token);
     }
@@ -301,7 +321,7 @@ class ShareController extends Controller
         $link = SharedLink::where('token', $token)->firstOrFail();
 
         // Kdo stránku v tomhle sezení otevřel, nahrává i po vyčerpání `max_uses`.
-        if (! $link->isAccessibleFor($link->jeZapoctenoV($request)) || ! $link->allow_guest_upload || ($link->password_hash && ! session("share_verified_{$token}"))) {
+        if (! $link->isAccessibleFor($link->jeZapoctenoV($request)) || ! $link->allow_guest_upload || ! $link->jeOvereno($request)) {
             return response()->json(['error' => 'Upload not allowed'], 403);
         }
         $limitKb = (int) floor(min($link->upload_limit_bytes ?: 104857600, 104857600) / 1024);
@@ -341,7 +361,7 @@ class ShareController extends Controller
     public function download(Request $request, string $token, string $uuid): StreamedResponse
     {
         $link = SharedLink::where('token', $token)->firstOrFail();
-        abort_unless($link->isAccessibleFor($link->jeZapoctenoV($request)) && $link->allow_download && (! $link->password_hash || session("share_verified_{$token}")), 403);
+        abort_unless($link->isAccessibleFor($link->jeZapoctenoV($request)) && $link->allow_download && $link->jeOvereno($request), 403);
         $item = $this->mediaOdkazu($link)->where('uuid', $uuid)->firstOrFail();
         [$variant, $jmeno] = $link->hide_gps ? $this->kopieBezPolohy($item) : [$item->variants()->where('type', 'original')->firstOrFail(), $item->original_filename];
         DB::table('share_access_logs')->insert(['shared_link_id' => $link->id, 'action' => 'download', 'ip_hash' => hash('sha256', (string) $request->ip().config('app.key')), 'media_item_id' => $item->id, 'created_at' => now()]);
