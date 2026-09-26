@@ -36,6 +36,9 @@ class TripPlanController extends Controller
                 ->where('meal.trip_id', $id)->whereDate('meal.planned_for', $day->date)
                 ->orderBy('meal.planned_for')
                 ->get(['meal.uuid', 'meal.meal_type', 'meal.planned_for', 'meal.servings', 'meal.status', 'recipe.uuid as recipe_uuid', 'recipe.title', 'session.uuid as cooking_session_uuid'])
+                // Porce jsou `decimal(8,2)` a z MySQL chodí jako text „4.00"; obrazovka
+                // z nich skloňuje „4 porce", s textem by psala „4.00 porcí".
+                ->map(fn (object $meal) => (object) array_merge((array) $meal, ['servings' => (float) $meal->servings]))
             : collect();
 
         if (Schema::hasColumn('travel_journal_entries', 'visibility')) {

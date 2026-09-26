@@ -150,9 +150,8 @@ class TripIntelligenceController extends Controller
     public function financeSummary(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor, TripPartnerFinanceService $finance): JsonResponse
     {
         $trip = $this->trip($request->user(), $tripId);
-        $goal = DB::table('trip_savings_goals')->where('trip_id', $tripId)->first();
 
-        return response()->json($finance->snapshot($trip) + ['savings_goal' => $goal, 'advisor' => $budgetAdvisor->snapshot($trip)]);
+        return response()->json($finance->snapshot($trip) + ['savings_goal' => $this->cilSporeni($tripId), 'advisor' => $budgetAdvisor->snapshot($trip)]);
     }
 
     public function budgetAdvisor(Request $request, int $tripId, TripBudgetAdvisorService $budgetAdvisor): JsonResponse
@@ -217,7 +216,32 @@ class TripIntelligenceController extends Controller
             DB::table('trip_savings_goals')->insert($zmeny + ['trip_id' => $tripId, 'created_at' => now()]);
         }
 
-        return response()->json(DB::table('trip_savings_goals')->where('trip_id', $tripId)->first());
+        return response()->json($this->cilSporeni($tripId));
+    }
+
+    /**
+     * Cíl spoření s částkami jako čísly.
+     *
+     * Sloupce jsou `decimal(12,2)` a PDO je z MySQL vrací jako text
+     * (`"1200.00"`), ze SQLite jako číslo. Obrazovka cesty i nástěnka
+     * s nimi počítají (procento naspořeného, `toLocaleString`) — z textu by
+     * vyšlo „1200.00" bez formátu, sčítání by skládalo řetězce.
+     */
+    private function cilSporeni(int $tripId): ?object
+    {
+        $cil = DB::table('trip_savings_goals')->where('trip_id', $tripId)->first();
+
+        if ($cil === null) {
+            return null;
+        }
+
+        foreach (['target_amount', 'saved_amount', 'monthly_contribution'] as $sloupec) {
+            if (isset($cil->{$sloupec})) {
+                $cil->{$sloupec} = (float) $cil->{$sloupec};
+            }
+        }
+
+        return $cil;
     }
 
     /**

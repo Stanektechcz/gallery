@@ -117,7 +117,13 @@ class ObsahOdvozeneTest extends TestCase
             'gallery_space_id' => $this->prostor->id,
             'created_by' => $this->adri->id,
             'type' => 'expense',
-            'occurred_at' => '2026-08-01 12:30:00',
+            /*
+             * `transactions.occurred_at` je sloupec `date`. Dřív tu byl čas
+             * „12:30" — SQLite ho uložila i s hodinami, MySQL ho ořízne a
+             * platba pak na produkci žádný čas nemá. Test má vidět totéž co
+             * produkce: platba bez času jde na konec dne s pomlčkou.
+             */
+            'occurred_at' => '2026-08-01',
             'amount_from' => 690,
             'currency_from' => 'CZK',
             'description' => 'Oběd',
@@ -129,10 +135,11 @@ class ObsahOdvozeneTest extends TestCase
 
         $this->assertSame('Sobota 1. srpna 2026', $d['title']);
         $this->assertSame(['8:00', '2 fotky za 10 minut — Zadar.', 'fotky · 2 snímky za sebou', 'ph-camera'], $d['steps'][0]);
-        $this->assertSame('12:30', $d['steps'][1][0]);
-        $this->assertStringContainsString('690 Kč', $d['steps'][1][1]);
-        // Mezi obědem a přístavem je pět a půl hodiny prázdna.
-        $this->assertStringContainsString('nejsou žádná data', $d['gap']);
+        $this->assertSame('18:00', $d['steps'][1][0]);
+        $this->assertSame('—', $d['steps'][2][0], 'Platba jen s datem se řadí na konec dne.');
+        $this->assertStringContainsString('690 Kč', $d['steps'][2][1]);
+        // Mezi ranními fotkami a přístavem je deset hodin prázdna.
+        $this->assertStringContainsString('Mezi 8:00 a 18:00 nejsou žádná data', $d['gap']);
     }
 
     /** Den o jednom kroku není rekonstrukce, je to jedna fotka. */

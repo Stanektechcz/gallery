@@ -157,4 +157,34 @@ class ImportRevolutuTest extends TestCase
 
         $this->assertSame('Tabulku XLS/XLSX nelze přečíst. Ověřte, že není chráněná heslem ani poškozená.', $zprava);
     }
+
+    /**
+     * Kód rezervace z dopravy nebo ubytování spáruje platbu s cestou.
+     *
+     * Párování se ptalo na sloupec `trip_travel_choices.reference`, který
+     * neexistuje (kód leží v `details`). SQLite z neznámého jména udělala text
+     * „reference" a nic nenašla, MySQL dotaz odmítla — a na produkci tak
+     * každá platba bez shody s itinerářem shodila párování celého výpisu.
+     */
+    public function test_kod_rezervace_z_dopravy_sparuje_platbu_s_cestou(): void
+    {
+        $tripId = DB::table('trips')->insertGetId(['gallery_space_id' => $this->prostor->id, 'created_by' => $this->vlastnik->id,
+            'name' => 'Vídeň', 'start_date' => '2026-08-10', 'end_date' => '2026-08-12', 'status' => 'planned',
+            'timezone' => 'Europe/Prague', 'currency' => 'CZK', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('trip_travel_choices')->insert(['uuid' => (string) Str::uuid(), 'trip_id' => $tripId, 'created_by' => $this->vlastnik->id,
+            'kind' => 'transport', 'provider' => null, 'title' => 'Autobus tam', 'currency' => 'CZK', 'is_selected' => true,
+            'details' => json_encode(['reference' => 'XK7Q2B']), 'created_at' => now(), 'updated_at' => now()]);
+
+        // Doprava zaplacená předem má bez další shody 70 bodů — na potvrzení
+        // je potřeba 80, takže rozhodne právě kód rezervace (+20).
+        $this->nahrat('jizdenka.csv', "Type,Completed Date,Description,Amount,Currency,State\n"
+            ."CARD,2026-07-20 10:00:00,Flixbus XK7Q2B,-450,CZK,COMPLETED\n")
+            ->assertCreated()->assertJsonPath('trip_links_created', 1)->assertJsonPath('warnings', []);
+
+        $vazba = DB::table('trip_bank_transactions')->where('trip_id', $tripId)->first();
+        $this->assertNotNull($vazba);
+        $this->assertSame('confirmed', $vazba->status);
+        $this->assertStringContainsString('shoda s rezervací nebo dopravou', (string) $vazba->reason);
+        $this->assertDatabaseHas('trip_expenses', ['trip_id' => $tripId, 'title' => 'Flixbus XK7Q2B', 'automation_source' => 'bank_transaction']);
+    }
 }

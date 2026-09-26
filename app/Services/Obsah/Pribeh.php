@@ -442,7 +442,16 @@ class Pribeh implements MaPrazdneKolekce, PoskytovatelObsahu
                 ->whereNull('deleted_at')
                 ->whereIn('type', Transaction::VYSLEDKOVE)
                 ->whereIn('state', Transaction::ZAPSANE)
-                ->whereBetween('occurred_at', [$od, $do])
+                /*
+                 * `occurred_at` je `date`. Porovnání s `…00:00:00`–`…23:59:59`
+                 * sedí jen na MySQL, která datum převede; SQLite porovnává
+                 * text a „2026-08-01" je v něm menší než „2026-08-01 00:00:00"
+                 * — platba jen s datem (tak je zapisuje celá aplikace) se do
+                 * dne na SQLite nedostala nikdy. Polootevřený rozsah dnů platí
+                 * na obou a index na sloupci zůstane použitelný.
+                 */
+                ->where('occurred_at', '>=', $den->toDateString())
+                ->where('occurred_at', '<', $den->addDay()->toDateString())
                 ->orderBy('occurred_at')
                 ->get(['occurred_at', 'description', 'counterparty', 'amount_from', 'currency_from', 'place']);
 

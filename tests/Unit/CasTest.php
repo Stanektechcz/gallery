@@ -56,4 +56,30 @@ class CasTest extends TestCase
         // Okamžik 16:30 UTC (18:30 v Praze) je po akci, která začala v 18:00.
         $this->assertTrue(Cas::mistni('2026-09-22 16:30:00')->gt($zacatek));
     }
+
+    /**
+     * Čas z požadavku se do DATETIME zapíše v tvaru, který vezme i MySQL.
+     *
+     * ISO s pásmem MySQL ve striktním režimu odmítne (SQLite ho spolkne),
+     * proto se to nedá chytit zápisem do testovací databáze — hlídá se tvar.
+     */
+    public function test_cas_pro_databazi_bez_pasma_a_v_hodinach_cesty(): void
+    {
+        config(['app.display_timezone' => 'Europe/Prague']);
+
+        // Okamžik s pásmem → hodiny cesty (v říjnu ještě letní čas, UTC+2).
+        $this->assertSame('2026-10-26 01:00:00', Cas::hodinyProDb('2026-10-26T00:00:00.000000Z'));
+        $this->assertSame('2026-10-01 02:00:00', Cas::hodinyProDb('2026-10-01T00:00:00.000Z'));
+        $this->assertSame('2026-10-01 09:00:00', Cas::hodinyProDb('2026-10-01T02:00:00+02:00', 'Asia/Tokyo'));
+        // Půlnoc v Praze poslaná přes toISOString() zůstane ve správném dni.
+        $this->assertSame('2026-10-27 00:00:00', Cas::hodinyProDb('2026-10-26T23:00:00.000Z'));
+
+        // Bez pásma jsou to hodiny, jak je člověk napsal — neposouvají se.
+        $this->assertSame('2026-10-26 18:30:00', Cas::hodinyProDb('2026-10-26T18:30'));
+        $this->assertSame('2026-10-26 00:00:00', Cas::hodinyProDb('2026-10-26'));
+        $this->assertSame('2026-10-26 18:30:00', Cas::hodinyProDb('2026-10-26 18:30:00', 'America/New_York'));
+
+        // Neplatné pásmo cesty nespadne, vezme se pásmo dvojice.
+        $this->assertSame('2026-10-01 02:00:00', Cas::hodinyProDb('2026-10-01T00:00:00Z', 'Není/Pásmo'));
+    }
 }

@@ -194,8 +194,17 @@ class TripBankReconciliationService
             }
         }
         if (Schema::hasTable('trip_travel_choices')) {
-            foreach (DB::table('trip_travel_choices')->where('trip_id', $trip->id)->get(['title', 'provider', 'reference']) as $choice) {
-                foreach ([$choice->provider, $choice->reference, $choice->title] as $label) {
+            /*
+             * Sloupec `reference` tahle tabulka nemá — kód rezervace leží
+             * v `details` (TripTravelController). SQLite neznámé jméno v uvozovkách
+             * tiše vezme jako text „reference", MySQL dotaz odmítne: párování
+             * každé platby, která nesedla na itinerář ani místo, spadlo, import
+             * výpisu to spolkl jako varování a výdaj cesty nevznikl.
+             */
+            foreach (DB::table('trip_travel_choices')->where('trip_id', $trip->id)->get(['title', 'provider', 'details']) as $choice) {
+                $details = json_decode((string) $choice->details, true);
+                $reference = is_array($details) && is_scalar($details['reference'] ?? null) ? (string) $details['reference'] : null;
+                foreach ([$choice->provider, $reference, $choice->title] as $label) {
                     $needle = $this->classifier->normalize($label);
                     if (strlen($needle) >= 4 && str_contains($haystack, $needle)) {
                         return [null, null, 'shoda s rezervací nebo dopravou'];

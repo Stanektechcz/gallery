@@ -52,6 +52,28 @@ final class Cas
     }
 
     /**
+     * Čas z požadavku jako hodiny v pásmu `$pasmo`, ve tvaru pro sloupec DATETIME.
+     *
+     * Pravidlo `date` pustí i ISO zápis s pásmem (`2026-10-26T00:00:00.000000Z`,
+     * tak ho posílá `toISOString()` i serializovaný Carbon). SQLite ho uloží
+     * jako text, MySQL ve striktním režimu odmítne celý INSERT — výdaj se
+     * na produkci neuložil a klient dostal 500.
+     *
+     * Zápis s pásmem je okamžik a převede se na hodiny v `$pasmo`; zápis bez
+     * pásma („2026-10-26 18:30") jsou hodiny, jak je člověk napsal, a nechá
+     * se. Pozná se to tak, že jen okamžik vyjde stejně, ať se čte v kterémkoli
+     * pásmu.
+     */
+    public static function hodinyProDb(string $kdy, ?string $pasmo = null): string
+    {
+        $pasmo = self::naCeste($pasmo)->getTimezone()->getName();
+        $vPasmu = CarbonImmutable::parse($kdy, $pasmo);
+        $sPasmem = $vPasmu->getTimestamp() === CarbonImmutable::parse($kdy, 'Pacific/Kiritimati')->getTimestamp();
+
+        return ($sPasmem ? $vPasmu->setTimezone($pasmo) : $vPasmu)->format('Y-m-d H:i:s');
+    }
+
+    /**
      * Dnešní datum dvojice jako půlnoc v pásmu aplikace.
      *
      * Pro porovnání s daty z databáze (začátek cesty, datum zápisu…), která se

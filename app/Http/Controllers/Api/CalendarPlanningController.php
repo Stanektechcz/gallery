@@ -909,6 +909,10 @@ class CalendarPlanningController extends Controller
         if (! Schema::hasColumn('trip_expenses', 'payment_source')) {
             unset($data['payment_source']);
         }
+        // ISO s pásmem („…T00:00:00.000000Z") MySQL do DATETIME nevezme — viz Cas::hodinyProDb.
+        if (! empty($data['occurred_at'])) {
+            $data['occurred_at'] = Cas::hodinyProDb((string) $data['occurred_at'], $trip->timezone ?? null);
+        }
         $id = DB::table('trip_expenses')->insertGetId($data + ['trip_id' => $tripId, 'created_by' => $user->id, 'currency' => strtoupper($data['currency'] ?? $trip->currency ?? 'CZK'), 'state' => $data['state'] ?? 'actual', 'created_at' => now(), 'updated_at' => now()]);
 
         return response()->json(DB::table('trip_expenses')->find($id), 201);
@@ -951,6 +955,9 @@ class CalendarPlanningController extends Controller
         }
         if (! Schema::hasColumn('trip_expenses', 'payment_source')) {
             unset($data['payment_source']);
+        }
+        if (! empty($data['occurred_at'])) {
+            $data['occurred_at'] = Cas::hodinyProDb((string) $data['occurred_at'], $trip->timezone ?? null);
         }
         DB::table('trip_expenses')->where('id', $expenseId)->update($data + ['updated_at' => now()]);
 

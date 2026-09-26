@@ -233,6 +233,10 @@ class PlanningExpansionTest extends TestCase
         $this->postJson('/api/v1/places', ['name' => 'Levná vyhlídka', 'type' => 'custom', 'city' => 'Vídeň', 'price_level' => 1])->assertCreated();
         $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Apartmán', 'category' => 'accommodation', 'amount' => 1800, 'state' => 'planned'])->assertCreated();
         $this->postJson("/api/v1/trips/{$tripId}/expenses", ['title' => 'Jídlo', 'category' => 'food', 'amount' => 900, 'state' => 'actual', 'occurred_at' => $start])->assertCreated();
+        // Carbon jde do JSONu jako ISO s „Z" — MySQL by takový INSERT odmítl (500).
+        // SQLite ho spolkne, proto se hlídá tvar uložené hodnoty.
+        $this->assertMatchesRegularExpression('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/',
+            (string) DB::table('trip_expenses')->where('trip_id', $tripId)->where('title', 'Jídlo')->value('occurred_at'));
 
         $response = $this->putJson("/api/v1/trips/{$tripId}/budget-plan", [
             'budget_profile' => 'economy',
