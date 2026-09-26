@@ -804,6 +804,69 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ar. Čtyřicáté páté kolo — co ukázal první běh CI na Linuxu a MySQL (27. 9.)
+
+Zadání: **„Pokračuj dalším kolem a pak to pushni"**. První běh
+`tests.yml` (po pushi kola 44) spadl v obou úlohách: SQLite 23 selhání,
+MySQL 16 chyb a 41 selhání. Lokálně na Windows prošlo všech 2797 testů —
+tohle byla přesně ta třída chyb, kvůli které CI vzniklo.
+
+### Linux: stránky Inertia
+
+* Balíček Inertia hledá stránky v `resources/js/pages` (malé `p`),
+  v repozitáři je `resources/js/Pages`. Windows velikost písmen neřeší,
+  Linux ano — 23 testů hlásilo „komponenta neexistuje". Nový
+  `config/inertia.php` s `Pages`; `InertiaStrankyTest` porovnává přesnou
+  velikost písmen i na Windows.
+
+### Chyby jen na MySQL, které platily i na produkci
+
+* **Platby z výpisu se nikdy nespárovaly s cestou podle kódu rezervace.**
+  `TripBankReconciliationService` četl sloupec `reference`, který
+  `trip_travel_choices` nemá (kód leží v `details`). SQLite neznámý
+  sloupec v uvozovkách tiše vezme jako text, MySQL dotaz odmítne a import
+  chybu spolkl.
+* **Uložení výdaje cesty s datem z prohlížeče → 500** (`…T00:00:00.000Z`
+  MySQL do DATETIME nevezme). Nové `Cas::hodinyProDb()`: čas s pásmem se
+  převede na hodiny cesty, čas bez pásma zůstane, jak ho člověk napsal.
+* **Částky cíle spoření, souhrnu financí cesty a porce jídla šly do JSON
+  jako text** (`"1200.00"`, „4.00 porcí").
+* Platby dne v příběhu (`Pribeh::krokyDne`) — rozsah `00:00:00…23:59:59`
+  na sloupci DATE fungoval jen na MySQL; na SQLite se platby bez času
+  do dne nepočítaly. Teď `>= den` a `< další den` na obou.
+
+### Testy, které platily jen na SQLite
+
+* Fixtury s `users.role = 'member'` (není v enum) — `RoleUctuVTestechTest`
+  hlídá testy, seedery i factory proti enum z migrace.
+* `SirkySloupcuTest` měřil na MySQL délku **jména** sloupce (uvozovky
+  = řetězec) a bajty místo znaků — hlídání přetečení tam dosud nic
+  nekontrolovalo.
+* JSON sloupce MySQL vrací klíče přeřazené — `assertStejneBezPoradiKlicu`
+  (pořadí seznamů i typy dál přísně). Klient stav převezme tiše, smyčka
+  ukládání nevzniká.
+* Hledání dotazů podle `"tabulka"` — MySQL píše zpětné apostrofy.
+
+### Zbývá
+
+* Další běh CI ukáže, co bylo za prvním selháním každého testu (PHPUnit
+  končí u prvního); `SirkySloupcuTest` teď na MySQL měří doopravdy
+  a může najít skutečné přetečení.
+* Jiné výběry neexistujících sloupců (SQLite je tiše promění v text)
+  najde jen úloha MySQL; statická kontrola sloupců proti migracím by
+  stála za vlastní úkol.
+* Syrové řádky `DB::table()->first()` s DECIMAL v odpovědích (např.
+  výdaje cesty) dál posílají na MySQL text.
+
+| Commit | Obsah |
+|---|---|
+| `b0f555cc` | Stránky Inertia v `resources/js/Pages` i na Linuxu |
+| `dcef69b3` | Na MySQL — platby z výpisu k cestě, výdaj cesty, částky jako čísla |
+| `9b5c177c` | Testy, které platily jen na SQLite, běží i na MySQL |
+
+Testy: **2802 PHP testů (5 nových)**, všechny prošly v běžném čase,
+o Silvestru 23:30 i v letní noci 1. 7. 22:40. **Žádná migrace.**
+
 ## 2aq. Čtyřicáté čtvrté kolo — MySQL v CI, kopie v cloudu, token a CSP (26. 9.)
 
 Zadání: **„Pokračuj dalším kolem a pak to pushni"**. Vychází z bodů, které
