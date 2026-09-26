@@ -804,6 +804,117 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2ap. Čtyřicáté třetí kolo — videa bez shellu, nasazení v režimu údržby (26. 9.)
+
+Zadání: **„Pokračuj dalším kolem, oprav videa a nasazení, pak pushni"**.
+Vychází z auditu připravenosti na produkci na konci 2ao: videa na serveru
+nefungovala a nasazení nemělo režim údržby ani kontrolu cronu. Dva
+pracovníci souběžně na oddělených souborech, každý nález nejdřív potvrdil
+test, který bez opravy spadl.
+
+### Videa a EXIF na serveru
+
+* **Příčina:** `shell_exec` i `exec` jsou na serveru v php.ini vypnuté
+  (píše to i `ZalohaDatabaze`). Přes ně se volal ffprobe (metadata videa),
+  ffmpeg (náhled, kopie pro prohlížeč, výběr kodéru) i exiftool (EXIF, XMP).
+  Nevrátily nic a nic nehlásily — video zůstalo bez rozměrů, data a kopie,
+  v logu ani slovo.
+* **`App\Support\Program::spust`** — Laravel `Process` (tedy `proc_open`),
+  pole argumentů bez shellu, bez `escapeshellarg`, `2>/dev/null` i `| grep`.
+  Každé volání má vlastní strop času; selhání i vypršení jde do logu s koncem
+  chybového výstupu a volající dostane `null` jako dřív. `BezShelluTest`
+  hlídá, že se shellové volání do `app/` nevrátí.
+* **Strop převodu:** `VIDEO_TRANSCODE_TIMEOUT` (výchozí 3000 s, služba pustí
+  nejvýš 3300 s) < `$timeout` úlohy 3600 s < `retry_after` fronty 3900 s.
+  Převod skončí dřív, než úlohu zabije worker, uklidí po sobě a druhý worker
+  si ho nevezme znovu. Dřív měla úloha 1800 s a ffmpeg žádný strop — dlouhé
+  video worker zabil uprostřed zápisu.
+* **`open_basedir` webu** (aaPanel `.user.ini`, platí jen pro PHP-FPM):
+  nahrání videa volá ffprobe a ffmpeg přímo v požadavku a
+  `is_executable('/usr/bin/ffmpeg')` tam hodil varování, které Laravel mění
+  na výjimku — nahrané video mělo vždy jen náhradní náhled.
+  `Program::lzeSpustit` nechá cestu mimo `open_basedir` rozhodnout spuštěním
+  (to se na `open_basedir` neohlíží). Totéž ve správě a na stránce obnovy,
+  které nástroje hlásily jako chybějící.
+* **Po cestě:**
+  * `ExifExtractorService::getRawExif` měl špatně zapsané deskriptory
+    `proc_open` a vždy spadl — panorama a Live Photo se při nahrání
+    nerozpoznaly nikdy.
+  * Náhled z RAW hledal `exiftool` v PATH místo nastavené cesty.
+  * Štítky v XMP by s polem argumentů dostaly doslovné uvozovky
+    (`escapeshellarg` pryč).
+* **Sdílená stránka:** u odkazu s povolenou polohou poslala hostovi originál
+  videa i s polohou z telefonu, když mělo video jen plakát bez `thumbnail`.
+  Plakát se teď počítá jako náhled.
+* **`gallery:videa-bez-polohy`** — kopie k přehrávání vzniklé před kolem 42
+  (`-map_metadata -1`) mohou nést polohu. Bez přepínače je jen spočítá,
+  `--provest` je přebalí bez překódování (`-c copy`) a nahradí na místě.
+  Originály nechává být.
+
+### Nasazení
+
+* **`deploy.sh` v režimu údržby:** `artisan down --retry=60` před
+  `git pull` (nový kód nikdy neběží proti starému schématu nebo `vendor/`),
+  `artisan up` až po reloadu PHP-FPM. Selhání uprostřed nechá aplikaci
+  v údržbě schválně a vypíše krok i příkaz k návratu. Zápisy z aplikace se
+  během údržby neztrácejí: `galerie-api.js` vrátí zápis při 503 do fronty
+  a zkouší ho znovu (4 s → nejvýš 2 min).
+* **Česká stránka údržby** (`resources/views/errors/503.blade.php`); API
+  dál vrací JSON.
+* **Kontrola cronu** na konci nasazení: řádky se `schedule:run` v crontabu,
+  `/etc/cron.d`, `/var/spool/cron` i aaPanelu (`/www/server/cron`), varování
+  u holého `php` nebo PHP pod 8.4.1 a doporučená řádka s nalezenou binárkou.
+  Bez plánovače nechodí ani fronta — `queue:work` běží jen jako naplánovaná
+  úloha (`queue-drain`).
+* **`galerie:pred-nasazenim`:**
+  * Pravidlo „odkaz na úložiště existuje" bylo obráceně — `deploy.sh` odkaz
+    maže, protože vydává originály bez přihlášení (hlasovky hostů jdou přes
+    `/files`). Teď je vážná chyba, když `public/storage` existuje, a skript
+    odkaz maže **před** kontrolou (jinak by první nasazení skončilo
+    v údržbě).
+  * Nová vážná: mezipaměť `array`.
+  * Nová varování: `proc_open`, pošta (`log`/`array`), klíče VAPID, jazyk
+    `cs`, e-mail vlastníka, otevřená registrace.
+* **`gallery:doctor`:** hlásí vypnuté `proc_open` a spol. a zkouší, jestli
+  ffmpeg, ffprobe a exiftool opravdu běží (`-version`), ne jen jestli leží na
+  disku. `exec`/`shell_exec` nekontroluje — aplikace je už nepotřebuje.
+* **README a DEPLOYMENT_ISPCONFIG:** PHP 8.4.1+, absolutní binárka v cronu,
+  `php8.4-fpm`. `composer.json` zůstává `^8.3` schválně: jeho změna by
+  při nasazení spustila `composer install` a bez composeru na serveru by
+  nasazení zůstalo stát v údržbě.
+
+### Po nasazení (ručně, na serveru)
+
+1. `php -v` u binárky PHP-FPM i u té v cronu — obojí aspoň 8.4.1. Výpis
+   cronu je na konci `deploy.sh`.
+2. `disable_functions` nesmí obsahovat `proc_open`, `proc_close`,
+   `proc_get_status` ani `proc_terminate` (`gallery:doctor` to hlásí).
+3. `php artisan gallery:videa-bez-polohy`, pak s `--provest`.
+4. Videa, která na serveru zůstala bez metadat a náhledu:
+   `php artisan gallery:videos` (s `--compat` i kopie pro prohlížeč).
+5. Zkušební nahrání videa z telefonu: náhled hned, kopie do pár minut.
+
+### Zbývá
+
+* Distribuční ffmpeg hlásí `h264_qsv`/`vaapi`/`nvenc` i bez hardwaru —
+  první pokus selže a jede se softwarově, v logu varování u každého videa;
+  `h264_vaapi` bez `-vaapi_device` neprojde nikdy. Kdyby to vadilo, kodér
+  nastavit natvrdo.
+* Dlouhý převod drží `queue-drain` (`--max-time=280`) déle, než trvá jeho
+  zámek (10 min) — vedle může naběhnout druhý drain (jiné úlohy, jen víc
+  zátěže).
+* Ze 2ao dál: běh na MySQL 8 / CI, přihlášený průchod obou zařízení,
+  token v `localStorage` a CSP, staré `/prehled`, cloudové kopie trezoru.
+
+| Commit | Obsah |
+|---|---|
+| `3ca4de6c` | Videa a EXIF bez shellu — ffmpeg, ffprobe a exiftool přes Process |
+| `6ed65122` | `gallery:videa-bez-polohy` — starší kopie videí bez polohy |
+| `a6735df8` | Nasazení v režimu údržby, kontrola cronu a pravdivé brány |
+
+Testy: **2693 PHP testů (53 nových)**, všechny prošly v běžném čase,
+o Silvestru 23:30 i v letní noci 1. 7. 22:40. **Žádná migrace.**
+
 ## 2ao. Čtyřicáté druhé kolo — dvojice se nedá obejít, hlavní měna CZK, sdílení a upozornění (25. 9.)
 
 Rozhodnutí dvojice k otevřeným bodům z 2an: **„Vlastník nemůže partnera
