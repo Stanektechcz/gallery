@@ -396,7 +396,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   </div>
                   <div style="display:grid; grid-template-columns:{{ gridCols }}; gap:3px; padding:0 6px">
                     <sc-for list="{{ g.items }}" as="t" hint-placeholder-count="9">
-                      <button onClick="{{ t.tap }}" aria-label="Fotka" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}; outline:{{ t.ring }}; outline-offset:-3px">
+                      <!-- Obal kvůli ikoně „k tisku": tlačítko v tlačítku HTML nedovolí. -->
+                      <div style="position:relative; aspect-ratio:1">
+                      <button onClick="{{ t.tap }}" aria-label="Fotka" style="position:absolute; inset:0; width:100%; height:100%; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ t.bg }}; outline:{{ t.ring }}; outline-offset:-3px">
                         <sc-if value="{{ t.selectMode }}">
                           <span style="position:absolute; left:6px; top:6px; width:22px; height:22px; border-radius:50%; border:1.5px solid #fff; background:{{ t.checkBg }}; display:grid; place-items:center">
                             <sc-if value="{{ t.on }}"><i class="ph-bold ph-check" style="font-size:12px; color:#fff"></i></sc-if>
@@ -405,6 +407,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                         <sc-if value="{{ t.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; left:5px; bottom:4px; font-size:13px; color:#fff"></i></sc-if><sc-if value="{{ t.navrhSmazat }}"><i class="ph-duotone ph-hourglass" role="img" aria-label="Navrženo ke smazání" style="position:absolute; right:5px; top:5px; font-size:13px; color:#fff; filter:drop-shadow(0 0 2px rgba(0,0,0,.6))"></i></sc-if>
                         <sc-if value="{{ t.video }}"><span style="position:absolute; right:5px; bottom:4px; font-size:10.5px; color:#fff">{{ t.dur }}</span></sc-if>
                       </button>
+                      <sc-if value="{{ t.tiskBtn }}"><button onClick="{{ t.tiskPrepni }}" aria-pressed="{{ t.tisk }}" aria-label="{{ t.tiskLabel }}" style="position:absolute; right:3px; top:3px; width:32px; height:32px; display:grid; place-items:center; border:0; border-radius:50%; padding:0; cursor:pointer; background:{{ t.tiskBg }}; color:#fff; opacity:{{ t.tiskOp }}"><i class="ph-duotone ph-printer" style="font-size:15px"></i></button></sc-if>
+                      </div>
                     </sc-for>
                   </div>
                 </div>
@@ -1750,6 +1754,61 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </sc-for>
                     </div>
                   </sc-for>
+                </div>
+              </sc-if>
+
+              <!-- K TISKU: označené fotky, „Stáhnout vše" do telefonu a dříve stažené sady. -->
+              <sc-if value="{{ all.isKTisku }}">
+                <div style="display:flex; flex-direction:column; gap:12px">
+                  <div style="font-size:13px; color:var(--g-ink2)">{{ all.kt.head }}</div>
+                  <button onClick="{{ all.kt.stahnout }}" disabled="{{ all.kt.stahnoutOff }}" class="btn btn-primary" style="width:100%; min-height:48px; gap:7px"><i class="ph-duotone ph-download-simple" style="font-size:18px"></i>{{ all.kt.stahnoutLabel }}</button>
+                  <sc-if value="{{ all.kt.priprava }}">
+                    <div role="status" style="border:1px solid var(--g-line); border-radius:2px; padding:12px 13px; display:flex; flex-direction:column; gap:10px">
+                      <div style="display:flex; align-items:center; gap:9px; font-size:13.5px; text-wrap:pretty"><i class="ph-duotone ph-printer" style="flex:none; font-size:19px; color:var(--g-acc)"></i>{{ all.kt.pripravaText }}</div>
+                      <sc-if value="{{ all.kt.pripraveno }}">
+                        <button onClick="{{ all.kt.uloz }}" class="btn btn-primary" style="width:100%; min-height:48px; gap:7px"><i class="ph-duotone ph-device-mobile" style="font-size:18px"></i>Uložit do telefonu</button>
+                      </sc-if>
+                      <button onClick="{{ all.kt.zrus }}" style="min-height:44px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-ink)">Zrušit</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ all.kt.nacita }}">
+                    <div style="font-size:13px; color:var(--g-ink3)">Načítám fotky k tisku…</div>
+                  </sc-if>
+                  <sc-if value="{{ all.kt.chyba }}">
+                    <div style="font-size:13px; color:var(--g-mag)">Seznam k tisku se nepodařilo načíst — zkuste záložku otevřít znovu.</div>
+                  </sc-if>
+                  <sc-if value="{{ all.kt.prazdno }}">
+                    <div style="font-size:13.5px; color:var(--g-ink2); line-height:1.5; text-wrap:pretty">Fotku k tisku označíte ikonou tiskárny na dlaždici v knihovně nebo v prohlížeči fotky. Tady se pak všechny stáhnou najednou.</div>
+                  </sc-if>
+                  <sc-if value="{{ all.kt.ma }}">
+                    <div style="display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:3px">
+                      <sc-for list="{{ all.kt.tiles }}" as="k" hint-placeholder-count="6">
+                        <div style="position:relative; aspect-ratio:1">
+                          <button onClick="{{ k.open }}" aria-label="{{ k.aria }}" style="position:absolute; inset:0; width:100%; height:100%; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ k.bg }}"></button>
+                          <button onClick="{{ k.odebrat }}" aria-pressed="true" aria-label="Odebrat z tisku" style="position:absolute; right:3px; top:3px; width:34px; height:34px; display:grid; place-items:center; border:0; border-radius:50%; padding:0; cursor:pointer; background:var(--g-acc); color:#fff"><i class="ph-duotone ph-printer" style="font-size:16px"></i></button>
+                        </div>
+                      </sc-for>
+                    </div>
+                  </sc-if>
+                  <div style="font-size:11.5px; color:var(--g-ink3); line-height:1.5; text-wrap:pretty">Fotky se předají sdílení telefonu — zvolte „Uložit obrázky“ (iPhone) nebo Fotky či Galerii (Android) a v galerii je přidejte do alba. Kde sdílení není, stáhne se ZIP. Stažené fotky se přesunou do „Dříve staženo“.</div>
+                  <sc-if value="{{ all.kt.maSady }}">
+                    <div style="font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding:6px 0 0">Dříve staženo</div>
+                    <sc-for list="{{ all.kt.sady }}" as="sd" hint-placeholder-count="3">
+                      <div style="border:1px solid var(--g-line); border-radius:2px; padding:12px 13px">
+                        <div style="display:flex; align-items:center; gap:9px">
+                          <i class="ph-duotone ph-printer" style="flex:none; font-size:19px; color:var(--g-ink2)"></i>
+                          <div style="flex:1; min-width:0; font-size:14.5px; text-wrap:pretty">{{ sd.nazev }}</div>
+                        </div>
+                        <div style="font-size:11.5px; color:var(--g-ink3); margin-top:5px">{{ sd.meta }}</div>
+                        <div style="font-size:11.5px; color:var(--g-ink3); margin-top:2px">{{ sd.stazeno }}</div>
+                        <sc-if value="{{ sd.chybi }}"><div style="font-size:11.5px; color:var(--g-warn); margin-top:2px">{{ sd.chybi }}</div></sc-if>
+                        <div style="display:flex; gap:8px; margin-top:10px">
+                          <button onClick="{{ sd.znovu }}" disabled="{{ all.kt.off }}" style="flex:1; min-height:44px; border:1px solid var(--g-ink); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-ink); display:flex; align-items:center; justify-content:center; gap:6px"><i class="ph-duotone ph-arrow-clockwise" style="font-size:15px"></i>Stáhnout znovu</button>
+                          <button onClick="{{ sd.zip }}" style="flex:none; min-height:44px; padding:0 12px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:13px; color:var(--g-ink2)">Jako ZIP</button>
+                        </div>
+                      </div>
+                    </sc-for>
+                  </sc-if>
                 </div>
               </sc-if>
 
@@ -5109,6 +5168,7 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
             <div style="flex:none; display:flex; align-items:center; gap:6px; padding:14px 12px 6px">
               <button onClick="{{ lbClose }}" aria-label="Zavřít" style="width:44px; height:44px; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; color:#fff"><i class="ph-duotone ph-x" style="font-size:22px"></i></button>
               <div style="flex:1; min-width:0; text-align:center; color:rgba(255,255,255,.82); font-size:12.5px">{{ lb.meta }}</div>
+              <sc-if value="{{ lbTiskOn }}"><button onClick="{{ lbTiskPrepni }}" aria-pressed="{{ lbTisk }}" aria-label="{{ lbTiskLabel }}" style="width:44px; height:44px; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; color:{{ lbTiskColor }}"><i class="ph-duotone ph-printer" style="font-size:22px"></i></button></sc-if>
               <button onClick="{{ lbFav }}" aria-label="Oblíbené" style="width:44px; height:44px; display:grid; place-items:center; border:0; background:transparent; cursor:pointer; color:{{ lb.favColor }}"><i class="ph-duotone {{ lb.favIcon }}" style="font-size:22px"></i></button>
             </div>
             <sc-if value="{{ lbAutoOn }}">
@@ -8677,8 +8737,10 @@ class Component extends DCLogic {
       || isNed || isNedLog || isKlMood || isKlEnergy || isKlAttn || isKlBurn || isKlQuiet || isKlAsk
       || isRulSug || isPrepress || isNowOff || isEvConf || isEvLearn || isEvStats || isEvHealth
       || isCkSuggest || isCkPantry || isRt || isNd || isWhSpin || isWhOpts || isWhLog || isOffPacks || isOffState || isMom
-      || isMemPrefs || isCsList || isCsCompare || isCsSeason || isCsSplit || isRtNext || isOffPwa);
+      || isMemPrefs || isCsList || isCsCompare || isCsSeason || isCsSplit || isRtNext || isOffPwa || key === 'kTisku');
     vals.all = {
+      // K tisku — fotky označené rychlou ikonou a dříve stažené sady (`/api/k-tisku`).
+      isKTisku: key === 'kTisku', kt: key === 'kTisku' ? this.kTiskuVals() : {},
       isRulSug: isRulSug, rulSug: rulSug,
       isPrepress: isPrepress, prepress: prepress,
       isNowOff: isNowOff, nowOff: nowOff,
@@ -12222,11 +12284,197 @@ class Component extends DCLogic {
       video: !!f.isVideo, dur: f.dur || null, fav: !!f.fav, seed: f.n || 0, bg: f.bg, full: f.full || null,
       play: f.video || null, tags: f.tags && f.tags.length ? f.tags : null, people: f.people && f.people.length ? f.people : null,
       uprava: f.uprava || null, poster: f.poster || null, author: f.author || null, dev: f.dev || null,
-      navrhSmazat: f.navrhSmazat || null, caption: f.caption || ''
+      navrhSmazat: f.navrhSmazat || null, caption: f.caption || '', tisk: !!f.tisk
     };
   }
-  // Fotka z výsledků hledání podle id — prohlížeč ji otevře, i když v načtené knihovně není.
-  hledaniFotka(id) { return ((this._hl || {}).zname || {})[id] || null; }
+  // Fotka z výsledků hledání (nebo ze seznamu k tisku) podle id — prohlížeč ji otevře, i když v načtené knihovně není.
+  hledaniFotka(id) { return ((this._hl || {}).zname || {})[id] || this.kTiskuFotka(id); }
+  /*
+   * Fotky „k tisku" — rychlá ikona na dlaždici a v prohlížeči fotky.
+   *
+   * Označení je společné pro dvojici a leží na serveru (`/api/k-tisku`), ne ve
+   * sdíleném stavu: ten se skládá z opisů obou zařízení a starší opis by druhému
+   * označení vrátil nebo smazal. Co se právě ťuklo, drží jen tohle okno
+   * (`this._tisk`) a překreslí se `forceUpdate()` — bez zápisu stavu.
+   * Táž logika jako v širokém rozvržení.
+   */
+  tiskStav() {
+    return this._tisk || (this._tisk = { zmeny: {}, leti: {}, server: null, seznam: null, sady: null, nacita: false, zastarale: false, chyba: false, busy: false, priprava: null });
+  }
+  tiskNaServeru() {
+    const api = window.GalerieApi;
+    return this.galerieNaServeru() && !!(api.get && api.del);
+  }
+  // Ťuknutí z tohoto okna, pak poslední seznam ze serveru, pak příznak dlaždice z knihovny.
+  jeKTisku(p) {
+    if (!p) return false;
+    const t = this.tiskStav(), z = t.zmeny[p.id];
+    if (z !== undefined) return z;
+    return t.server ? !!t.server[p.id] : !!p.tisk;
+  }
+  // Fotka ze seznamu k tisku ve tvaru telefonu — i ta, která v načtené knihovně není.
+  kTiskuFotka(id) {
+    const f = (this.tiskStav().seznam || []).find(x => x.id === id);
+    return f ? this.hledaniNaTelefon(f) : null;
+  }
+  prepniKTisku(p) {
+    if (!p || p.video || p.isVideo) return;
+    const t = this.tiskStav(), bylo = this.jeKTisku(p);
+    t.zmeny[p.id] = !bylo;
+    t.zastarale = true;
+    this.forceUpdate();
+    if (!this.tiskNaServeru()) return;
+    const api = window.GalerieApi;
+    t.leti[p.id] = true;
+    (bylo ? api.del('k-tisku/oznacene/' + encodeURIComponent(p.id)) : api.post('k-tisku/oznacene', { id: p.id }))
+      .then(() => { delete t.leti[p.id]; this.forceUpdate(); })
+      .catch(e => { delete t.leti[p.id]; delete t.zmeny[p.id]; this.forceUpdate(); this.chybaServeru(e, 'Označení k tisku se nepodařilo uložit'); });
+  }
+  kTiskuNacti() {
+    const t = this.tiskStav();
+    if (t.nacita || !this.tiskNaServeru()) return;
+    t.nacita = true;
+    t.zastarale = false;
+    window.GalerieApi.get('k-tisku').then(res => {
+      t.nacita = false; t.chyba = false;
+      t.seznam = Array.isArray(res && res.oznacene) ? res.oznacene : [];
+      t.sady = Array.isArray(res && res.sady) ? res.sady : [];
+      // Server je teď pravda i pro dlaždice knihovny; seznam nad stropem není celý.
+      const server = {};
+      t.seznam.forEach(p => { server[p.id] = true; });
+      t.server = Number(res && res.pocet) > t.seznam.length ? null : server;
+      Object.keys(t.zmeny).forEach(id => { if (!t.leti[id]) delete t.zmeny[id]; });
+      this.forceUpdate();
+    }).catch(() => { t.nacita = false; t.chyba = true; t.chybaCas = Date.now(); this.forceUpdate(); });
+  }
+  // „Stáhnout vše" — server z označených založí sadu a označení do ní přesune.
+  kTiskuStahnout() {
+    const t = this.tiskStav();
+    if (t.busy) return;
+    if (!this.tiskNaServeru()) { this.toast('Stažení k tisku jde jen s galerií na serveru', { icon: 'ph-info', silent: true }); return; }
+    t.busy = true;
+    this.forceUpdate();
+    window.GalerieApi.post('k-tisku/sady', {}).then(res => {
+      t.busy = false;
+      const soubory = (res && res.soubory) || [];
+      soubory.forEach(f => { if (!t.leti[f.id]) t.zmeny[f.id] = false; });
+      t.seznam = (t.seznam || []).filter(p => !soubory.some(f => f.id === p.id));
+      t.zastarale = true;
+      if (res && res.sada) t.sady = [res.sada].concat((t.sady || []).filter(x => x.id !== res.sada.id));
+      this.forceUpdate();
+      if (res && res.sada) this.kTiskuDorucit(res.sada, soubory);
+    }).catch(e => { t.busy = false; this.forceUpdate(); this.chybaServeru(e, 'Sadu k tisku se nepodařilo připravit'); });
+  }
+  kTiskuZnovu(sada) {
+    const t = this.tiskStav();
+    if (t.busy || !sada || !this.tiskNaServeru()) return;
+    t.busy = true;
+    this.forceUpdate();
+    window.GalerieApi.get('k-tisku/sady/' + encodeURIComponent(sada.id)).then(res => {
+      t.busy = false;
+      this.forceUpdate();
+      this.kTiskuDorucit((res && res.sada) || sada, (res && res.soubory) || []);
+    }).catch(e => { t.busy = false; this.forceUpdate(); this.chybaServeru(e, 'Sadu se nepodařilo načíst'); });
+  }
+  // Do telefonu: sdílením systému (Uložit obrázky → Fotky), jinak ZIP se složkou sady.
+  kTiskuDorucit(sada, soubory) {
+    const api = window.GalerieApi;
+    if (!soubory.length) { this.toast('V sadě „' + sada.nazev + '“ už není co stáhnout — fotky jsou v koši nebo v trezoru', { icon: 'ph-info', silent: true }); return; }
+    if (api.soubor && api.umiSdiletSoubory && api.umiSdiletSoubory()) { this.kTiskuPriprav(sada, soubory, 0); return; }
+    this.kTiskuArchiv(sada);
+  }
+  kTiskuArchiv(sada) {
+    const api = window.GalerieApi;
+    if (!sada || !api || !api.download) return;
+    api.download(sada.archiv, sada.zip).then(ok => {
+      if (!ok) return;
+      this.toast('Sada „' + sada.nazev + '“ se stáhla jako ' + sada.zip, { icon: 'ph-printer', silent: true });
+      this.kTiskuNacti();
+    }).catch(e => this.chybaServeru(e, 'Archiv sady se nepodařilo stáhnout'));
+  }
+  // Soubory pro sdílení se stahují po dvaceti — víc originálů najednou by telefonu došla paměť.
+  kTiskuPriprav(sada, soubory, od) {
+    const t = this.tiskStav(), api = window.GalerieApi;
+    const cast = soubory.slice(od, od + 20);
+    const pr = { sada, soubory, od, hotovo: 0, celkem: cast.length, pripraveno: null };
+    t.priprava = pr;
+    this.forceUpdate();
+    Promise.all(cast.map(f => api.soubor(f.cesta, f.name, f.mime).then(x => { pr.hotovo++; if (t.priprava === pr) this.forceUpdate(); return x; })))
+      .then(files => {
+        if (t.priprava !== pr) return;
+        const ok = files.filter(Boolean);
+        if (!ok.length || !api.umiSdiletSoubory(ok)) { t.priprava = null; this.forceUpdate(); this.kTiskuArchiv(sada); return; }
+        pr.pripraveno = ok;
+        this.forceUpdate();
+      })
+      .catch(e => { if (t.priprava === pr) { t.priprava = null; this.forceUpdate(); } this.chybaServeru(e, 'Fotky se nepodařilo připravit — zkuste „Jako ZIP“ u sady níž'); });
+  }
+  // Sdílení musí vyjít z ťuknutí, proto je to samostatné tlačítko až po přípravě souborů.
+  kTiskuUloz() {
+    const t = this.tiskStav(), pr = t.priprava, api = window.GalerieApi;
+    if (!pr || !pr.pripraveno) return;
+    let slib;
+    try { slib = navigator.share({ files: pr.pripraveno, title: pr.sada.nazev }); } catch (e) { slib = Promise.reject(e); }
+    Promise.resolve(slib).then(() => {
+      if (pr.od === 0) api.post('k-tisku/sady/' + encodeURIComponent(pr.sada.id) + '/stazeno', {}).then(() => this.kTiskuNacti()).catch(() => {});
+      const dalsi = pr.od + 20;
+      if (dalsi < pr.soubory.length) { this.kTiskuPriprav(pr.sada, pr.soubory, dalsi); return; }
+      t.priprava = null;
+      this.forceUpdate();
+      this.toast('Fotky ze sady „' + pr.sada.nazev + '“ jsou v telefonu — v galerii je najdete mezi nejnovějšími', { icon: 'ph-printer', silent: true });
+    }).catch(e => {
+      // Zavřená nabídka sdílení není chyba — připravené fotky zůstanou, ťuknout jde znovu.
+      if (e && e.name === 'AbortError') { this.forceUpdate(); return; }
+      t.priprava = null;
+      this.forceUpdate();
+      this.kTiskuArchiv(pr.sada);
+    });
+  }
+  kTiskuVals() {
+    const t = this.tiskStav();
+    const server = this.tiskNaServeru();
+    // Po chybě znovu až za půl minuty — jinak by každé překreslení poslalo další požadavek.
+    const smiZnovu = !t.chyba || Date.now() - (t.chybaCas || 0) > 30000;
+    if (server && !t.nacita && smiZnovu && (t.seznam === null || t.zastarale)) setTimeout(() => this.kTiskuNacti(), 0);
+    // Z knihovny přibude, co se ťuklo mimo tuhle záložku; ze seznamu odpadne, co se odznačilo.
+    const zeSeznamu = server ? (t.seznam || []).map(f => this.hledaniNaTelefon(f)) : [];
+    const uz = {};
+    zeSeznamu.forEach(p => { uz[p.id] = 1; });
+    const fotky = zeSeznamu.concat(this.library().filter(p => !uz[p.id])).filter(p => !p.video && this.jeKTisku(p));
+    const n = fotky.length, pr = t.priprava, ids = fotky.map(p => p.id);
+    return {
+      nacita: server && t.seznam === null,
+      chyba: server && t.chyba && t.seznam === null,
+      prazdno: n === 0 && !(server && t.seznam === null),
+      ma: n > 0,
+      head: n ? this.pl(n, 'fotka čeká na tisk', 'fotky čekají na tisk', 'fotek čeká na tisk') : 'K tisku zatím nic nečeká',
+      tiles: fotky.map(p => ({
+        bg: this.tlo(p), aria: 'Otevřít fotku k tisku',
+        open: () => this.setState({ lb: p.id, lbList: ids, lbAuto: false }),
+        odebrat: () => this.prepniKTisku(p)
+      })),
+      stahnout: () => this.kTiskuStahnout(),
+      stahnoutLabel: t.busy ? 'Připravuji…' : 'Stáhnout vše (' + n + ')',
+      stahnoutOff: t.busy || n === 0,
+      priprava: !!pr,
+      pripravaText: !pr ? '' : pr.pripraveno
+        ? 'Připraveno ' + this.pl(pr.pripraveno.length, 'fotka', 'fotky', 'fotek') + (pr.soubory.length > 20 ? ' (' + (pr.od + 1) + '–' + (pr.od + pr.pripraveno.length) + ' z ' + pr.soubory.length + ')' : '') + ' ze sady „' + pr.sada.nazev + '“'
+        : 'Připravuji fotky ze sady „' + pr.sada.nazev + '“ · ' + pr.hotovo + ' z ' + pr.celkem,
+      pripraveno: !!(pr && pr.pripraveno),
+      uloz: () => this.kTiskuUloz(),
+      zrus: () => { t.priprava = null; this.forceUpdate(); },
+      maSady: (t.sady || []).length > 0,
+      sady: (t.sady || []).map(sd => ({
+        nazev: sd.nazev,
+        meta: [this.pl(sd.pocet, 'fotka', 'fotky', 'fotek'), sd.vytvoreno, sd.kdo].filter(Boolean).join(' · '),
+        stazeno: sd.stazeniPocet ? 'Staženo ' + sd.stazeniPocet + '× · naposledy ' + sd.stazeno : 'Zatím nestaženo',
+        chybi: sd.dostupne < sd.pocet ? (sd.pocet - sd.dostupne) + ' v koši nebo v trezoru — nestáhnou se' : '',
+        znovu: () => this.kTiskuZnovu(sd),
+        zip: () => this.kTiskuArchiv(sd)
+      })),
+      off: t.busy
+    };
+  }
   // ── hledání v přirozeném jazyce ──
   mNlPlaces() {
     if (this._nlPl) return this._nlPl;
@@ -12980,7 +13228,14 @@ class Component extends DCLogic {
         checkBg: on ? 'var(--g-acc)' : 'rgba(20,19,18,.32)',
         tap: () => s.selectMode
           ? this.setState({ sel: on ? s.sel.filter(x => x !== p.id) : s.sel.concat([p.id]) })
-          : this.setState({ lb: p.id })
+          : this.setState({ lb: p.id }),
+        // Rychlá ikona „k tisku" v pravém horním rohu — ne u videa, ve výběru ani u návrhu ke smazání (tam jsou hodiny).
+        tiskBtn: !p.video && !s.selectMode && !p.navrhSmazat,
+        tisk: this.jeKTisku(p),
+        tiskBg: this.jeKTisku(p) ? 'var(--g-acc)' : 'rgba(20,19,18,.38)',
+        tiskOp: this.jeKTisku(p) ? '1' : '.6',
+        tiskLabel: this.jeKTisku(p) ? 'Odebrat z tisku' : 'Označit k tisku',
+        tiskPrepni: () => this.prepniKTisku(p)
       };
     };
 
@@ -15590,6 +15845,12 @@ class Component extends DCLogic {
       lbAutoLabel: lbP && s.lbAuto ? 'Promítání · ' + (lbIdx + 1) + ' z ' + lbZdroj.length : '',
       lbAutoStop: () => { this.zastavPromitani(); this.setState({ lbAuto: false }); },
       lbFav: () => { if (!lbP) return; const was = this.isFav(lbP); this.setState({ favs: Object.assign({}, s.favs, { [lbP.id]: !was }) }); this.toast(was ? 'Odebráno z oblíbených' : 'Přidáno do oblíbených', { icon: 'ph-heart-straight' }); },
+      // K tisku — tatáž rychlá ikona jako na dlaždici; video se netiskne.
+      lbTiskOn: !!lbP && !lbP.video,
+      lbTisk: !!lbP && this.jeKTisku(lbP),
+      lbTiskColor: lbP && this.jeKTisku(lbP) ? 'var(--g-acc)' : '#fff',
+      lbTiskLabel: lbP && this.jeKTisku(lbP) ? 'Odebrat z tisku' : 'Označit k tisku',
+      lbTiskPrepni: () => { if (lbP) this.prepniKTisku(lbP); },
       // ——— Detail fotky ———
       // Tytéž údaje i akce jako v druhém rozhraní: místo s mapou, album,
       // štítky k přidání, verze s obnovením a kdo snímek nahrál.

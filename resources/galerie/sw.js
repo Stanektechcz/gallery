@@ -217,6 +217,18 @@ self.addEventListener('fetch', e => {
   }
   if (req.method !== 'GET') return;
 
+  // Soubory z knihovny (náhled, velký obrázek, video, obrázek z chatu) jdou
+  // mimo worker, rovnou přes prohlížeč. Větev pro data níž je ukládala do
+  // paměti celé — každé otevřené video i fotku v plné velikosti — a offline
+  // místo obrázku podala JSON. Video se navíc stahuje po částech (`Range`,
+  // odpověď 206), kterou paměť uložit neumí (`put` ji odmítne), a přehrávání
+  // přes worker je v Safari známý zdroj černého přehrávače. Podepsané adresy
+  // si prohlížeč drží v HTTP mezipaměti sám (`private, max-age`).
+  if (/^\/api\/(media\/[^/]+\/(thumb|video|raw)|chat\/[^/]+\/nahled)$/.test(url.pathname)) return;
+  // Archiv sady k tisku taky: ZIP s originály by v paměti workeru ležel celý
+  // a offline by místo něj přišel JSON.
+  if (/^\/api\/k-tisku\/sady\/[^/]+\/archiv$/.test(url.pathname)) return;
+
   // Data z API: nejdřív síť, kopie do paměti; offline se podá poslední známý stav.
   if (url.pathname.indexOf('/api/') >= 0) {
     e.respondWith((async () => {

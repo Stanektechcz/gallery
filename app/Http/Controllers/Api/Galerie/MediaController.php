@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
+use App\Jobs\Media\GenerateImageVariantsJob;
 use App\Jobs\MirrorMediaToCloud;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Models\MediaVariant;
 use App\Services\Billing\EntitlementService;
 use App\Services\Media\ArchivMedii;
 use App\Services\Media\MediaFormatService;
@@ -19,6 +21,8 @@ use App\Support\Trezor;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -206,10 +210,14 @@ class MediaController extends Controller
      *
      * @param  array<string, string>  $dalsi
      */
-    private function doprohlizece(string $disk, string $cesta, string $jmeno, array $dalsi = []): StreamedResponse
+    private function doprohlizece(string $disk, string $cesta, string $jmeno, array $dalsi = [], bool $vlastniSvg = false): StreamedResponse
     {
         $typ = (string) (rescue(fn () => Storage::disk($disk)->mimeType($cesta), null, false) ?: 'application/octet-stream');
-        $zobrazit = (str_starts_with($typ, 'image/') && ! str_contains($typ, 'svg'))
+        // SVG jen tehdy, když ho nakreslil server sám — viz `vlastniZastupce()`.
+        if ($vlastniSvg) {
+            $typ = 'image/svg+xml';
+        }
+        $zobrazit = (str_starts_with($typ, 'image/') && (! str_contains($typ, 'svg') || $vlastniSvg))
             || str_starts_with($typ, 'video/') || str_starts_with($typ, 'audio/');
 
         return Storage::disk($disk)->response($cesta, $jmeno, $dalsi + [
@@ -269,22 +277,97 @@ class MediaController extends Controller
          * chodil místo něj originál a nebylo to vidět; s náhledy by byla každá
          * otevřená fotka rozmazaná. Upravená verze (otočení, výřez) má přednost.
          */
-        $poradi = $request->query('velikost') === 'velky'
+        $velky = $request->query('velikost') === 'velky';
+        $poradi = $velky
             ? ['edited_preview', 'large', 'medium', 'small', 'original', 'video_poster', 'thumbnail']
             : ['edited_thumbnail', 'thumbnail', 'small', 'video_poster', 'original'];
 
-        $varianta = $media->variants()
-            ->whereIn('type', $poradi)
-            ->get()
-            ->sortBy(fn ($v) => array_search($v->type, $poradi, true))
-            ->first();
+        $varianty = $media->variants()->whereIn('type', $poradi)->get();
+
+        /*
+         * Originál, který prohlížeč nevykreslí (HEIC, TIFF, RAW), až úplně
+         * nakonec. Prohlížeč fotky ho dostával místo chybějící zmenšeniny
+         * a Chrome z něj ukázal jen podklad `#111` — černý čtverec. Menší
+         * náhled, který se vykreslí, je lepší; originál zůstává poslední
+         * možností, kdyby nic jiného nebylo.
+         */
+        $varianta = $this->prvniNaDisku($varianty, $poradi,
+            fn ($v) => $v->type !== 'original' || self::obrazekProProhlizec((string) ($v->mime_type ?: $media->mime_type)))
+            ?? $this->prvniNaDisku($varianty, $poradi);
 
         abort_if($varianta === null, 404, 'Náhled ani originál na disku nejsou.');
+
+        if ($velky && $media->media_type === 'photo' && ! in_array($varianta->type, self::VELKE_NAHLEDY, true)) {
+            $this->doplnVarianty($media);
+        }
 
         return $this->doprohlizece($varianta->disk, $varianta->path, $media->original_filename, [
             // Náhled se nemění; ať se pro druhou obrazovku nestahuje znovu.
             'Cache-Control' => 'private, max-age=86400',
-        ]);
+        ], self::vlastniZastupce($media, $varianta));
+    }
+
+    /** Zmenšeniny, které stačí na celou obrazovku prohlížeče fotky. */
+    private const VELKE_NAHLEDY = ['edited_preview', 'large', 'medium'];
+
+    /** Obrázky, které vykreslí každý běžný prohlížeč. HEIC umí jen Safari. */
+    private const OBRAZKY_PRO_PROHLIZEC = ['image/jpeg', 'image/jpg', 'image/pjpeg', 'image/png', 'image/gif', 'image/webp', 'image/avif', 'image/bmp'];
+
+    private static function obrazekProProhlizec(string $typ): bool
+    {
+        return in_array(strtolower(trim($typ)), self::OBRAZKY_PRO_PROHLIZEC, true);
+    }
+
+    /**
+     * První varianta v daném pořadí, jejíž soubor na disku opravdu je.
+     *
+     * Brala se první podle záznamu v databázi. Starší nasazení ale zakládala
+     * záznam i tehdy, když se soubor nezapsal (viz `gallery:thumbnails`),
+     * a soubor mohl zmizet i jinak — pak `Storage::response()` spadl na
+     * „Unable to retrieve the file_size" a z adresy byla pětistovka. Mřížka
+     * (`thumbnail`) přitom fungovala dál, takže to vypadalo, že se nenačítá
+     * jen detail: černý čtverec místo fotky i videa.
+     *
+     * @param  Collection<int, MediaVariant>  $varianty
+     * @param  list<string>  $poradi
+     * @param  (\Closure(MediaVariant): bool)|null  $smi
+     */
+    private function prvniNaDisku(Collection $varianty, array $poradi, ?\Closure $smi = null): ?MediaVariant
+    {
+        return $varianty
+            ->sortBy(fn ($v) => array_search($v->type, $poradi, true))
+            ->first(fn ($v) => ($smi === null || $smi($v))
+                && rescue(fn () => Storage::disk($v->disk)->exists($v->path), false, false));
+    }
+
+    /**
+     * Fotka bez velké zmenšeniny si ji nechá dodělat — jednou za půl hodiny.
+     *
+     * Stejně jako náhledy v `MediaFileController::missingPreviewResponse()`:
+     * `gallery:thumbnails` dřív doplňoval jen `thumbnail`, takže prohlížeč
+     * fotky u starších fotek neměl co ukázat v plné velikosti.
+     */
+    private function doplnVarianty(MediaItem $media): void
+    {
+        if (Cache::add('gallery:variant-repair:'.$media->id, true, now()->addMinutes(30))) {
+            GenerateImageVariantsJob::dispatch($media->id)->onQueue('media');
+        }
+    }
+
+    /**
+     * Zástupný obrázek videa, který kreslí server sám (`generateFallbackPoster`).
+     *
+     * Je to SVG a `doprohlizece()` SVG jinak vydává jako přílohu — plakát
+     * videa i dlaždice pak zůstaly prázdné (v prohlížeči černé). Tenhle
+     * soubor ale nahrát nejde: vzniká jen na téhle cestě a jen jako
+     * `video_poster` nebo `thumbnail`. Politika `sandbox` z `BEZ_SKRIPTU`
+     * platí i pro něj.
+     */
+    private static function vlastniZastupce(MediaItem $media, MediaVariant $varianta): bool
+    {
+        return in_array($varianta->type, ['video_poster', 'thumbnail'], true)
+            && $varianta->format === 'svg'
+            && $varianta->path === 'media/'.$media->uuid.'/video_placeholder.svg';
     }
 
     /**
@@ -311,15 +394,23 @@ class MediaController extends Controller
 
         // Kompatibilní převod má přednost: originál bývá v kodeku, který
         // prohlížeč neotevře, a člověk by viděl černou plochu.
-        $varianta = $media->variants()
-            ->whereIn('type', ['video_compat', 'original'])
-            ->orderByRaw("CASE type WHEN 'video_compat' THEN 0 ELSE 1 END")
-            ->first();
+        // Ze souborů, které na disku opravdu jsou — záznam převodu bez souboru
+        // dřív shodil přehrání na pětistovku, i když originál ležel vedle.
+        $poradi = ['video_compat', 'original'];
+        $varianta = $this->prvniNaDisku($media->variants()->whereIn('type', $poradi)->get(), $poradi);
 
         abort_if($varianta === null, 404, 'Soubor s videem na disku není.');
 
         $disk = Storage::disk($varianta->disk);
-        $typ = (string) ($media->mime_type ?: 'video/mp4');
+        /*
+         * Typ podle vydávaného souboru, ne podle originálu. Převod je vždycky
+         * MP4 (H.264 + AAC), ale posílal se s typem originálu — u videa
+         * z iPhonu `video/quicktime`. S `nosniff` to Safari i část ostatních
+         * prohlížečů odmítly a přehrávač zůstal černý.
+         */
+        $typ = $varianta->type === 'video_compat'
+            ? 'video/mp4'
+            : (string) ($varianta->mime_type ?: $media->mime_type ?: 'video/mp4');
         $hlavicky = [
             // Jen video — cokoli jiného by prohlížeč mohl vykreslit jako stránku.
             'Content-Type' => str_starts_with($typ, 'video/') ? $typ : 'video/mp4',

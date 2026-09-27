@@ -1191,6 +1191,37 @@
         });
     },
 
+    /*
+     * Soubor ze serveru jako `File` — fotky k tisku do telefonu.
+     *
+     * Prohlížeč do galerie telefonu zapisovat nesmí; umí ale soubory předat
+     * sdílení systému (`navigator.share`), odkud je člověk uloží do Fotek
+     * a do alba. Stahuje se přes fetch s hlavičkami ze stejného důvodu jako
+     * `download`: originál je za přihlášením. Typ ze serveru má přednost před
+     * obecným `octet-stream`, jinak by sdílení fotku nenabídlo uložit.
+     */
+    soubor: function (path, jmeno, typ) {
+      if (mode !== 'http') return Promise.resolve(null);
+      return fetch(base + '/' + path, { headers: headers(), credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
+          return r.blob();
+        })
+        .then(function (blob) {
+          var t = blob.type && blob.type !== 'application/octet-stream' ? blob.type : (typ || blob.type || 'application/octet-stream');
+          try { return new File([blob], jmeno || 'fotka.jpg', { type: t }); } catch (e) { return null; }
+        });
+    },
+
+    // Umí tenhle prohlížeč sdílet soubory (Web Share se soubory)? Bez souborů zkusí vzorový obrázek.
+    umiSdiletSoubory: function (soubory) {
+      try {
+        if (!navigator.share || !navigator.canShare || typeof File === 'undefined') return false;
+        var vzor = soubory && soubory.length ? soubory : [new File([''], 'fotka.jpg', { type: 'image/jpeg' })];
+        return !!navigator.canShare({ files: vzor });
+      } catch (e) { return false; }
+    },
+
     // Úprava jedné věci mimo stav (nastavení sdíleného odkazu). Jako post,
     // jen jiná metoda — server podle ní pozná změnu od založení.
     patch: function (path, body) {

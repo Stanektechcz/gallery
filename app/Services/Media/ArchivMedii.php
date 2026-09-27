@@ -19,10 +19,16 @@ use ZipArchive;
 class ArchivMedii
 {
     /**
+     * Sada k tisku chce soubory ve složce pojmenované po sadě („K tisku
+     * 27. 9. 2026/") a archiv s datem („K-tisku-2026-09-27.zip") — po rozbalení
+     * v telefonu je pak jedna složka, ne hromada souborů mezi staženými.
+     *
      * @param  Collection<int, MediaItem>  $polozky  s načtenými variantami typu `original`
+     * @param  string|null  $slozka  složka uvnitř archivu; bez ní leží soubory v kořeni
+     * @param  string|null  $jmenoSouboru  jméno archivu bez přípony; bez něj `Str::slug($nazev)`
      * @return BinaryFileResponse|null null, když není ani jeden originál
      */
-    public function stahnout(Collection $polozky, string $nazev): ?BinaryFileResponse
+    public function stahnout(Collection $polozky, string $nazev, ?string $slozka = null, ?string $jmenoSouboru = null): ?BinaryFileResponse
     {
         // `tempnam()` soubor rovnou založí a drží tím jméno; archiv se píše
         // vedle (ZipArchive chce příponu), takže rezervace se na konci smaže —
@@ -31,14 +37,30 @@ class ArchivMedii
         $soubor = $rezervace.'.zip';
 
         try {
-            return $this->slozit($polozky, $nazev, $soubor);
+            $odpoved = $this->slozit($polozky, $soubor, $this->predpona($slozka));
+
+            return $odpoved?->setContentDisposition('attachment',
+                ($jmenoSouboru !== null && $jmenoSouboru !== '' ? $jmenoSouboru : Str::slug($nazev ?: 'fotky')).'.zip');
         } finally {
             @unlink($rezervace);
         }
     }
 
+    /**
+     * Složka uvnitř archivu bez znaků, které by rozbalení vyneslo jinam.
+     *
+     * „../" ani lomítko ve jménu sady nesmí z archivu udělat cestu mimo složku.
+     */
+    private function predpona(?string $slozka): string
+    {
+        $cista = trim((string) preg_replace('/[\\\\\/:*?"<>|\x00-\x1F]+/u', ' ', (string) $slozka));
+        $cista = trim((string) preg_replace('/\s+/u', ' ', $cista), ' .');
+
+        return $cista === '' ? '' : $cista.'/';
+    }
+
     /** @param  Collection<int, MediaItem>  $polozky */
-    private function slozit(Collection $polozky, string $nazev, string $soubor): ?BinaryFileResponse
+    private function slozit(Collection $polozky, string $soubor, string $predpona): ?BinaryFileResponse
     {
         $zip = new ZipArchive;
         $zip->open($soubor, ZipArchive::CREATE | ZipArchive::OVERWRITE);
@@ -69,12 +91,12 @@ class ArchivMedii
             $jmeno = $this->volneJmeno($jmeno, $pouzita);
             $pouzita[mb_strtolower($jmeno)] = true;
 
-            $zip->addFile($cesta, $jmeno);
+            $zip->addFile($cesta, $predpona.$jmeno);
             $vlozeno++;
         }
 
         if ($chybi !== []) {
-            $zip->addFromString('CHYBI.txt',
+            $zip->addFromString($predpona.'CHYBI.txt',
                 "Tyhle soubory se do archivu nedostaly — originál u sebe aplikace nemá.\n"
                 ."Leží jen na připojeném Disku, nebo se přenos ještě nedokončil.\n\n"
                 .implode("\n", $chybi)."\n");
@@ -89,9 +111,10 @@ class ArchivMedii
         }
 
         // `download()` odpověď sám přepne na `public` — archiv fotek dvojice
-        // ale nesmí uložit sdílená mezipaměť (proxy, firemní síť).
+        // ale nesmí uložit sdílená mezipaměť (proxy, firemní síť). Jméno
+        // souboru dosadí `stahnout()`.
         return response()
-            ->download($soubor, Str::slug($nazev ?: 'fotky').'.zip')
+            ->download($soubor, 'fotky.zip')
             ->setPrivate()
             ->deleteFileAfterSend();
     }

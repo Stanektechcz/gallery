@@ -10,6 +10,7 @@ use App\Notifications\GalleryNotification;
 use App\Support\Cas;
 use App\Support\Cestina;
 use App\Support\TrasyPrototypu;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -48,13 +49,26 @@ class CycleService
     }
 
     /**
+     * Den výpočtu jako měnitelný `Carbon`.
+     *
+     * Příkaz připomínek předával `Cas::dnes()` (`CarbonImmutable`) a typ
+     * `?Carbon` ho odmítl — ranní připomínky cyklu na produkci padaly každý
+     * den. Veřejné metody berou jakékoli datum a tady se srovná na tvar,
+     * se kterým počítá zbytek služby (`copy()->addDays()` apod.).
+     */
+    private function den(?CarbonInterface $today): Carbon
+    {
+        return $today === null ? $this->dnes() : Carbon::parse($today->toDateString());
+    }
+
+    /**
      * Celý přehled pro jednoho člověka.
      *
      * @return array<string, mixed>
      */
-    public function overview(GallerySpace $space, User $owner, ?Carbon $today = null): array
+    public function overview(GallerySpace $space, User $owner, ?CarbonInterface $today = null): array
     {
-        $today ??= $this->dnes();
+        $today = $this->den($today);
         $settings = $this->settings($space, $owner);
 
         $days = CycleDay::where('user_id', $owner->id)
@@ -292,8 +306,9 @@ class CycleService
      * Nefiltruje se to až na obrazovce — sem se nedostane nic, co majitelka nesdílí.
      * Skrývat na frontendu údaj, který server odeslal, je iluze soukromí.
      */
-    public function partnerView(GallerySpace $space, User $owner, ?Carbon $today = null): ?array
+    public function partnerView(GallerySpace $space, User $owner, ?CarbonInterface $today = null): ?array
     {
+        $today = $this->den($today);
         $settings = $this->settings($space, $owner);
         if (! $settings->allowsPartner()) {
             return null;
@@ -428,9 +443,9 @@ class CycleService
      *
      * @return array<int, array{day: string, phase: string, cycle_day: int, fertility: int, is_recorded: bool, flow: ?string, confidence: string}>
      */
-    public function forecast(GallerySpace $space, User $owner, int $dnu = 40, ?Carbon $today = null): array
+    public function forecast(GallerySpace $space, User $owner, int $dnu = 40, ?CarbonInterface $today = null): array
     {
-        $today ??= $this->dnes();
+        $today = $this->den($today);
 
         $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
         $cycles = $this->cycles($days);
@@ -539,9 +554,9 @@ class CycleService
      *
      * @return array<int, array{code: string, level: string, title: string, detail: string}>
      */
-    public function analysis(GallerySpace $space, User $owner, ?Carbon $today = null): array
+    public function analysis(GallerySpace $space, User $owner, ?CarbonInterface $today = null): array
     {
-        $today ??= $this->dnes();
+        $today = $this->den($today);
 
         $days = CycleDay::where('user_id', $owner->id)->orderBy('day')->get();
         $cycles = $this->cycles($days);

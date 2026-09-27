@@ -14,6 +14,7 @@ use App\Http\Controllers\Api\Galerie\HledaniController;
 use App\Http\Controllers\Api\Galerie\ImportVypisuController;
 use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
 use App\Http\Controllers\Api\Galerie\KosController;
+use App\Http\Controllers\Api\Galerie\KTiskuController;
 use App\Http\Controllers\Api\Galerie\LideController;
 use App\Http\Controllers\Api\Galerie\MazaniController;
 use App\Http\Controllers\Api\Galerie\MechanismController;
@@ -189,6 +190,24 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1,api-galerie'])->pr
      */
     Route::post('tisk/objednavka', [TiskController::class, 'store'])->name('galerie.tisk.store');
     Route::post('tisk/stav', [TiskController::class, 'step'])->name('galerie.tisk.step');
+
+    /*
+     * Fotky „k tisku".
+     *
+     * Rychlá ikona na dlaždici a v prohlížeči fotku označí, „Stáhnout vše"
+     * označené přesune do sady a vydá je do telefonu (sdílením souborů, jinak
+     * jako ZIP). Stažené sady zůstávají v historii a jdou stáhnout znovu.
+     * Označení je společné pro dvojici a neleží ve sdíleném stavu.
+     */
+    Route::prefix('k-tisku')->name('galerie.k-tisku.')->group(function () {
+        Route::get('/', [KTiskuController::class, 'index'])->name('index');
+        Route::post('oznacene', [KTiskuController::class, 'oznac'])->name('oznac');
+        Route::delete('oznacene/{uuid}', [KTiskuController::class, 'zrus'])->name('zrus');
+        Route::post('sady', [KTiskuController::class, 'zaloz'])->name('sady.store');
+        Route::get('sady/{sada}', [KTiskuController::class, 'show'])->whereUuid('sada')->name('sady.show');
+        Route::get('sady/{sada}/archiv', [KTiskuController::class, 'archiv'])->whereUuid('sada')->name('sady.archiv');
+        Route::post('sady/{sada}/stazeno', [KTiskuController::class, 'stazeno'])->whereUuid('sada')->name('sady.stazeno');
+    });
 
     /*
      * Sdílení odkazem.

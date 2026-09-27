@@ -65,7 +65,8 @@
     'x-promitani': { g: 'Vzpomínky', title: 'Promítání', note: 'Dva výstupy jedné obrazovky — okno a televize. Výběr je pro obě stejný.', photo: 1,
       tabs: [['Slideshow', 'grid', 'show'], ['TV režim', 'form', 'tv']] },
     'x-tisk': { g: 'Vzpomínky', title: 'Tisk a fotoknihy', note: 'Příprava tiskových návrhů — rozvržení, korektura na archu a předtisková kontrola. Objednání řeší tiskárna, tady se připravuje podklad.', photo: 1,
-      tabs: [['Návrhy', 'print', 'print'], ['Rok v číslech', 'print', 'yearBook'], ['Kontaktní arch', 'print', 'contact'], ['Předtisková kontrola', 'print', 'prepress']] },
+      // „K tisku" je poslední, ať se nepohne `appTab: 0` (Návrhy), kam vede zbytek aplikace.
+      tabs: [['Návrhy', 'print', 'print'], ['Rok v číslech', 'print', 'yearBook'], ['Kontaktní arch', 'print', 'contact'], ['Předtisková kontrola', 'print', 'prepress'], ['K tisku', 'print', 'kTisku']] },
     'x-vybery': { g: 'Vzpomínky', title: 'Společné výběry', note: 'Fotku po fotce oba řeknete ano nebo ne. Album se udělá z toho, na čem se shodnete.', photo: 1,
       tabs: [['Hlasování', 'cur', 'curVote'], ['Shodli jsme se', 'cur', 'curMatch'], ['Rozcházíme se', 'cur', 'curSplit'], ['Hotové výběry', 'cur', 'curDone']] },
     'x-vyrocni': { g: 'Vzpomínky', title: 'Výroční album', note: 'Jedna fotka za každý rok ke stejnému dni — deset let na jedné ose.', photo: 1,

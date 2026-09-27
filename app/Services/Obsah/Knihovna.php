@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Str;
 
@@ -338,10 +339,11 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         // s dvěma sty videi si tím přidala dvě stě dotazů.
         $this->zjistiVidea($media->where('media_type', 'video')->pluck('id')->map(fn ($i) => (int) $i)->all());
         $navrhujici = $this->navrhujici($media);
+        $kTisku = $this->kTisku($media);
         $ja = auth()->id() === null ? null : (int) auth()->id();
         $poradi = $poradiOd;
 
-        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, $navrhujici, $ja, &$poradi) {
+        return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, $navrhujici, $kTisku, $ja, &$poradi) {
             $poradi++;
             $klic = $this->den($m)->format('Y-m-d');
             $den = $dny[$klic];
@@ -388,6 +390,14 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                  * partnerovo srdíčko na mojí fotce. Jediný zdroj je `user_favorites`.
                  */
                 'fav' => isset($this->oblibene[$m->id]),
+                /*
+                 * Označená k tisku — společně pro dvojici (`print_marks`).
+                 *
+                 * Jen u označené: neoznačených je většina a `false` u každé
+                 * dlaždice by byly bajty navíc. Chybějící klíč je pro obrazovku
+                 * totéž co `false`.
+                 */
+                'tisk' => isset($kTisku[$m->id]) ?: null,
                 // Stav zpracování, ne výmysl: co ještě nemá náhled, se pozná.
                 'pending' => $m->status !== 'ready',
                 /*
@@ -511,6 +521,28 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
              */
             return array_filter($radek, fn ($v) => $v !== null);
         })->values()->all();
+    }
+
+    /**
+     * Které fotky mřížky jsou k tisku: `media_item_id => true`, jedním dotazem.
+     *
+     * Označení patří prostoru fotky, ne přihlášenému — oba z dvojice vidí totéž.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @return array<int, true>
+     */
+    private function kTisku(Collection $media): array
+    {
+        if ($media->isEmpty() || ! Tabulky::je('print_marks')) {
+            return [];
+        }
+
+        return DB::table('print_marks')
+            ->whereIn('media_item_id', $media->pluck('id'))
+            ->whereIn('gallery_space_id', $media->pluck('gallery_space_id')->unique()->values())
+            ->pluck('media_item_id')
+            ->mapWithKeys(fn ($id) => [(int) $id => true])
+            ->all();
     }
 
     /**
@@ -1542,6 +1574,8 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
                 // bez metadat (a jednou i u fotky) tvrdil dvacet vteřin.
                 'dur' => $f['dur'] ?? null,
                 'fav' => $f['fav'],
+                // K tisku — telefon má vlastní kopii dlaždic (jako `navrhSmazat` níž).
+                'tisk' => $f['tisk'] ?? null,
                 'seed' => $f['n'],
                 'bg' => $f['bg'],
                 'full' => $f['full'] ?? null,
@@ -1790,11 +1824,23 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             return;
         }
 
+        /*
+         * Jen soubor, který na disku opravdu je.
+         *
+         * Stačil záznam v databázi. Když soubor chyběl (starší nasazení
+         * zakládala záznam i po nezdařeném zápisu), dostal prohlížeč adresu,
+         * ze které přišla chyba, a ukázal černý přehrávač místo věty, že
+         * soubor s videem tu není. Stat na video, ne na každou fotku —
+         * videí je v mřížce zlomek.
+         */
         $maji = DB::table('media_variants')
             ->whereIn('media_item_id', $id)
             ->whereIn('type', ['video_compat', 'original'])
-            ->distinct()
+            ->get(['media_item_id', 'disk', 'path'])
+            ->filter(fn ($v) => rescue(fn () => Storage::disk((string) $v->disk)->exists((string) $v->path), false, false))
             ->pluck('media_item_id')
+            ->map(fn ($i) => (int) $i)
+            ->unique()
             ->all();
 
         foreach ($id as $jeden) {
