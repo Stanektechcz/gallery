@@ -63,6 +63,26 @@ class UklidDocasnychSouboruTest extends TestCase
         $disk->assertExists($cerstvaRelace);
     }
 
+    /**
+     * Složený soubor z prototypu leží vedle složek s částmi (`{uživatel}-{id}.soubor`).
+     *
+     * Po sobě ho uklidí požadavek sám; když ale PHP-FPM proces uprostřed
+     * skládání velkého videa ukončí `request_terminate_timeout`, zůstal by
+     * na disku napořád — soubor, ne složka, takže ho úklid složek nevidí.
+     */
+    public function test_stary_slozeny_soubor_z_prototypu_se_smaze(): void
+    {
+        $stary = 'upload_chunks/galerie/7-up-stary.soubor';
+        $cerstvy = 'upload_chunks/galerie/7-up-cerstvy.soubor';
+        $this->ulozNaDisk($stary, now()->subDays(10));
+        $this->ulozNaDisk($cerstvy, now());
+
+        $this->artisan('gallery:clean-temp')->assertExitCode(0);
+
+        Storage::disk('local')->assertMissing($stary);
+        Storage::disk('local')->assertExists($cerstvy);
+    }
+
     public function test_stare_soubory_ze_sdileni_se_smazou_a_cerstve_zustanou(): void
     {
         $stary = 'share_target/'.Str::random(40).'.jpg';

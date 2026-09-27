@@ -228,6 +228,78 @@
     return new Promise(function (hotovo) { setTimeout(hotovo, za); }).then(pockejNaSlot);
   }
 
+  /*
+   * Velikost části při nahrávání.
+   *
+   * Server řekne, kolik unese (`media/limity` podle `post_max_size`). Kdo
+   * mu ale stojí před ním — nginx s `client_max_body_size` — se zjistit nedá
+   * jinak než odpovědí 413 (HTML stránka nginxu, ne JSON). Po ní se část
+   * zmenší na polovinu a soubor se pošle znovu; menší velikost pak platí do
+   * konce relace. Dřív 413 znamenal „se nenahrála" u každé fotky nad limit.
+   */
+  var CAST_VYCHOZI = 8 * 1024 * 1024;
+  var CAST_NEJMENSI = 256 * 1024;
+  var castNahravani = 0;
+  var limityNahravani = null;
+  var ZPRAVA_SPOJENI = 'Spojení se serverem se přerušilo — zkontrolujte signál (nebo server tuhle síť dočasně zablokoval)';
+
+  function hlavickyNahravani() {
+    var h = { 'Accept': 'application/json' };
+    var t = csrf();
+    if (t) h['X-CSRF-TOKEN'] = t;
+    if (window.GALERIE_API_TOKEN) h['Authorization'] = 'Bearer ' + window.GALERIE_API_TOKEN;
+    return h;
+  }
+
+  /*
+   * Česká věta ke stavu, který nepřišel jako JSON aplikace.
+   *
+   * nginx odpovídá na 413, 502 a 504 vlastní HTML stránkou a `r.json()` na ní
+   * padal s „Unexpected token <" — ven pak šlo nahrání bez důvodu, jako by
+   * se nestalo nic. Tady má každý stav větu, se kterou se dá něco dělat.
+   */
+  function zpravaPodleStavu(s) {
+    if (s === 413) return 'Soubor je pro server příliš velký (limit nginx client_max_body_size nebo PHP post_max_size)';
+    if (s === 419) return 'Přihlášení v prohlížeči vypršelo — obnovte stránku a nahrajte zbytek znovu';
+    if (s === 401) return 'Nejste přihlášení — přihlaste se a nahrajte zbytek znovu';
+    if (s === 403) return 'K nahrávání nemáte oprávnění';
+    if (s === 429) return 'Server teď přijímá moc požadavků najednou';
+    if (s === 507) return 'Server nemůže ukládat soubory (práva k úložišti nebo plný disk)';
+    if (s === 502 || s === 503 || s === 504) return 'Server neodpověděl včas (chyba ' + s + ')';
+    if (s >= 500) return 'Server nahrávání nepřijal (chyba ' + s + ')';
+    return 'Server odpověděl chybou ' + s;
+  }
+
+  // Chyba z odpovědi: text aplikace, když přišel JSON; jinak věta podle stavu.
+  function chybaNahravani(r) {
+    var typ = (r.headers && r.headers.get && r.headers.get('content-type')) || '';
+    var telo = typ.indexOf('json') >= 0 ? r.json().then(null, function () { return null; }) : Promise.resolve(null);
+    return telo.then(function (b) {
+      /*
+       * 403 bez JSONu neposlala aplikace, ale firewall před ní (aaPanel WAF).
+       * Neznamená odhlášení — dřív by aplikace člověka zbytečně odhlásila.
+       */
+      var zAplikace = !!b;
+      var zprava = (b && (b.message || b.zprava))
+        || (r.status === 403 && !zAplikace ? 'Požadavek zablokoval server nebo jeho firewall (403) — nahrávání teď neprojde' : zpravaPodleStavu(r.status));
+      var poCekani = r.headers && r.headers.get ? parseInt(r.headers.get('retry-after') || '', 10) : NaN;
+      return Object.assign(new Error(zprava), {
+        status: r.status, body: Object.assign({}, b || {}, { message: zprava }), zAplikace: zAplikace,
+        cekat: isNaN(poCekani) ? 0 : poCekani * 1000
+      });
+    });
+  }
+
+  // Výpadek sítě, 408, 429 a 5xx kromě „nemůžu zapisovat" se dají zkusit znovu.
+  function opakovatelna(e) {
+    var s = e && e.status;
+    return s === 0 || s === 408 || s === 429 || s === 500 || s === 502 || s === 503 || s === 504;
+  }
+
+  function pockej(ms) {
+    return new Promise(function (hotovo) { setTimeout(hotovo, ms); });
+  }
+
   function notify() {
     var snap = snapshot();
     subs.forEach(function (fn) { try { fn(snap); } catch (e) {} });
@@ -956,63 +1028,122 @@
     },
 
     // ——— Nahrávání médií ———
-    // POST {base}/media (multipart) → { id, name, bytes, status }
-    // Velké soubory jdou po částech: POST {base}/media/chunk s hlavičkami
-    // X-Upload-Id, X-Chunk-Index, X-Chunk-Count. 202 znamená, že zápis vzal
-    // service worker do fronty a doručí ho sám. Bez backendu vrací null,
-    // aby aplikace mohla soubor jen započítat lokálně.
-    upload: function (file, meta) {
+    /*
+     * Co server přijme: `{ cast, nejvic, zapis, zprava }` z `media/limity`.
+     *
+     * Ptá se jednou za dávku. Když se zeptat nepodaří (starší server, výpadek),
+     * platí výchozí hodnoty a o zbytek se postará samo nahrávání — část se po
+     * 413 zmenší a chyba zápisu přijde s větou od serveru.
+     */
+    limityNahravani: function () {
       if (mode !== 'http') return Promise.resolve(null);
-      var CHUNK = 8 * 1024 * 1024;
-      var hdr = function () {
-        var h = { 'Accept': 'application/json' };
-        var t = csrf();
-        if (t) h['X-CSRF-TOKEN'] = t;
-        if (window.GALERIE_API_TOKEN) h['Authorization'] = 'Bearer ' + window.GALERIE_API_TOKEN;
-        return h;
-      };
-      if (file.size <= CHUNK) {
-        var fd = new FormData();
-        fd.append('file', file, file.name);
-        Object.keys(meta || {}).forEach(function (k) { fd.append(k, meta[k]); });
-        return pockejNaSlot().then(function () {
-          return fetch(base + '/media', { method: 'POST', headers: hdr(), credentials: 'same-origin', body: fd });
-        }).then(function (r) {
-          if (r.status === 202) return { status: 'queued' };
-          return r.json().then(function (b) {
-            // Chybová odpověď dřív prošla jako „nahráno" — do knihovny nedorazilo nic.
-            if (!r.ok) throw Object.assign(new Error(b.message || 'HTTP ' + r.status), { status: r.status, body: b });
-            return b;
-          });
+      return fetch(base + '/media/limity', { headers: hlavickyNahravani(), credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) return null;
+          return r.json().then(null, function () { return null; });
+        }, function () { return null; })
+        .then(function (b) {
+          if (b && typeof b.cast === 'number' && b.cast > 0) limityNahravani = b;
+          return limityNahravani || { cast: CAST_VYCHOZI, zapis: true, zprava: null };
         });
-      }
+    },
+
+    /*
+     * Jeden soubor po částech: POST {base}/media/chunk s hlavičkami
+     * X-Upload-Id, X-Chunk-Index, X-Chunk-Count, X-File-Name, volitelně
+     * X-Taken-At (ms) a X-Album (uuid alba, do kterého se soubor zařadí).
+     *
+     * Po částech jdou **všechny** soubory, i malé fotky. Vícedílný formulář
+     * (`POST media`) naráží na `upload_max_filesize` a dočasný adresář PHP;
+     * syrové tělo části jen na `post_max_size`, na který se velikost části
+     * nastaví podle serveru. Fotka z telefonu (5–15 MB) tak neskončí na
+     * „soubor se nepodařilo nahrát" jen proto, že má server výchozí 2 MB.
+     *
+     * Každá část se při výpadku spojení nebo 5xx zkusí znovu (s prodlevou,
+     * `api.prodlevyNahravani`), soubor se kvůli jedné části nezačíná znovu.
+     * Poslední část, na kterou server odpoví 202 se seznamem `chybi`, doplní
+     * chybějící části — dřív se to tiše počítalo jako nahrané.
+     *
+     * `naPrubeh(odeslanoBajtu, velikost)` hlásí postup. Bez backendu vrací
+     * null, aby aplikace mohla soubor jen započítat lokálně.
+     */
+    upload: function (file, meta, naPrubeh) {
+      if (mode !== 'http') return Promise.resolve(null);
+      var api = this;
+      meta = meta || {};
+      var cast = castNahravani || (limityNahravani && limityNahravani.cast) || CAST_VYCHOZI;
       var id = 'up-' + Date.now() + '-' + Math.random().toString(16).slice(2, 8);
-      var count = Math.ceil(file.size / CHUNK);
-      var send = function (i) {
-        if (i >= count) return Promise.resolve({ id: id, status: 'complete', name: file.name, bytes: file.size });
-        var part = file.slice(i * CHUNK, Math.min(file.size, (i + 1) * CHUNK));
-        var h = hdr();
+      var count = Math.max(1, Math.ceil(file.size / cast));
+      var prodlevy = api.prodlevyNahravani || [1500, 4000, 10000];
+      var odeslane = {};
+      var doplneno = false;
+
+      function neuplne(zprava, status) {
+        return Object.assign(new Error(zprava), { status: status, body: { message: zprava } });
+      }
+
+      function posli(i, pokus) {
+        var part = file.slice(i * cast, Math.min(file.size, (i + 1) * cast));
+        var h = hlavickyNahravani();
         h['X-Upload-Id'] = id;
         h['X-Chunk-Index'] = String(i);
         h['X-Chunk-Count'] = String(count);
         h['X-File-Name'] = encodeURIComponent(file.name);
+        if (meta.taken_at) h['X-Taken-At'] = String(Math.round(meta.taken_at));
+        if (meta.album) h['X-Album'] = meta.album;
         return pockejNaSlot().then(function () {
-          return fetch(base + '/media/chunk', { method: 'POST', headers: h, credentials: 'same-origin', body: part });
+          return fetch(base + '/media/chunk', { method: 'POST', headers: h, credentials: 'same-origin', body: part })
+            .then(null, function () { throw neuplne(ZPRAVA_SPOJENI, 0); });
         }).then(function (r) {
-          if (!r.ok && r.status !== 202) throw Object.assign(new Error('HTTP ' + r.status), { status: r.status });
+          if (!r.ok) return chybaNahravani(r).then(function (e) { throw e; });
           /*
-           * Poslední část vrací hotový záznam (`id` fotky, `stored`/`duplicate`).
-           * Dřív se zahodil a vracel se jen identifikátor přenosu — duplicitní
-           * velké video se tak hlásilo jako nahrané a fotku nešlo zařadit do alba.
+           * Úspěch jen s JSONem aplikace. Stránka s kódem 200 (přesměrování
+           * na přihlášení, špatně nasměrovaný nginx, portál Wi-Fi) se dřív
+           * počítala jako nahraná fotka, která pak v knihovně nebyla.
            */
-          if (i === count - 1 && r.status !== 202) {
-            return r.json().then(function (b) { return Object.assign({ name: file.name, bytes: file.size }, b); },
-              function () { return { id: id, status: 'complete', name: file.name, bytes: file.size }; });
+          return r.json().then(null, function () { return null; }).then(function (b) {
+            var castecne = r.status === 202 && b && b.status === 'partial';
+            var hotovo = r.status !== 202 && b && b.id && (b.status === 'stored' || b.status === 'duplicate');
+            if (!castecne && !hotovo) throw neuplne('Server odpověděl nečekaně (ne jako galerie) — nahrání se nepovedlo', 0);
+            odeslane[i] = part.size;
+            if (naPrubeh) {
+              var soucet = 0;
+              Object.keys(odeslane).forEach(function (k) { soucet += odeslane[k]; });
+              try { naPrubeh(Math.min(soucet, file.size), file.size); } catch (e) {}
+            }
+            return { castecne: castecne, b: b };
+          });
+        }).then(null, function (e) {
+          if (opakovatelna(e) && pokus < prodlevy.length) {
+            return pockej(Math.max(prodlevy[pokus], e.cekat || 0)).then(function () { return posli(i, pokus + 1); });
           }
-          return send(i + 1);
+          throw e;
         });
-      };
-      return send(0);
+      }
+
+      function postupne(poradi, k) {
+        return posli(poradi[k], 0).then(function (o) {
+          if (!o.castecne) return Object.assign({ name: file.name, bytes: file.size }, o.b);
+          if (k < poradi.length - 1) return postupne(poradi, k + 1);
+          var chybi = Array.isArray(o.b.chybi) ? o.b.chybi.filter(function (x) { return x >= 0 && x < count; }) : [];
+          if (chybi.length && !doplneno) { doplneno = true; return postupne(chybi, 0); }
+          // 409: soubor se zkusí celý znovu (nahrajVse), nic se nepočítá jako hotové.
+          throw neuplne('Server nedostal všechny části souboru', 409);
+        });
+      }
+
+      var vse = [];
+      for (var i = 0; i < count; i++) vse.push(i);
+
+      return postupne(vse, 0).then(null, function (e) {
+        // 413 od nginxu nebo PHP: menší části a znovu. Limit galerie na celý soubor ne.
+        var limitGalerie = e && e.body && /^Soubor je větší/.test(e.body.message || '');
+        if (e && e.status === 413 && cast > CAST_NEJMENSI && !limitGalerie) {
+          castNahravani = Math.max(CAST_NEJMENSI, Math.floor(cast / 2));
+          return api.upload(file, meta, naPrubeh);
+        }
+        throw e;
+      });
     },
 
     /*
@@ -1034,18 +1165,35 @@
      * Přenáším originál — 62 %") a „Nahrávám 4 z 218" u tří fotek.
      *
      * `api.pauza = true` zastaví start dalších souborů; rozběhnuté doběhnou.
+     *
+     * `volby`: `album` (uuid — každý hotový soubor se na serveru rovnou
+     * zařadí do alba), `soubezne` (kolik souborů najednou, výchozí 3),
+     * `onCast(index, odeslanoBajtu, velikost)` pro postup velkého souboru.
+     * Položka v `selhalo` nese i `i` — index v `files` — kvůli „Zkusit znovu".
      */
-    nahrajVse: function (files, onProgress, onItem) {
+    nahrajVse: function (files, onProgress, onItem, volby) {
       var api = this;
+      volby = volby || {};
       var seznam = Array.prototype.slice.call(files || []);
       var celkem = seznam.length, hotovo = 0, ulozeno = 0, duplicitni = 0;
-      var selhalo = [], media = [];
+      var selhalo = [], media = [], mimoAlbum = 0;
       var fronta = seznam.map(function (f, i) { return { f: f, i: i, pokus: 0 }; });
-      var hlas = function (i, stav, zprava) { try { if (onItem) onItem(i, stav, zprava || ''); } catch (e) {} };
+      var hlas = function (i, stav, zprava, b) { try { if (onItem) onItem(i, stav, zprava || '', b || null); } catch (e) {} };
 
       function pockejNaPokracovani() {
         if (!api.pauza) return Promise.resolve();
         return new Promise(function (hotovo) { setTimeout(hotovo, 400); }).then(pockejNaPokracovani);
+      }
+
+      // Zbytek dávky se nepošle: označí se jako neodeslaný s jedním důvodem.
+      function zastavDavku(polozka, stav, zprava) {
+        var zbyle = [polozka].concat(fronta.splice(0, fronta.length));
+        zbyle.forEach(function (p) {
+          selhalo.push({ jmeno: p.f.name, stav: stav, zprava: zprava, i: p.i });
+          hlas(p.i, 'selhalo', zprava);
+          hotovo++;
+        });
+        if (onProgress) onProgress(hotovo, celkem);
       }
 
       function dalsi() {
@@ -1053,16 +1201,19 @@
           var polozka = fronta.shift();
           if (!polozka) return;
           hlas(polozka.i, 'nahravam');
-          return api.upload(polozka.f, { taken_at: polozka.f.lastModified }).then(function (b) {
+          var meta = { taken_at: polozka.f.lastModified, album: volby.album || null };
+          var prubeh = volby.onCast ? function (odeslano, velikost) { volby.onCast(polozka.i, odeslano, velikost); } : null;
+          return api.upload(polozka.f, meta, prubeh).then(function (b) {
             // Identifikátory nahraných fotek — kvůli zařazení do alba, odkud se nahrávalo.
             if (b && b.id && String(b.id).indexOf('up-') !== 0) media.push(b.id);
-            if (b && b.status === 'duplicate') { duplicitni++; hlas(polozka.i, 'duplicitni'); } else { ulozeno++; hlas(polozka.i, 'hotovo'); }
+            if (volby.album && b && b.album !== volby.album) mimoAlbum++;
+            if (b && b.status === 'duplicate') { duplicitni++; hlas(polozka.i, 'duplicitni', '', b); } else { ulozeno++; hlas(polozka.i, 'hotovo', '', b); }
             hotovo++;
             if (onProgress) onProgress(hotovo, celkem);
           }, function (e) {
             // 413 a 422 se opakováním nespraví (velký soubor, nepodporovaný formát).
             var stav = e && e.status;
-            var zprava = (e && e.body && e.body.message) || '';
+            var zprava = (e && e.body && e.body.message) || (e && e.message) || '';
             /*
              * Bez přihlášení neprojde ani jeden další soubor.
              *
@@ -1071,14 +1222,17 @@
              * označí jako neodeslaný a aplikace ukáže přihlášení.
              */
             if (stav === 401 || stav === 403) {
-              var zbyle = [polozka].concat(fronta.splice(0, fronta.length));
-              zbyle.forEach(function (p) {
-                selhalo.push({ jmeno: p.f.name, stav: stav, zprava: zprava });
-                hlas(p.i, 'selhalo', zprava);
-                hotovo++;
-              });
-              if (onProgress) onProgress(hotovo, celkem);
-              if (window.GALERIE_API_TOKEN) odhlaseno(stav, zprava);
+              zastavDavku(polozka, stav, zprava);
+              if (window.GALERIE_API_TOKEN && e.zAplikace !== false) odhlaseno(stav, zprava);
+              return;
+            }
+            /*
+             * Stejně tak server, který nemůže zapisovat (507), vypršelé
+             * přihlášení v prohlížeči (419) a album, které mezitím zmizelo:
+             * každý další soubor by skončil stejně, jen o minuty později.
+             */
+            if (stav === 507 || stav === 419 || (stav === 422 && volby.album && /^Album/.test(zprava))) {
+              zastavDavku(polozka, stav, zprava);
               return;
             }
             if (polozka.pokus < 1 && stav !== 413 && stav !== 422) {
@@ -1086,7 +1240,7 @@
               fronta.push(polozka);
               hlas(polozka.i, 'opakuji', zprava);
             } else {
-              selhalo.push({ jmeno: polozka.f.name, stav: stav || 0, zprava: zprava });
+              selhalo.push({ jmeno: polozka.f.name, stav: stav || 0, zprava: zprava, i: polozka.i });
               hlas(polozka.i, 'selhalo', zprava);
               hotovo++;
               if (onProgress) onProgress(hotovo, celkem);
@@ -1095,12 +1249,26 @@
         });
       }
 
-      var soubezne = Math.min(3, Math.max(1, celkem));
-      var vlakna = [];
-      for (var i = 0; i < soubezne; i++) vlakna.push(dalsi());
+      function spust() {
+        var soubezne = Math.min(volby.soubezne || 3, Math.max(1, celkem));
+        var vlakna = [];
+        for (var i = 0; i < soubezne; i++) vlakna.push(dalsi());
+        return Promise.all(vlakna);
+      }
 
-      return Promise.all(vlakna).then(function () {
-        return { celkem: celkem, ulozeno: ulozeno, duplicitni: duplicitni, selhalo: selhalo, media: media };
+      /*
+       * Nejdřív se zeptat serveru. Když nemůže zapisovat, nemá smysl posílat
+       * dvě stě fotek, aby každá skončila stejnou chybou — dávka skončí hned
+       * s větou, co je špatně.
+       */
+      return (celkem && api.limityNahravani ? api.limityNahravani() : Promise.resolve(null)).then(function (lim) {
+        if (lim && lim.zapis === false && fronta.length) {
+          zastavDavku(fronta.shift(), 507, lim.zprava || zpravaPodleStavu(507));
+          return;
+        }
+        return spust();
+      }).then(function () {
+        return { celkem: celkem, ulozeno: ulozeno, duplicitni: duplicitni, selhalo: selhalo, media: media, mimoAlbum: mimoAlbum };
       });
     },
 

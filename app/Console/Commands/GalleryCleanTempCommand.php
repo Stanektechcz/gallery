@@ -72,6 +72,20 @@ class GalleryCleanTempCommand extends Command
             $smazano++;
         }
 
+        /*
+         * Složený soubor z prototypu (`{uživatel}-{id}.soubor`) leží vedle složek.
+         * Po sobě ho uklidí požadavek; zůstane jen po procesu ukončeném uprostřed
+         * skládání (limit FPM) — a to bývá právě velké video.
+         */
+        foreach ($disk->files(self::CASTI_Z_PROTOTYPU) as $soubor) {
+            if ($this->zmenenoPo($disk, $soubor, $cutoff)) {
+                continue;
+            }
+
+            $disk->delete($soubor);
+            $smazano++;
+        }
+
         return $smazano;
     }
 

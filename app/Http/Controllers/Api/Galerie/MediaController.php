@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Media\CalculateMediaHashesJob;
 use App\Jobs\Media\GenerateImageVariantsJob;
 use App\Jobs\MirrorMediaToCloud;
+use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
@@ -15,6 +16,7 @@ use App\Services\Billing\EntitlementService;
 use App\Services\Media\ArchivMedii;
 use App\Services\Media\MediaFormatService;
 use App\Services\Media\UpravaFotky;
+use App\Services\Media\ZarazeniDoAlba;
 use App\Support\Cas;
 use App\Support\SpaceContext;
 use App\Support\Trezor;
@@ -23,9 +25,11 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -33,9 +37,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 /**
  * Nahrávání médií z prototypu.
  *
- * Malé soubory jedním POSTem, velké po částech — klient (`galerie-api.js`) posílá
- * části s hlavičkami `X-Upload-Id`, `X-Chunk-Index`, `X-Chunk-Count` a nic jiného
- * o serveru vědět nepotřebuje.
+ * Klient (`galerie-api.js`) posílá od září 2026 **všechno po částech** s hlavičkami
+ * `X-Upload-Id`, `X-Chunk-Index`, `X-Chunk-Count`, volitelně `X-Taken-At` a `X-Album`;
+ * velikost části si zjistí z `limity()`. Vícedílný `store()` zůstává pro starší
+ * klienty. S albem se každý hotový soubor rovnou zařadí (viz `zaradDoAlba()`).
  *
  * **Zapisuje se do existující knihovny**, ne do vlastní tabulky, kterou scaffold
  * prototypu navrhoval. Druhý sklad fotek by znamenal dva seznamy téhož: fotka
@@ -58,14 +63,31 @@ class MediaController extends Controller
     /** Klient posílá po osmi megabajtech; šestnáct je rezerva, ne pozvánka. */
     private const NEJVETSI_CAST = 16 * 1024 * 1024;
 
+    /** Kolik klient posílá v jedné části, když mu server nic menšího neřekne. */
+    private const VYCHOZI_CAST = 8 * 1024 * 1024;
+
+    /** Menší části už nemají smysl — nahrání videa by trvalo stovky požadavků. */
+    private const NEJMENSI_CAST = 256 * 1024;
+
+    /** Rezerva pod `post_max_size` na hlavičky požadavku. */
+    private const REZERVA_POZADAVKU = 64 * 1024;
+
+    private const ZPRAVA_ALBUM = 'Album, do kterého se nahrává, už v galerii není. Založte ho znovu.';
+
+    private const ZPRAVA_ZAPIS = 'Server nemohl uložit nahrávaný soubor na disk (nemá právo zápisu do úložiště nebo je plné). '
+        .'Nahrávání teď nemá smysl opakovat — je potřeba opravit server.';
+
     /** Malý soubor jedním požadavkem. */
     public function store(Request $request): JsonResponse
     {
         $request->validate([
             'file' => ['required', 'file', 'max:512000'],
             'taken_at' => ['nullable'],
+            // Nahrávání z telefonu rovnou do alba — viz `albumZPozadavku()`.
+            'album' => ['nullable', 'uuid'],
         ]);
 
+        $album = $this->albumZPozadavku($request, $request->input('album'));
         $soubor = $request->file('file');
 
         return $this->prijmi(
@@ -73,7 +95,35 @@ class MediaController extends Controller
             $soubor->getRealPath(),
             $soubor->getClientOriginalName(),
             $request->input('taken_at'),
+            $album,
         );
+    }
+
+    /**
+     * Co server přijme a jestli vůbec může zapisovat.
+     *
+     * Telefon se ptá před každou dávkou. Velikost části musí projít pod
+     * `post_max_size` — jinak PHP tělo zahodí a Laravel odpoví 413 na každou
+     * část. A když FPM nesmí psát do `storage` (vlastník root po úloze
+     * z cronu), má to telefon říct hned, ne po dvou stech neúspěšných fotkách.
+     */
+    public function limity(): JsonResponse
+    {
+        $post = self::bajty((string) ini_get('post_max_size'));
+        $cast = self::VYCHOZI_CAST;
+
+        if ($post > 0) {
+            $cast = min($cast, $post - self::REZERVA_POZADAVKU);
+        }
+
+        $zapis = $this->lzeZapisovat();
+
+        return response()->json([
+            'cast' => max(self::NEJMENSI_CAST, $cast),
+            'nejvic' => (int) config('gallery.max_upload_size_gb', 32) * 1024 * 1024 * 1024,
+            'zapis' => $zapis,
+            'zprava' => $zapis ? null : self::ZPRAVA_ZAPIS,
+        ]);
     }
 
     /**
@@ -94,6 +144,16 @@ class MediaController extends Controller
         // Identifikátor jde do cesty na disku, takže se nekontroluje jen na prázdno.
         abort_unless(preg_match('/^[A-Za-z0-9_-]{1,64}$/', $id) === 1, 422, 'Neplatný identifikátor nahrávání.');
 
+        /*
+         * Album se ověří hned u první části, ne až po přenesení celého videa.
+         * U poslední části znovu v `prijmi()` — mezitím ho mohl ten druhý smazat.
+         */
+        $albumUuid = trim((string) $request->header('X-Album', ''));
+        abort_unless($albumUuid === '' || Str::isUuid($albumUuid), 422, self::ZPRAVA_ALBUM);
+        if ($poradi === 0 && $albumUuid !== '') {
+            $this->albumZPozadavku($request, $albumUuid);
+        }
+
         $disk = Storage::disk(self::CASTI_DISK);
         // Složka patří přihlášenému: cizí nahrávání se stejným identifikátorem
         // si nemůže podstrčit ani přepsat části.
@@ -101,12 +161,26 @@ class MediaController extends Controller
 
         $vstup = $request->getContent(true);
         $cestaCasti = $adresar.'/'.str_pad((string) $poradi, 6, '0', STR_PAD_LEFT);
-        $disk->writeStream($cestaCasti, $vstup);
+        $zapsano = $disk->writeStream($cestaCasti, $vstup);
         if (is_resource($vstup)) {
             fclose($vstup);
         }
 
-        if ((int) $disk->size($cestaCasti) > self::NEJVETSI_CAST) {
+        /*
+         * Nezapsaná část.
+         *
+         * Disk má `throw => false`, takže adresář, do kterého PHP-FPM nesmí
+         * psát (vlastník root po úloze spuštěné cronem), vrátil jen `false`
+         * a pád přišel až o řádek níž na „Unable to retrieve the file_size" —
+         * obecná pětistovka, ze které nikdo nepoznal, že jde o práva na serveru.
+         */
+        $velikost = $zapsano === false ? null : rescue(fn () => (int) $disk->size($cestaCasti), null, false);
+        if ($velikost === null) {
+            $this->zapisChybu('Část nahrávaného souboru se nepodařilo zapsat na disk', $disk->path($cestaCasti));
+            abort(507, self::ZPRAVA_ZAPIS);
+        }
+
+        if ($velikost > self::NEJVETSI_CAST) {
             $disk->deleteDirectory($adresar);
             abort(413, 'Část nahrávaného souboru je příliš velká.');
         }
@@ -137,25 +211,169 @@ class MediaController extends Controller
                 'received' => count($casti),
                 'of' => $celkem,
                 'status' => 'partial',
-            ], 202);
+            ] + ($poradi === $celkem - 1 ? ['chybi' => $this->chybejiciCasti($casti, $celkem)] : []), 202);
         }
 
-        $cely = tempnam(sys_get_temp_dir(), 'galerie-');
-        $vystup = fopen($cely, 'wb');
+        /*
+         * Skládá se vedle částí, na disku aplikace — ne v `sys_get_temp_dir()`.
+         *
+         * Produkční PHP-FPM má `open_basedir` jen na adresář webu; `tempnam()`
+         * v dočasném adresáři systému tam skončil varováním, z něj byla výjimka
+         * a poslední část každého velkého souboru odpověděla 500. Tady je to
+         * navíc stejný disk jako části i cíl, takže se nic nekopíruje přes
+         * hranici souborových systémů.
+         */
+        $slozeny = $adresar.'.soubor';
+        $cely = $disk->path($slozeny);
+        $vystup = @fopen($cely, 'wb');
+
+        if ($vystup === false) {
+            $this->zapisChybu('Složený soubor se nepodařilo založit', $cely);
+            abort(507, self::ZPRAVA_ZAPIS);
+        }
 
         try {
             foreach ($casti as $cast) {
                 $zdroj = $disk->readStream($cast);
-                stream_copy_to_stream($zdroj, $vystup);
-                fclose($zdroj);
+                $zkopirovano = is_resource($zdroj) ? stream_copy_to_stream($zdroj, $vystup) : false;
+                if (is_resource($zdroj)) {
+                    fclose($zdroj);
+                }
+                if ($zkopirovano === false) {
+                    fclose($vystup);
+                    $disk->deleteDirectory($adresar);
+                    $this->zapisChybu('Části se nepodařilo složit', $cely);
+                    abort(507, self::ZPRAVA_ZAPIS);
+                }
             }
             fclose($vystup);
             $disk->deleteDirectory($adresar);
 
-            return $this->prijmi($request, $cely, $jmeno, null);
+            return $this->prijmi($request, $cely, $jmeno, $this->casPorizeni($request), $this->albumZHlavicky($request, $albumUuid));
         } finally {
-            @unlink($cely);
+            $disk->delete($slozeny);
         }
+    }
+
+    /**
+     * Pořadí částí, které serveru ještě chybí.
+     *
+     * Posílá se jen s poslední částí: telefon podle toho dopošle, co se
+     * ztratilo (výpadek spojení, opakovaná poslední část), místo aby celé
+     * nahrávání vzdal — nebo ho dřív tiše počítal jako hotové.
+     *
+     * @param  list<string>  $casti
+     * @return list<int>
+     */
+    private function chybejiciCasti(array $casti, int $celkem): array
+    {
+        $mame = array_flip(array_map(fn (string $c) => (int) basename($c), $casti));
+
+        return array_values(array_slice(
+            array_filter(range(0, $celkem - 1), fn (int $i) => ! isset($mame[$i])),
+            0,
+            1000,
+        ));
+    }
+
+    /** Datum pořízení z telefonu (`lastModified` souboru v ms), u částí v hlavičce. */
+    private function casPorizeni(Request $request): ?string
+    {
+        $cas = (string) $request->header('X-Taken-At', '');
+
+        return ctype_digit($cas) ? $cas : null;
+    }
+
+    private function albumZHlavicky(Request $request, string $uuid): ?Album
+    {
+        return $uuid === '' ? null : $this->albumZPozadavku($request, $uuid);
+    }
+
+    /**
+     * Album, do kterého se nahrává — jen nesmazané album téhož páru.
+     *
+     * Neexistující nebo cizí album se odmítne dřív, než se soubor uloží:
+     * nahrát fotku „do alba" a najít ji pak jen v knihovně by bylo horší
+     * než jasná chyba, po které jde album založit znovu.
+     */
+    private function albumZPozadavku(Request $request, mixed $uuid): ?Album
+    {
+        if ($uuid === null || $uuid === '') {
+            return null;
+        }
+
+        $album = Str::isUuid((string) $uuid)
+            ? app(ZarazeniDoAlba::class)->najdi($this->parId($request), (string) $uuid)
+            : null;
+
+        abort_if($album === null, 422, self::ZPRAVA_ALBUM);
+
+        return $album;
+    }
+
+    /**
+     * Čas z prohlížeče (ms) jen v rozumném rozsahu.
+     *
+     * Nula nebo nesmysl z telefonu by na MySQL (`timestamp` od roku 1970)
+     * shodil celý zápis — SQLite v testech to pustí. Čas z budoucnosti je
+     * špatně nastavené datum v telefonu; EXIF ho stejně přepíše.
+     */
+    private function platnyCas(mixed $ms): ?Carbon
+    {
+        if (! is_numeric($ms)) {
+            return null;
+        }
+
+        $ms = (int) $ms;
+
+        return $ms >= 86_400_000 && $ms <= (now()->timestamp + 86_400) * 1000
+            ? Carbon::createFromTimestampMs($ms)
+            : null;
+    }
+
+    /** Zápis do logu, který sám nesmí shodit odpověď — i log může patřit rootovi. */
+    private function zapisChybu(string $zprava, string $cesta): void
+    {
+        rescue(fn () => Log::error($zprava, ['cesta' => $cesta]), null, false);
+    }
+
+    /** Může PHP (na produkci FPM pod `www`) zapisovat tam, kam nahrávání ukládá? */
+    private function lzeZapisovat(): bool
+    {
+        $mista = [
+            [Storage::disk(self::CASTI_DISK), self::CASTI_ADRESAR],
+            [Storage::disk('public'), 'media'],
+        ];
+
+        foreach ($mista as [$disk, $adresar]) {
+            $ok = rescue(function () use ($disk, $adresar) {
+                if (! $disk->exists($adresar)) {
+                    $disk->makeDirectory($adresar);
+                }
+
+                return is_writable($disk->path($adresar));
+            }, false, false);
+
+            if (! $ok) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /** `8M`, `1G`, `512K` z php.ini na bajty; `0` = bez omezení. */
+    private static function bajty(string $hodnota): int
+    {
+        $hodnota = trim($hodnota);
+        $cislo = (int) $hodnota;
+
+        return match (strtolower(substr($hodnota, -1))) {
+            'g' => $cislo * 1024 * 1024 * 1024,
+            'm' => $cislo * 1024 * 1024,
+            'k' => $cislo * 1024,
+            default => $cislo,
+        };
     }
 
     /**
@@ -506,7 +724,7 @@ class MediaController extends Controller
      * @param  string  $cesta  Úplný soubor, ne část
      * @param  mixed  $takenAt  Čas poslední změny souboru z prohlížeče (ms)
      */
-    private function prijmi(Request $request, string $cesta, string $jmeno, $takenAt): JsonResponse
+    private function prijmi(Request $request, string $cesta, string $jmeno, $takenAt, ?Album $album = null): JsonResponse
     {
         $prostorId = $this->parId($request);
 
@@ -543,7 +761,14 @@ class MediaController extends Controller
             ->first();
 
         if ($stavajici) {
-            return response()->json($this->naKlienta($stavajici, 'duplicate'));
+            /*
+             * Duplicita do alba patří taky — opakované nahrání složky má
+             * skončit úplným albem. Jen ne fotka z trezoru: ta do sdíleného
+             * alba nesmí, ani když ji někdo nahraje znovu.
+             */
+            $doAlba = $album !== null && ! $stavajici->is_hidden ? $album : null;
+
+            return response()->json($this->naKlienta($stavajici, 'duplicate') + $this->zaradDoAlba($request, $stavajici, $doAlba));
         }
 
         /*
@@ -592,7 +817,7 @@ class MediaController extends Controller
              * fotka spadla na konec časové osy, kam se nikdo nedívá. Skutečné EXIF
              * ho přepíše, jakmile doběhne `ExtractMediaMetadataJob`.
              */
-            'taken_at' => $takenAt ? Carbon::createFromTimestampMs((int) $takenAt) : null,
+            'taken_at' => $this->platnyCas($takenAt),
         ]);
 
         try {
@@ -626,7 +851,36 @@ class MediaController extends Controller
 
         AuditLog::record('media.upload', $media, ['filename' => $media->original_filename]);
 
-        return response()->json($this->naKlienta($media, 'stored'), 201);
+        return response()->json($this->naKlienta($media, 'stored') + $this->zaradDoAlba($request, $media, $album), 201);
+    }
+
+    /**
+     * Hotová fotka do alba, ze kterého se nahrává.
+     *
+     * Hned po uložení, ne až na konci dávky: zavřený prohlížeč uprostřed
+     * nahrávání dvou set fotek by jinak nechal hotové fotky mimo album.
+     * Nepovedené zařazení nesmí shodit už uložený originál — klient dostane
+     * `album: null` a větu, co se stalo.
+     *
+     * @return array{album?: string|null, album_zprava?: string}
+     */
+    private function zaradDoAlba(Request $request, MediaItem $media, ?Album $album): array
+    {
+        if ($album === null) {
+            return $request->filled('album') || $request->hasHeader('X-Album') ? ['album' => null] : [];
+        }
+
+        try {
+            DB::transaction(fn () => app(ZarazeniDoAlba::class)->zarad($album, $media->gallery_space_id, [$media->uuid], $request->user()->id));
+
+            return ['album' => $album->uuid];
+        } catch (\Throwable $e) {
+            rescue(fn () => Log::warning('Nahranou fotku se nepodařilo zařadit do alba', [
+                'media_id' => $media->id, 'album_id' => $album->id, 'chyba' => $e->getMessage(),
+            ]), null, false);
+
+            return ['album' => null, 'album_zprava' => 'Soubor je nahraný, ale do alba se zařadit nepodařilo.'];
+        }
     }
 
     /**

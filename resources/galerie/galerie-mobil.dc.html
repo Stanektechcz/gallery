@@ -4521,6 +4521,17 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
           </sc-if>
         </div>
 
+        <!-- NAHRÁVÁNÍ NA POZADÍ: postup i se zavřeným listem -->
+        <sc-if value="{{ nahr.pruhOn }}">
+          <button onClick="{{ nahr.otevri }}" aria-label="Nahrávání — otevřít podrobnosti" style="position:absolute; left:{{ panePad }}; right:0; bottom:{{ barBottom }}; z-index:8; display:flex; align-items:center; gap:10px; min-height:48px; padding:8px 16px; border:0; border-top:1px solid var(--g-line); background:var(--g-raise); cursor:pointer; text-align:left; font-family:inherit; color:inherit; animation:mIn .16s ease">
+            <i class="ph-duotone {{ nahr.pruhIkona }}" style="flex:none; font-size:20px; color:var(--g-acc)"></i>
+            <span style="flex:1; min-width:0">
+              <span style="display:block; font-size:13.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis">{{ nahr.pruhText }}</span>
+              <span style="display:block; height:3px; margin-top:5px; border-radius:2px; background:var(--g-line2); overflow:hidden"><span style="display:block; height:100%; width:{{ nahr.pruhPct }}; background:var(--g-acc)"></span></span>
+            </span>
+          </button>
+        </sc-if>
+
         <!-- HROMADNÉ AKCE -->
         <sc-if value="{{ selBarOn }}">
           <div style="position:absolute; left:{{ panePad }}; right:0; bottom:{{ barBottom }}; z-index:8; padding:10px 12px; background:var(--g-ink); animation:mIn .16s ease">
@@ -5055,6 +5066,69 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </span>
                     </button>
                   </sc-for>
+                </div>
+              </sc-if>
+
+              <sc-if value="{{ sheetIsNahr }}">
+                <div style="margin-top:14px">
+                  <div style="font-size:14.5px">{{ nahr.souhrn }}</div>
+                  <sc-if value="{{ nahr.preskoceno }}"><div style="font-size:12px; color:var(--g-ink3); margin-top:4px">{{ nahr.preskoceno }}</div></sc-if>
+                  <sc-if value="{{ nahr.vyber }}">
+                    <div>
+                      <button onClick="{{ nahr.prepniAlbum }}" role="switch" aria-checked="{{ nahr.albumStav }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:52px; margin-top:12px; padding:10px 2px; border:0; border-top:1px solid var(--g-line2); border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
+                        <i class="ph-duotone {{ nahr.albumIkona }}" style="flex:none; font-size:26px; color:{{ nahr.albumBarva }}"></i>
+                        <span style="flex:1; min-width:0">
+                          <span style="display:block; font-size:15px">Uložit jako album</span>
+                          <span style="display:block; font-size:11.5px; color:var(--g-ink3); margin-top:2px">v galerii vznikne album a každá nahraná fotka se do něj hned zařadí</span>
+                        </span>
+                      </button>
+                      <sc-if value="{{ nahr.doAlba }}">
+                        <div style="margin-top:12px">
+                          <div style="font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink2); padding-bottom:6px">Název alba</div>
+                          <input value="{{ nahr.nazev }}" onInput="{{ nahr.nastavNazev }}" aria-label="Název alba" maxlength="160" class="input" style="width:100%; box-sizing:border-box; min-height:44px; font-family:inherit; font-size:15px" />
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ nahr.chyba }}"><div role="alert" style="font-size:12.5px; color:var(--g-mag); margin-top:10px; text-wrap:pretty">{{ nahr.chyba }}</div></sc-if>
+                      <button onClick="{{ nahr.spust }}" class="btn btn-primary btn-block" style="min-height:48px; margin-top:16px">{{ nahr.spustText }}</button>
+                      <button onClick="{{ nahr.vybratJine }}" class="btn btn-secondary btn-block" style="min-height:44px; margin-top:8px">Vybrat jiné soubory</button>
+                    </div>
+                  </sc-if>
+                  <sc-if value="{{ nahr.prubehOn }}">
+                    <div style="margin-top:14px">
+                      <div role="status" aria-live="polite" style="font-size:15px">{{ nahr.stavText }}</div>
+                      <div style="height:6px; margin-top:9px; border-radius:2px; background:var(--g-line2); overflow:hidden">
+                        <div style="height:100%; width:{{ nahr.pct }}; background:{{ nahr.barva }}; transition:width .3s ease"></div>
+                      </div>
+                      <div style="font-size:12px; color:var(--g-ink3); margin-top:7px; overflow-wrap:anywhere">{{ nahr.meta }}</div>
+                      <sc-if value="{{ nahr.pozn }}"><div style="font-size:11.5px; color:var(--g-ink2); margin-top:8px; text-wrap:pretty">{{ nahr.pozn }}</div></sc-if>
+                      <sc-if value="{{ nahr.chyba }}"><div role="alert" style="font-size:12.5px; color:var(--g-mag); margin-top:10px; text-wrap:pretty">{{ nahr.chyba }}</div></sc-if>
+                      <sc-if value="{{ nahr.bezi }}">
+                        <div style="display:flex; gap:8px; margin-top:14px">
+                          <button onClick="{{ nahr.prepniPauzu }}" class="btn btn-secondary" style="flex:1; min-height:44px">{{ nahr.pauzaText }}</button>
+                          <button onClick="{{ nahr.naPozadi }}" class="btn btn-secondary" style="flex:1; min-height:44px">Nahrávat na pozadí</button>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ nahr.maSelhane }}">
+                        <div>
+                          <div style="margin-top:18px; font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-mag); padding-bottom:7px; border-bottom:1px solid var(--g-line)">{{ nahr.selhaneNadpis }}</div>
+                          <sc-for list="{{ nahr.selhane }}" as="f" hint-placeholder-count="2">
+                            <div style="padding:9px 2px; border-bottom:1px solid var(--g-line2)">
+                              <div style="font-size:13.5px; overflow-wrap:anywhere">{{ f.jmeno }}</div>
+                              <div style="font-size:11.5px; color:var(--g-mag); margin-top:2px; text-wrap:pretty">{{ f.zprava }}</div>
+                            </div>
+                          </sc-for>
+                          <sc-if value="{{ nahr.selhaneVic }}"><div style="font-size:12px; color:var(--g-ink3); padding-top:8px">{{ nahr.selhaneVic }}</div></sc-if>
+                          <sc-if value="{{ nahr.lzeZnovu }}"><button onClick="{{ nahr.znovu }}" class="btn btn-primary btn-block" style="min-height:48px; margin-top:14px">{{ nahr.znovuText }}</button></sc-if>
+                        </div>
+                      </sc-if>
+                      <sc-if value="{{ nahr.hotovo }}">
+                        <div>
+                          <sc-if value="{{ nahr.albumOn }}"><button onClick="{{ nahr.otevritAlbum }}" class="btn btn-primary btn-block" style="min-height:48px; margin-top:14px">Otevřít album</button></sc-if>
+                          <button onClick="{{ nahr.zavrit }}" class="btn btn-secondary btn-block" style="min-height:44px; margin-top:8px">Hotovo</button>
+                        </div>
+                      </sc-if>
+                    </div>
+                  </sc-if>
                 </div>
               </sc-if>
 
@@ -10253,37 +10327,258 @@ class Component extends DCLogic {
     return vals;
   }
 
-  // Nahrání z telefonu: skutečný výběr souborů. Se backendem jdou soubory
-  // přes GalerieApi.upload (velké po částech), bez něj se jen započítají —
-  // knihovna v prototypu roste o to, co jste vybrali, ne o vymyšlené číslo.
-  pickMedia(fotak) {
+  /*
+   * Nahrání z telefonu: skutečný výběr souborů.
+   *
+   * Dřív se po výběru ukázala jedna hláška „N položek se nahrává" a pak
+   * minuty nic — žádný postup, žádná jména, a když telefon mezitím zhasl
+   * nebo server odpověděl chybou, nebylo poznat, co prošlo. Teď výběr otevře
+   * list „Nahrát" (souhrn, volitelně „Uložit jako album" s názvem), nahrávání
+   * ukazuje n z N, jméno souboru a chyby po jednom se „Zkusit znovu".
+   *
+   * `slozka` přidá `webkitdirectory` — celá složka, kde to telefon umí;
+   * kde ne, otevře se obyčejný výběr a název alba se vezme z data.
+   * „Vyfotit" (`fotak`) nahraje fotku hned, bez listu.
+   */
+  pickMedia(fotak, slozka) {
+    if (this._nahrBezi) {
+      this.setState({ sheet: 'nahrAlbum' });
+      this.toast('Nejdřív nechte doběhnout rozběhnuté nahrávání', { icon: 'ph-info', silent: true });
+      return;
+    }
     const inp = document.createElement('input');
     inp.type = 'file';
     inp.multiple = !fotak;
     inp.accept = fotak ? 'image/*' : 'image/*,video/*';
     // „Vyfotit" otevře rovnou fotoaparát; fotka pak jde stejnou cestou jako výběr z galerie.
     if (fotak) inp.setAttribute('capture', 'environment');
+    // Výběr složky `accept` nerespektuje; co není fotka ani video, odfiltruje `nahrPriprav`.
+    if (slozka) { inp.setAttribute('webkitdirectory', ''); inp.removeAttribute('accept'); }
     inp.style.display = 'none';
-    inp.onchange = async () => {
+    inp.addEventListener('change', () => {
       const files = Array.from(inp.files || []);
       inp.remove();
       if (!files.length) return;
-      const mb = files.reduce((a, f) => a + f.size, 0) / (1024 * 1024);
-      // Počítadlo se nezvedá dopředu: dřív knihovna ukázala „+N" dřív, než
-      // cokoli dorazilo, a u selhaného nahrání to tam zůstalo.
-      this.setState({ sheet: null, tab: 'memories', stack: [], filter: 'all' });
-      this.toast(this.pl(files.length, 'položka se nahrává', 'položky se nahrávají', 'položek se nahrává') + ' · ' + mb.toFixed(1).replace('.', ',') + ' MB', { icon: 'ph-upload-simple' });
       const api = window.GalerieApi;
       if (!api || !api.nahrajVse || api.mode !== 'http') {
-        this.toast('Nahrávat jde jen při spojení se serverem', { icon: 'ph-cloud-slash' });
+        this.setState({ sheet: null });
+        this.toast('Nahrávat jde jen při spojení se serverem', { icon: 'ph-cloud-slash', silent: true });
         return;
       }
-      const v = await api.nahrajVse(files);
-      if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) GalerieObnovit('knihovna');
-      this.toast(this.nahraniHlaska(v), { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check' });
-    };
+      this.nahrPriprav(files, slozka ? this.nahrSlozka(files) : null, !!fotak);
+      if (fotak) this.nahrSpust();
+    });
     document.body.appendChild(inp);
     inp.click();
+  }
+  // Umí prohlížeč výběr složky? Jednou za relaci — `renderVals` běží při každém překreslení.
+  nahrUmiSlozku() {
+    if (this._nahrSlozkaOk === undefined) {
+      try { this._nahrSlozkaOk = 'webkitdirectory' in document.createElement('input'); } catch (e) { this._nahrSlozkaOk = false; }
+    }
+    return this._nahrSlozkaOk;
+  }
+  // Fotka nebo video podle typu, a když ho telefon neřekne (HEIC, RAW), podle přípony.
+  nahrJeMedium(f) {
+    const typ = String((f && f.type) || '');
+    if (typ.indexOf('image/') === 0 || typ.indexOf('video/') === 0) return true;
+    return /\.(jpe?g|png|gif|webp|avif|heic|heif|bmp|tiff?|dng|cr2|cr3|nef|arw|orf|rw2|raf|mp4|mov|m4v|3gp|webm|mkv|avi)$/i.test(String((f && f.name) || ''));
+  }
+  // Jméno vybrané složky z `webkitRelativePath` („Dovolená/IMG_1.jpg" → „Dovolená").
+  nahrSlozka(files) {
+    const cesta = String((files[0] && files[0].webkitRelativePath) || '');
+    const jmeno = cesta.indexOf('/') > 0 ? cesta.split('/')[0].trim() : '';
+    return jmeno.length >= 2 ? jmeno.slice(0, 160) : null;
+  }
+  nahrNazevVychozi() {
+    const d = this.dnes();
+    return 'Album ' + d.getDate() + '. ' + (d.getMonth() + 1) + '. ' + d.getFullYear();
+  }
+  // Stav nahrávání patří telefonu: `nahr` není v `persistKey`, soubory samotné žijí jen v `_nahrSoubory`.
+  nahrUprav(zmena) {
+    this.setState({ nahr: Object.assign({}, this.state.nahr || {}, zmena) });
+  }
+  nahrPriprav(files, slozka, hned) {
+    const media = files.filter(f => this.nahrJeMedium(f));
+    this._nahrSoubory = media;
+    this._nahrAlbum = null;
+    this._nahrOdeslano = {};
+    const zmena = {
+      nahr: {
+        faze: 'vyber', slozka: slozka || null, preskoceno: files.length - media.length,
+        doAlba: !!slozka, nazev: slozka || this.nahrNazevVychozi(), album: null, chyba: '', pauza: false, zakladam: false,
+        polozky: media.map(f => ({ jmeno: f.name, velikost: f.size, stav: 'ceka', zprava: '' }))
+      },
+      sheet: media.length && !hned ? 'nahrAlbum' : null
+    };
+    // Fotka z fotoaparátu patří do dneška — rovnou tam, kde se objeví.
+    if (hned) Object.assign(zmena, { tab: 'memories', stack: [], filter: 'all' });
+    this.setState(zmena);
+    if (!media.length) this.toast('Ve výběru nejsou fotky ani videa', { icon: 'ph-warning', silent: true });
+  }
+  /*
+   * Spuštění (i „Zkusit znovu"): nejdřív album, pak soubory, které ještě nejsou hotové.
+   *
+   * Album se zakládá jen jednou za výběr (`_nahrAlbum`). Když se založit
+   * nepodaří, nenahraje se nic — fotky by jinak skončily jen v knihovně
+   * a nikdo by nevěděl, které patřily do alba.
+   */
+  async nahrSpust() {
+    const api = window.GalerieApi, files = this._nahrSoubory || [];
+    let n = this.state.nahr;
+    if (!n || !files.length || this._nahrBezi || !api) return;
+    // Album zmizelo (smazal ho ten druhý) — při dalším pokusu se založí znovu.
+    if (this._nahrAlbum && (n.polozky || []).some(p => p.stav === 'selhalo' && /^Album/.test(p.zprava || ''))) this._nahrAlbum = null;
+    if (n.doAlba && !this._nahrAlbum) {
+      const nazev = String(n.nazev || '').trim();
+      if (nazev.length < 2) { this.nahrUprav({ chyba: 'Album potřebuje název aspoň o dvou znacích.' }); return; }
+      this.nahrUprav({ chyba: '', zakladam: true });
+      try {
+        const res = await api.post('alba', { nazev: nazev.slice(0, 160) });
+        if (!res || !res.album) throw new Error('bez alba');
+        this._nahrAlbum = { uuid: res.album, nazev: nazev };
+        if (window.GalerieObsahNavlec) window.GalerieObsahNavlec(res.data, res.prazdne);
+      } catch (e) {
+        const t = (e && e.body) || {};
+        const prvni = t.errors ? (Object.values(t.errors)[0] || [])[0] : null;
+        this.nahrUprav({ zakladam: false, chyba: (t.zprava || t.message || prvni || 'Album se nepodařilo založit') + ' — nic se zatím nenahrálo.' });
+        return;
+      }
+    }
+    n = this.state.nahr;
+    const indexy = n.polozky.map((p, i) => i).filter(i => n.polozky[i].stav !== 'hotovo' && n.polozky[i].stav !== 'duplicitni');
+    if (indexy.length) await this.nahrDavka(indexy, this._nahrAlbum);
+  }
+  async nahrDavka(indexy, album) {
+    const api = window.GalerieApi, files = this._nahrSoubory || [];
+    this._nahrBezi = true;
+    api.pauza = false;
+    this.nahrNechRozsviceno(true);
+    this._nahrOdeslano = this._nahrOdeslano || {};
+    indexy.forEach(i => { this._nahrOdeslano[i] = 0; });
+    this.nahrUprav({
+      faze: 'bezi', album: album || null, chyba: '', zakladam: false, pauza: false,
+      polozky: this.state.nahr.polozky.map((p, i) => indexy.indexOf(i) >= 0 ? Object.assign({}, p, { stav: 'ceka', zprava: '' }) : p)
+    });
+    let v = null;
+    try {
+      v = await api.nahrajVse(indexy.map(i => files[i]), null,
+        (k, stav, zprava) => this.nahrPolozka(indexy[k], stav, zprava),
+        { album: album ? album.uuid : null, soubezne: 2, onCast: (k, odeslano) => this.nahrPrubeh(indexy[k], odeslano) });
+    } catch (e) {
+      v = null;
+    }
+    this._nahrBezi = false;
+    this.nahrNechRozsviceno(false);
+    if (!v) {
+      this.nahrUprav({ faze: 'hotovo', chyba: 'Nahrávání se nečekaně přerušilo — nevyřízené soubory zkuste znovu.' });
+      return;
+    }
+    this.nahrUprav({ faze: 'hotovo' });
+    if ((v.ulozeno || v.duplicitni) && window.GalerieObnovit) window.GalerieObnovit('knihovna');
+    // Jedna hláška na konci dávky, tichá — žádná za každý soubor.
+    const kam = album && (v.ulozeno || v.duplicitni) ? ' · album „' + album.nazev + '“' : '';
+    const mimo = v.mimoAlbum ? ' · ' + this.pl(v.mimoAlbum, 'soubor se do alba nezařadil', 'soubory se do alba nezařadily', 'souborů se do alba nezařadilo') : '';
+    this.toast(this.nahraniHlaska(v) + kam + mimo, { icon: v.selhalo.length ? 'ph-warning' : 'ph-cloud-check', silent: true });
+  }
+  nahrPolozka(i, stav, zprava) {
+    const n = this.state.nahr;
+    if (!n || !n.polozky[i]) return;
+    if ((stav === 'opakuji' || stav === 'selhalo') && this._nahrOdeslano) this._nahrOdeslano[i] = 0;
+    this.nahrUprav({ polozky: n.polozky.map((p, j) => j === i ? Object.assign({}, p, { stav: stav, zprava: zprava || '' }) : p) });
+  }
+  // Postup velkého souboru po částech: jen číslo stranou a překreslení nejvýš dvakrát za vteřinu.
+  nahrPrubeh(i, odeslano) {
+    (this._nahrOdeslano = this._nahrOdeslano || {})[i] = odeslano;
+    const ted = Date.now();
+    if (ted - (this._nahrKresleno || 0) < 500) return;
+    this._nahrKresleno = ted;
+    this.forceUpdate();
+  }
+  // Rozsvícený displej: zhasnutý telefon aplikaci uspí a nahrávání se zastaví.
+  nahrNechRozsviceno(ano) {
+    try {
+      if (!ano) {
+        if (this._nahrZamek) this._nahrZamek.release().catch(() => {});
+        this._nahrZamek = null;
+        return;
+      }
+      if (navigator.wakeLock && navigator.wakeLock.request) navigator.wakeLock.request('screen').then(z => { this._nahrZamek = z; }, () => {});
+    } catch (e) {}
+  }
+  nahrZahod() {
+    if (this._nahrBezi) return;
+    this._nahrSoubory = null;
+    this._nahrAlbum = null;
+    this._nahrOdeslano = {};
+    this.setState({ nahr: null, sheet: null });
+  }
+  nahrVals() {
+    const n = this.state.nahr;
+    if (!n) return { pruhOn: false };
+    const pol = n.polozky || [];
+    const celkem = pol.length;
+    const jeHotova = p => p.stav === 'hotovo' || p.stav === 'duplicitni';
+    const hotove = pol.filter(jeHotova).length;
+    const selhane = pol.map((p, i) => Object.assign({ i: i }, p)).filter(p => p.stav === 'selhalo');
+    const odes = this._nahrOdeslano || {};
+    const bajty = pol.reduce((a, p) => a + p.velikost, 0);
+    const hotoveBajty = pol.reduce((a, p, i) => a + (jeHotova(p) ? p.velikost : p.stav === 'selhalo' ? 0 : Math.min(p.velikost, odes[i] || 0)), 0);
+    const mb = x => (x / (1024 * 1024)).toFixed(1).replace('.', ',') + ' MB';
+    const bezi = n.faze === 'bezi';
+    const prave = pol.filter(p => p.stav === 'nahravam' || p.stav === 'opakuji').map(p => p.jmeno);
+    const api = window.GalerieApi;
+    return {
+      vyber: n.faze === 'vyber',
+      prubehOn: n.faze === 'bezi' || n.faze === 'hotovo',
+      bezi: bezi,
+      hotovo: n.faze === 'hotovo',
+      souhrn: this.pl(celkem, 'položka', 'položky', 'položek') + ' · ' + mb(bajty) + (n.slozka ? ' · složka „' + n.slozka + '“' : ''),
+      preskoceno: n.preskoceno ? this.pl(n.preskoceno, 'soubor není fotka ani video — přeskočí se', 'soubory nejsou fotky ani videa — přeskočí se', 'souborů nejsou fotky ani videa — přeskočí se') : '',
+      doAlba: !!n.doAlba,
+      albumIkona: n.doAlba ? 'ph-toggle-right' : 'ph-toggle-left',
+      albumBarva: n.doAlba ? 'var(--g-acc)' : 'var(--g-ink3)',
+      albumStav: n.doAlba ? 'true' : 'false',
+      prepniAlbum: () => this.nahrUprav({ doAlba: !n.doAlba, chyba: '' }),
+      nazev: n.nazev || '',
+      nastavNazev: e => this.nahrUprav({ nazev: e.target.value, chyba: '' }),
+      spustText: n.zakladam ? 'Zakládám album…' : 'Nahrát ' + this.pl(celkem, 'položku', 'položky', 'položek') + (n.doAlba ? ' jako album' : ''),
+      spust: () => { if (!n.zakladam) this.nahrSpust(); },
+      vybratJine: () => { const sl = !!n.slozka; this.nahrZahod(); this.pickMedia(false, sl); },
+      stavText: (bezi ? 'Nahráno ' : 'Hotovo · nahráno ') + hotove + ' z ' + celkem + (n.album ? ' · album „' + n.album.nazev + '“' : ''),
+      pct: (bajty ? Math.round(hotoveBajty / bajty * 100) : 100) + '%',
+      barva: selhane.length ? 'var(--g-warn)' : 'var(--g-acc)',
+      meta: bezi
+        ? (n.pauza ? 'Pozastaveno — rozběhnuté soubory doběhnou' : prave.length ? 'Právě: ' + prave.slice(0, 2).join(', ') : 'Připravuji další soubor…') + ' · ' + mb(hotoveBajty) + ' z ' + mb(bajty)
+        : mb(hotoveBajty) + ' přeneseno',
+      pozn: bezi ? 'Nechte aplikaci otevřenou. Když ji telefon zavře, nahrávání se zastaví — co je hotové, zůstane uložené' + (n.album ? ' i v albu' : '') + ' a zbytek půjde vybrat znovu.' : '',
+      pauzaText: n.pauza ? 'Pokračovat' : 'Pozastavit',
+      prepniPauzu: () => { if (!api) return; api.pauza = !n.pauza; this.nahrUprav({ pauza: api.pauza }); },
+      naPozadi: () => this.setState({ sheet: null }),
+      chyba: n.chyba || '',
+      maSelhane: selhane.length > 0,
+      selhaneNadpis: 'Nenahrálo se · ' + selhane.length,
+      selhane: selhane.slice(0, 50).map(p => ({ jmeno: p.jmeno, zprava: p.zprava || 'Neznámá chyba' })),
+      selhaneVic: selhane.length > 50 ? 'a ' + (selhane.length - 50) + ' dalších' : '',
+      lzeZnovu: !bezi && selhane.length > 0,
+      znovuText: 'Zkusit znovu ' + this.pl(selhane.length, 'soubor', 'soubory', 'souborů'),
+      znovu: () => this.nahrSpust(),
+      albumOn: !bezi && !!n.album && hotove > 0,
+      otevritAlbum: () => {
+        const uuid = n.album.uuid;
+        this.nahrZahod();
+        this.setState({ tab: 'more', stack: ['albums'], albumId: uuid });
+        this.push('album');
+      },
+      zavrit: () => this.nahrZahod(),
+      // Pruh nad spodní lištou, když je list zavřený: nahrávání běží dál a je vidět.
+      pruhOn: (bezi || (n.faze === 'hotovo' && selhane.length > 0)) && !this.state.sheet && !this.state.selectMode,
+      pruhText: bezi ? 'Nahráno ' + hotove + ' z ' + celkem + (selhane.length ? ' · ' + this.pl(selhane.length, 'chyba', 'chyby', 'chyb') : '') + (n.album ? ' · „' + n.album.nazev + '“' : '')
+        : this.pl(selhane.length, 'soubor se nenahrál', 'soubory se nenahrály', 'souborů se nenahrálo') + ' — klepněte pro detail',
+      pruhIkona: bezi ? 'ph-cloud-arrow-up' : 'ph-warning',
+      pruhPct: (bajty ? Math.round(hotoveBajty / bajty * 100) : 100) + '%',
+      otevri: () => this.setState({ sheet: 'nahrAlbum' })
+    };
   }
   /*
    * Hláška po nahrání — co prošlo, co už v knihovně bylo, co zůstalo venku.
@@ -15336,8 +15631,9 @@ class Component extends DCLogic {
 
       // sheety
       sheetOn: !!s.sheet,
-      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : s.sheet === 'odhlasit' ? 'Odhlásit se?' : s.sheet === 'schvalitSam' ? 'Schválit bez partnera?' : '',
+      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'nahrAlbum' ? 'Nahrát do galerie' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : s.sheet === 'odhlasit' ? 'Odhlásit se?' : s.sheet === 'schvalitSam' ? 'Schválit bez partnera?' : '',
       sheetNote: s.sheet === 'upload' ? 'Originály se přenesou na server, jen když je Wi-Fi nebo to povolíte.'
+        : s.sheet === 'nahrAlbum' ? 'Originály jdou na server po částech, dva soubory najednou. Co se nenahraje, zůstane v seznamu ke zkusení znovu.'
         : s.sheet === 'vypis' ? 'Na který účet? Pak vyberete soubor z banky (CSV, XLS nebo XLSX) — co už v knize je, se nezdvojí.'
         : s.sheet === 'sort' ? ({ memories: 'Vzpomínky', finance: 'Transakce', trips: 'Cesty', places: 'Místa', albums: 'Alba' }[screen] || null)
         // U dvojice se všechny čtyři volby stáhnou hned (tisk, ZIP, CSV, itineráře);
@@ -15359,6 +15655,8 @@ class Component extends DCLogic {
         this.navrhVyrid('schvalit-sam', ids);
       },
       sheetIsFilter: s.sheet === 'filter', sheetIsUpload: s.sheet === 'upload',
+      // Nahrávání z telefonu (i jako album) — viz `pickMedia` a `nahrVals`.
+      sheetIsNahr: s.sheet === 'nahrAlbum', nahr: this.nahrVals(),
       sheetIsSearch: s.sheet === 'search', sheetIsTx: s.sheet === 'tx', sheetIsAdd: s.sheet === 'add',
       sheetIsCyc: s.sheet === 'cyc', sheetIsVypis: s.sheet === 'vypis',
       filterChips: [['all', 'Vše'], ['fav', 'Oblíbené'], ['video', 'Videa']].concat(DAYS.map(d => [d[1], d[1]])).map(c => ({
@@ -15374,10 +15672,12 @@ class Component extends DCLogic {
           if (this.galerieNaServeru()) { this.pickMedia(true); return; }
           this.setState({ extra: s.extra + 1, sheet: null, tab: 'memories', stack: [], filter: 'all' }); this.toast('1 fotka nahrána', { icon: 'ph-camera', undo: () => this.setState({ extra: s.extra }) });
         } },
-        { label: 'Z galerie telefonu', icon: 'ph-images', note: 'vyberte fotky a videa', go: () => this.pickMedia() },
+        { label: 'Z galerie telefonu', icon: 'ph-images', note: 'vyberte klidně stovky fotek a videí — můžete je uložit jako album', go: () => this.pickMedia() },
+        // Kde prohlížeč výběr složky nemá, otevře se obyčejný výběr — proto jen tam, kde vlastnost existuje.
+        this.nahrUmiSlozku() ? { label: 'Celá složka jako album', icon: 'ph-folder-simple-plus', note: 'album dostane jméno složky; když ji telefon nenabídne, vyberte fotky ručně', go: () => this.pickMedia(false, true) } : null,
         { label: 'Naskenovat účtenku', icon: 'ph-receipt', note: 'založí platbu k zařazení', go: () => this.setState({ sheet: 'add', addKind: 'tx', addA: '', addB: '' }) },
         { label: 'Zápis do deníku', icon: 'ph-notebook', note: 'text nebo hlasovka', go: () => this.setState({ sheet: 'add', addKind: 'diary', addA: '', addB: '' }) }
-      ],
+      ].filter(Boolean),
       query: s.query,
       setQuery: e => this.setState({ query: e.target.value }),
       queryKey: e => { if (e.key === 'Escape') this.setState({ sheet: null }); },

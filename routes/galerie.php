@@ -464,6 +464,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1,api-galerie'])->pr
 Route::middleware(['auth:sanctum', 'dvojice', 'throttle:600,1,media'])->prefix('api')->group(function () {
     Route::post('media', [MediaController::class, 'store'])->name('galerie.media.store');
     Route::post('media/chunk', [MediaController::class, 'chunk'])->name('galerie.media.chunk');
+    // Velikost části a právo zápisu — telefon se ptá před dávkou (viz MediaController::limity).
+    Route::get('media/limity', [MediaController::class, 'limity'])->name('galerie.media.limity');
     Route::get('media/{uuid}/raw', [MediaController::class, 'raw'])->name('galerie.media.raw');
     // „Do koše" ve společném režimu jen navrhne — viz MazaniController.
     Route::delete('media/{uuid}', [MazaniController::class, 'smazat'])->name('galerie.media.destroy');

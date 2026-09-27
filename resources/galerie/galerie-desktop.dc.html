@@ -33720,7 +33720,10 @@ class Component extends DCLogic {
           polozky[i] = Object.assign({}, polozky[i], { stav, zprava });
           if (stav === 'hotovo' || stav === 'duplicitni') hotovoBajtu += files[i].size;
           obnov();
-        });
+        },
+        // Každý hotový soubor jde do alba rovnou na serveru (jako na telefonu) —
+        // přerušené nahrávání tak nenechá hotové fotky mimo album.
+        { album: doAlba && /^[0-9a-f-]{36}$/i.test(String(doAlba)) ? doAlba : null });
       this.setState({ queuePct: 100 });
       /*
        * „Nahrát do alba" z obrazovky alba nahrálo do knihovny a album zůstalo
