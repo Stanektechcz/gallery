@@ -32,6 +32,17 @@ final class PrihlaseniZarizeni
     public const PLATNOST_DNI = 60;
 
     /**
+     * Nejdéle, co jedno přihlášení vydrží, i když se používá denně.
+     *
+     * Klouzavá platnost sama by ukradený token, který se aspoň jednou za
+     * šedesát dní použije, držela naživu napořád. Po roce se zařízení
+     * přihlásí znovu — jednou ročně to nikoho neobtěžuje. Rozhodnutí 27. 9.:
+     * přihlášení přes cookie místo tokenu v `localStorage` až po nasazení,
+     * do té doby aspoň tenhle strop.
+     */
+    public const NEJDELE_DNI = 365;
+
+    /**
      * Značka přihlašovacího tokenu mezi jeho schopnostmi.
      *
      * Posouvat se smí jen platnost, kterou vydalo přihlášení. Jiný sloupec na
@@ -76,6 +87,10 @@ final class PrihlaseniZarizeni
         }
 
         $nova = now()->addDays(self::PLATNOST_DNI);
+
+        if ($token->created_at !== null) {
+            $nova = $nova->min($token->created_at->copy()->addDays(self::NEJDELE_DNI));
+        }
 
         if ($token->expires_at->gt($nova->copy()->subHours(self::POSUN_PO_HODINACH))) {
             return;

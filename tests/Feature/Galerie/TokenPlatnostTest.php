@@ -129,6 +129,36 @@ class TokenPlatnostTest extends TestCase
     }
 
     /**
+     * Ani denně používané přihlášení nevydrží déle než rok.
+     *
+     * Klouzavá platnost sama by ukradený token, použitý aspoň jednou za
+     * šedesát dní, držela naživu napořád.
+     */
+    public function test_prihlaseni_nevydrzi_dele_nez_rok(): void
+    {
+        $this->freezeTime();
+        $token = $this->prihlas();
+        $vznik = now()->toImmutable();
+
+        // Šestkrát po 55 dnech = den 330; každé použití platnost posune,
+        // poslední už jen po strop roku od přihlášení.
+        foreach (range(1, 6) as $_) {
+            $this->travel(55)->days();
+            $this->resetAuth();
+            $this->withToken($token)->getJson('/api/state')->assertOk();
+        }
+
+        $this->assertSame(
+            $vznik->addDays(PrihlaseniZarizeni::NEJDELE_DNI)->getTimestamp(),
+            $this->adri->tokens()->sole()->expires_at->getTimestamp(),
+        );
+
+        $this->travel(PrihlaseniZarizeni::NEJDELE_DNI - 330 + 1)->days();
+        $this->resetAuth();
+        $this->withToken($token)->getJson('/api/state')->assertStatus(401);
+    }
+
+    /**
      * Zrušení, které přijde uprostřed požadavku, posun platnosti nepřepíše.
      *
      * Sanctum načte token a teprve pak ohlásí, že prošel; mezi tím ho druhé
