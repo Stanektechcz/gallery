@@ -231,6 +231,9 @@ git checkout -- public/build 2>/dev/null || true
 git clean -qfd public/build 2>/dev/null || true
 
 PRED="$(git rev-parse HEAD)"
+# Kam se vrátit, kdyby nový kód nešel: `git checkout <tohle>`, `optimize:clear`,
+# reload PHP-FPM. Bez zápisu se to po `git pull` hledá v reflogu.
+echo "Předchozí verze (pro návrat): $PRED"
 
 echo
 echo "== Stahuji kód a assety =="
@@ -272,6 +275,12 @@ else
     echo "== Závislosti =="
     echo "composer.lock beze změny — přeskakuji."
 fi
+
+# Konfigurace z mezipaměti pryč hned po kódu. Kdyby ji někdo někdy uložil
+# ručně (`config:cache`, `optimize`), kontrola před nasazením, záloha i migrace
+# by běžely se starými hodnotami — `optimize:clear` přichází až po migraci.
+KROK="config:clear"
+"$PHP" artisan config:clear
 
 echo
 echo "== Veřejný disk =="
@@ -361,16 +370,35 @@ fi
 # `artisan up`: jinak by opcache ještě chvíli po ukončení údržby podávala
 # starý kód pod novým schématem.
 KROK="reload PHP-FPM"
-if [ "$(id -u)" = "0" ] && command -v systemctl >/dev/null 2>&1; then
-    FPM_UNIT="$(systemctl list-units --type=service --no-legend 'php*-fpm.service' 2>/dev/null | awk 'NR==1{print $1}')"
+# Hledá se FPM **té verze PHP, se kterou nasazení běží** — na serveru jich bývá
+# víc a první nalezená jednotka mohla být 8.1. aaPanel nemá jednotky systemd,
+# ale init skript `/etc/init.d/php-fpm-84`; Debian/Ubuntu `php8.4-fpm.service`.
+PHP_VER="$("$PHP" -r 'echo PHP_MAJOR_VERSION.PHP_MINOR_VERSION;' 2>/dev/null || true)"
+PHP_VER_TECKA="$("$PHP" -r 'echo PHP_MAJOR_VERSION.".".PHP_MINOR_VERSION;' 2>/dev/null || true)"
+FPM_HOTOVO=0
 
-    if [ -n "$FPM_UNIT" ]; then
-        systemctl reload "$FPM_UNIT" && echo "PHP-FPM načten znovu: $FPM_UNIT"
-    else
-        echo "PHP-FPM jednotku jsem nenašel — načtěte ji ručně, jinak poběží starý kód."
+if [ "$(id -u)" = "0" ]; then
+    if [ -n "$PHP_VER" ] && [ -x "/etc/init.d/php-fpm-$PHP_VER" ]; then
+        "/etc/init.d/php-fpm-$PHP_VER" reload && FPM_HOTOVO=1 \
+            && echo "PHP-FPM načten znovu: /etc/init.d/php-fpm-$PHP_VER"
+    elif command -v systemctl >/dev/null 2>&1; then
+        FPM_UNIT=""
+        for kandidat in "php$PHP_VER_TECKA-fpm.service" "php-fpm-$PHP_VER.service"; do
+            if [ -n "$PHP_VER" ] && systemctl list-unit-files --no-legend "$kandidat" 2>/dev/null | grep -q .; then
+                FPM_UNIT="$kandidat"
+                break
+            fi
+        done
+
+        if [ -n "$FPM_UNIT" ]; then
+            systemctl reload "$FPM_UNIT" && FPM_HOTOVO=1 && echo "PHP-FPM načten znovu: $FPM_UNIT"
+        fi
     fi
-else
-    echo "PHP-FPM nenačítám (nejsem root nebo tu není systemd) — načtěte ho ručně."
+fi
+
+if [ "$FPM_HOTOVO" != "1" ]; then
+    echo "PHP-FPM $PHP_VER_TECKA jsem nenačetl (nejsem root, nebo jsem jeho službu nenašel)."
+    echo "Načtěte ho ručně, jinak může poběžet starý kód (aaPanel: /etc/init.d/php-fpm-$PHP_VER reload)."
 fi
 
 echo
