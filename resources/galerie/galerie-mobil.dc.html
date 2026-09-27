@@ -12443,6 +12443,8 @@ class Component extends DCLogic {
     const fotky = zeSeznamu.concat(this.library().filter(p => !uz[p.id])).filter(p => !p.video && this.jeKTisku(p));
     const n = fotky.length, pr = t.priprava, ids = fotky.map(p => p.id);
     return {
+      // Odznak u „Pro tisk" v nabídce Více čte tohle číslo — žádný druhý výpočet.
+      pocet: n,
       nacita: server && t.seznam === null,
       chyba: server && t.chyba && t.seznam === null,
       prazdno: n === 0 && !(server && t.seznam === null),
@@ -14886,7 +14888,10 @@ class Component extends DCLogic {
           'x-inbox': (AL.inbox || []).length - resolvedIn('inbox'),
           // Zařazené do cesty už nečekají — server je posílá se štítkem „zařazeno".
           'x-inbox-cesty': (AL.travelInbox || []).filter(r => r[2] !== 'zařazeno').length - resolvedIn('travelInbox'),
-          'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length
+          'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length,
+          // Stejný výpočet jako záložka „K tisku" — `kTiskuVals()` si sama zařídí
+          // i líné dotažení ze serveru, žádné druhé volání na pozadí.
+          'pro-tisk': this.kTiskuVals().pocet
         };
         const remember = route => {
           const prev = (s.recentRoutes || []).filter(r => r !== route);

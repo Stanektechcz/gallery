@@ -2,6 +2,7 @@
 
 namespace Tests\Unit;
 
+use App\Support\TrasyPrototypu;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
@@ -190,6 +191,39 @@ class KTiskuVPrototypuTest extends TestCase
             $this->assertStringContainsString("e.name === 'AbortError'", $uloz, $nazev);
             $this->assertStringContainsString("'/stazeno'", $uloz, $nazev);
         }
+    }
+
+    /**
+     * Menu má vlastní záložku „Pro tisk" vedle „Tisk a fotoknihy".
+     *
+     * Otevírá stejnou záložku K tisku přímo (bez Návrhů, na kterých `appTab: 0`
+     * u `x-tisk` visí), a bere ji z téhož katalogu — žádná druhá šablona ani
+     * druhá kopie `kTiskuVals()`.
+     */
+    public function test_polozka_pro_tisk_je_v_menu_a_ma_vlastni_trasu(): void
+    {
+        $data = self::soubor('public/galerie-data.js');
+
+        $this->assertSame(1, substr_count($data, "['pro-tisk', 'Pro tisk', 'ph-printer']"),
+            '„Pro tisk" musí být v NAV_GROUPS právě jednou.');
+        $this->assertSame(1, substr_count($data, "'pro-tisk': { g: 'Vzpomínky', title: 'Pro tisk',"),
+            '„Pro tisk" musí mít vlastní záznam v katalogu APP.');
+        $this->assertStringContainsString("tabs: [['K tisku', 'print', 'kTisku']] },", $data,
+            'Jediná záložka „Pro tisk" musí vést na tutéž `printVals(\'kTisku\')`, ne na kopii.');
+
+        $this->assertSame('pro-tisk', TrasyPrototypu::ADRESY['pro-tisk'] ?? null,
+            'Trasa „pro-tisk" musí být v TrasyPrototypu::ADRESY, jinak neplatí obnovení stránky ani hlubší odkaz.');
+        $this->assertSame('/galerie/pro-tisk', TrasyPrototypu::url('pro-tisk'));
+
+        foreach ([self::POCITAC, self::TELEFON] as $nazev) {
+            $dokument = self::dokument($nazev);
+
+            // Odznak počítá totéž `kTiskuVals()` jako záložka „K tisku" — žádné druhé volání na server.
+            $this->assertSame(1, substr_count($dokument, "'pro-tisk': this.kTiskuVals()"), $nazev);
+        }
+
+        $this->assertStringContainsString('ktPocet: n,', self::metoda($this->dokument(self::POCITAC), 'kTiskuVals() {'));
+        $this->assertStringContainsString('pocet: n,', self::metoda($this->dokument(self::TELEFON), 'kTiskuVals() {'));
     }
 
     /** Skript komponenty obou dokumentů jde přeložit. */

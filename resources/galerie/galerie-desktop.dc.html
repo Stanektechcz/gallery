@@ -25159,6 +25159,8 @@ class Component extends DCLogic {
     const n = fotky.length, pr = t.priprava;
     return {
       printIsKTisku: true,
+      // Odznak v menu (`Pro tisk`) čte tohle číslo — žádný druhý výpočet.
+      ktPocet: n,
       ktNacita: server && t.seznam === null,
       ktChyba: server && t.chyba && t.seznam === null,
       ktPrazdno: n === 0 && !(server && t.seznam === null),
@@ -34995,7 +34997,10 @@ class Component extends DCLogic {
       'x-inbox': (AL.inbox || []).length - resolvedIn('inbox'),
       // Zařazené do cesty už nečekají — server je posílá se štítkem „zařazeno".
       'x-inbox-cesty': (AL.travelInbox || []).filter(r => r[2] !== 'zařazeno').length - resolvedIn('travelInbox'),
-      'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length
+      'x-transakce': TX.filter(t => (s.txCat[t[0]] === undefined ? t[3] : s.txCat[t[0]]) === 'Nezařazeno').length,
+      // Stejný výpočet jako záložka „K tisku" — `kTiskuVals()` si sama zařídí
+      // i líné dotažení ze serveru, žádné druhé volání na pozadí.
+      'pro-tisk': this.kTiskuVals().ktPocet
     };
     // Uživatelské uspořádání menu: skryté položky a vlastní pořadí ve skupině.
     // Sekce vypnuté v prvním spuštění se do menu nedostanou vůbec (aktivní trasa je výjimka).

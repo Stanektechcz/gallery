@@ -67,6 +67,11 @@
     'x-tisk': { g: 'Vzpomínky', title: 'Tisk a fotoknihy', note: 'Příprava tiskových návrhů — rozvržení, korektura na archu a předtisková kontrola. Objednání řeší tiskárna, tady se připravuje podklad.', photo: 1,
       // „K tisku" je poslední, ať se nepohne `appTab: 0` (Návrhy), kam vede zbytek aplikace.
       tabs: [['Návrhy', 'print', 'print'], ['Rok v číslech', 'print', 'yearBook'], ['Kontaktní arch', 'print', 'contact'], ['Předtisková kontrola', 'print', 'prepress'], ['K tisku', 'print', 'kTisku']] },
+    // Vlastní trasa na tutéž záložku „K tisku" — z menu se má otevřít přímo
+    // seznam označených, ne Návrhy (`appTab: 0` v `x-tisk`). Jediná záložka
+    // znovu volá `printVals('kTisku')`, žádná nová šablona ani logika.
+    'pro-tisk': { g: 'Vzpomínky', title: 'Pro tisk', note: 'Fotky označené ikonou tiskárny — stažení všech najednou a historie dřívějších stažení.', photo: 1,
+      tabs: [['K tisku', 'print', 'kTisku']] },
     'x-vybery': { g: 'Vzpomínky', title: 'Společné výběry', note: 'Fotku po fotce oba řeknete ano nebo ne. Album se udělá z toho, na čem se shodnete.', photo: 1,
       tabs: [['Hlasování', 'cur', 'curVote'], ['Shodli jsme se', 'cur', 'curMatch'], ['Rozcházíme se', 'cur', 'curSplit'], ['Hotové výběry', 'cur', 'curDone']] },
     'x-vyrocni': { g: 'Vzpomínky', title: 'Výroční album', note: 'Jedna fotka za každý rok ke stejnému dni — deset let na jedné ose.', photo: 1,
@@ -2297,6 +2302,7 @@
       ]],
       ['Výstupy', [
         ['x-promitani', 'Promítání', 'ph-television'], ['x-tisk', 'Tisk a fotoknihy', 'ph-printer'],
+        ['pro-tisk', 'Pro tisk', 'ph-printer'],
         ['x-uklid', 'Úklid knihovny', 'ph-broom', '16']
       ]],
       ['Společný život', [

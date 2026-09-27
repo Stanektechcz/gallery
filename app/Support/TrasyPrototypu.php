@@ -51,6 +51,7 @@ final class TrasyPrototypu
         // Výstupy
         'x-promitani' => 'promitani',
         'x-tisk' => 'tisk-a-fotoknihy',
+        'pro-tisk' => 'pro-tisk',
         'x-uklid' => 'uklid-knihovny',
 
         // Společný život
