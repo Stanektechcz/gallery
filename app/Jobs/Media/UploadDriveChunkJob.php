@@ -2,15 +2,21 @@
 
 namespace App\Jobs\Media;
 
+use App\Models\CloudCopyDeletion;
 use App\Models\MediaItem;
 use App\Models\UploadSession;
+use App\Services\Hledani\ObnovaHledani;
+use App\Services\Media\KopieTrezoru;
+use App\Services\Media\KopieVCloudu;
 use App\Services\Storage\DriveConnectionResolver;
 use App\Services\Storage\GoogleDriveStorageProvider;
+use App\Support\SpaceContext;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -43,6 +49,12 @@ class UploadDriveChunkJob implements ShouldQueue
             return;
         }
 
+        if ($media->is_hidden) {
+            $this->zastavVTrezoru($media);
+
+            return;
+        }
+
         $session = $this->uploadSessionId ? UploadSession::find($this->uploadSessionId) : null;
         $path = $session?->assembled_path;
 
@@ -67,7 +79,8 @@ class UploadDriveChunkJob implements ShouldQueue
             return;
         }
 
-        $provider = new GoogleDriveStorageProvider($connection);
+        // Přes kontejner, aby šel poskytovatel v testech nahradit (jako v RemoveCloudCopy).
+        $provider = app(GoogleDriveStorageProvider::class, ['connection' => $connection]);
 
         try {
             // First query current resumable status to get actual uploaded bytes
@@ -134,8 +147,16 @@ class UploadDriveChunkJob implements ShouldQueue
 
     private function finalizeMedia(MediaItem $media, ?UploadSession $session, array $driveFile): void
     {
+        $idNaDisku = isset($driveFile['id']) ? (string) $driveFile['id'] : null;
+
+        if ($this->zapisDoTrezoru($media, $idNaDisku)) {
+            $this->uklidDocasnySoubor($session);
+
+            return;
+        }
+
         $media->update([
-            'drive_file_id' => $driveFile['id'] ?? null,
+            'drive_file_id' => $idNaDisku,
             'storage_status' => 'synced',
             'status' => 'ready',
             'processing_stage' => null,
@@ -143,18 +164,124 @@ class UploadDriveChunkJob implements ShouldQueue
             'last_verified_at' => now(),
         ]);
 
-        // Clean up temporary assembled file
+        $this->uklidDocasnySoubor($session);
+
+        // Hledaný text, když je všechno hotové — vazby naráz a bez dalšího
+        // posunu `updated_at`, podle kterého se pozná zaseknuté nahrávání.
+        app(ObnovaHledani::class)->obnovJednu($media);
+
+        Log::info("Media #{$media->id} uploaded to Drive: {$driveFile['id']}");
+    }
+
+    /**
+     * Položka odešla do trezoru uprostřed nahrávání — další části už se
+     * neposílají.
+     *
+     * Jen se ještě zeptá Disku, jak nahrávání dopadlo: poslední část mohla na
+     * Googlu doběhnout a úloha spadnout před zápisem. Takový soubor na Disku už
+     * je a bez tohohle dotazu by o něm nikdo nevěděl — projde proto stejným
+     * dokončením jako jindy (`finalizeMedia` → `zapisDoTrezoru`). Nedokončené
+     * obnovitelné nahrávání Disk soubor nezaloží a relaci sám zahodí; stav
+     * `uploading` se uvolní, aby na něj `OdeberKopieVTrezoru` nečekal.
+     */
+    private function zastavVTrezoru(MediaItem $media): void
+    {
+        $session = $this->uploadSessionId ? UploadSession::find($this->uploadSessionId) : null;
+        $connection = app(DriveConnectionResolver::class)->forMedia($media);
+
+        // Bez spojení ani dotazu nevíme, jestli soubor na Disku je — zkusit
+        // znovu, ne zapomenout (stejně jako běžná cesta níž).
+        if (! $connection) {
+            $this->release(300);
+
+            return;
+        }
+
+        try {
+            $status = app(GoogleDriveStorageProvider::class, ['connection' => $connection])
+                ->queryResumableStatus($this->driveSessionUri, $this->totalSize);
+        } catch (\Throwable $e) {
+            Log::warning("Drive resumable status for vault media #{$media->id} unavailable", ['error' => $e->getMessage()]);
+            $this->release(min(30 * pow(2, $this->attempts()), 3600));
+
+            return;
+        }
+
+        if (($status['status'] ?? null) === 'complete') {
+            $this->finalizeMedia($media, $session, $status['file'] ?? []);
+
+            return;
+        }
+
+        $media->update(['storage_status' => 'local_only', 'processing_stage' => null]);
+    }
+
+    /** Clean up temporary assembled file. */
+    private function uklidDocasnySoubor(?UploadSession $session): void
+    {
         if ($session?->assembled_path && file_exists($session->assembled_path)) {
             @unlink($session->assembled_path);
             // Try to remove empty dir
             @rmdir(dirname($session->assembled_path));
         }
+    }
 
-        // Build search text now that everything is ready
-        $media->load(['tags', 'people', 'places', 'primaryAlbum']);
-        $media->rebuildSearchText();
+    /**
+     * Položka odešla do trezoru během poslední části — soubor na Disku už je.
+     *
+     * `drive_file_id` se nezapíše a soubor se zaznamená ke smazání (`vault`),
+     * stejně jako u zrcadlení do ostatních cloudů. Pod zámkem řádku, aby se
+     * to nepotkalo s `OdeberKopieVTrezoru`. Vrací `true`, když šlo o trezor.
+     */
+    private function zapisDoTrezoru(MediaItem $media, ?string $idNaDisku): bool
+    {
+        $kopie = app(KopieVCloudu::class);
 
-        Log::info("Media #{$media->id} uploaded to Drive: {$driveFile['id']}");
+        $vTrezoru = (bool) MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->whereKey($media->id)->value('is_hidden');
+
+        if (! $vTrezoru) {
+            return false;
+        }
+
+        /*
+         * Originál na serveru musí být ověřený dřív, než se soubor na Disku
+         * zapíše ke smazání — Disk maže trvale a zdrojem nahrávání mohl být
+         * dočasný sesbíraný soubor, který se hned potom uklidí. Neověřený
+         * originál: `drive_file_id` se zapíše jako obvykle, kopie zůstane
+         * dohledatelná a doktor ohlásí položku v trezoru s kopií v cloudu.
+         * Ověřuje se mimo zámek řádku — čte celý soubor kvůli otisku.
+         */
+        if ($duvod = app(KopieTrezoru::class)->procNelzeOverit($media)) {
+            Log::warning('Soubor na Disku doběhl u položky v trezoru, originál nejde ověřit — kopie zůstává', [
+                'media_id' => $media->id,
+                'duvod' => $duvod,
+            ]);
+
+            return false;
+        }
+
+        $ids = DB::transaction(function () use ($media, $idNaDisku, $kopie) {
+            $ted = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->lockForUpdate()->find($media->id);
+
+            if (! $ted?->is_hidden) {
+                return null;
+            }
+
+            $ted->update(['storage_status' => 'local_only', 'processing_stage' => null]);
+
+            return $idNaDisku
+                ? [$kopie->zaznamenejJednu($ted, 'google_drive', $idNaDisku, CloudCopyDeletion::DUVOD_TREZOR)]
+                : [];
+        });
+
+        if ($ids === null) {
+            return false;
+        }
+
+        $kopie->zaradPoPotvrzeni($ids);
+        Log::info("Media #{$media->id} je v trezoru — kopie na Disku zaznamenána ke smazání.");
+
+        return true;
     }
 
     private function chunkSize(): int

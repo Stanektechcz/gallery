@@ -7,6 +7,7 @@ use App\Models\Album;
 use App\Models\Budget;
 use App\Models\BudgetEntry;
 use App\Models\EntertainmentTitle;
+use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
 use App\Models\Place;
@@ -14,9 +15,10 @@ use App\Models\Recipe;
 use App\Models\SavedSearch;
 use App\Models\SharedTodo;
 use App\Models\Tag;
+use App\Services\Hledani\HledaniMedii;
 use App\Services\Search\EntityMatcher;
 use App\Services\Search\QueryInterpreter;
-use App\Support\FulltextDotaz;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -32,7 +34,7 @@ class SearchController extends Controller
      * GET /api/v1/search
      * Full-text + structured filter search — no AI.
      */
-    public function search(Request $request): JsonResponse
+    public function search(Request $request, HledaniMedii $hledani): JsonResponse
     {
         $validated = $request->validate([
             'q' => 'nullable|string|max:200',
@@ -53,9 +55,7 @@ class SearchController extends Controller
             'sort_direction' => 'nullable|in:asc,desc',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
-        $user = $request->user();
-        $space = $user->gallerySpaces()->first();
-        abort_if($space === null, 403, 'Nemáte přiřazený prostor galerie.');
+        $space = $this->prostor($request);
 
         $dotaz = trim((string) ($validated['q'] ?? ''));
 
@@ -91,27 +91,9 @@ class SearchController extends Controller
             ->where('is_hidden', false)
             ->where('status', 'ready');
 
-        // Full-text search
+        // Text hledá `HledaniMedii` až nad hotovými filtry (dole) — po stupních,
+        // bez ohledu na pořadí slov, velikost písmen a diakritiku.
         $q = $interpreted['text'];
-        if ($q && strlen(trim($q)) >= 2) {
-            $query->where(function ($textQuery) use ($q) {
-                // Holý text by v booleovském režimu nesl operátory (`@` z e-mailu
-                // = chyba syntaxe InnoDB) a krátká slova, která v indexu nejsou.
-                // Když z něj bezpečný dotaz nevznikne, hledá se jako na SQLite.
-                $fulltext = DB::connection()->getDriverName() === 'mysql'
-                    ? FulltextDotaz::zBooleovskeho($q)
-                    : null;
-
-                if ($fulltext !== null) {
-                    $textQuery->whereFullText('search_text', $fulltext, ['mode' => 'boolean']);
-                } else {
-                    $textQuery->where('search_text', 'like', "%{$q}%");
-                }
-                $textQuery->orWhere('original_filename', 'like', "%{$q}%")
-                    ->orWhere('display_title', 'like', "%{$q}%")
-                    ->orWhere('caption', 'like', "%{$q}%");
-            });
-        }
 
         // Rozpoznaná místa a lidé. Víc jmen v dotazu znamená „a zároveň" — kdo napíše
         // „Makinka v Praze", chce fotky, kde je obojí, ne sjednocení obou seznamů.
@@ -203,29 +185,43 @@ class SearchController extends Controller
             }
         }
 
-        $facets = [
-            'photos' => (clone $query)->where('media_type', 'photo')->count(),
-            'videos' => (clone $query)->where('media_type', 'video')->count(),
-            'favorites' => (clone $query)->where('is_favorite', true)->count(),
-            'with_gps' => (clone $query)->whereNotNull('latitude')->whereNotNull('longitude')->count(),
-        ];
-
         $perPage = min((int) ($filters['per_page'] ?? 40), 100);
-        $sortBy = $filters['sort_by'] ?? 'taken_at';
-        $sortDirection = $filters['sort_direction'] ?? 'desc';
-        $paginated = $query->with(['variants' => fn ($q) => $q->where('type', 'thumbnail')])
-            ->orderBy($sortBy, $sortDirection)
-            ->paginate($perPage);
+        $page = max(1, (int) $request->integer('page', 1));
+
+        /*
+         * Bez výslovného řazení se s textem řadí podle shody (`HledaniMedii`),
+         * bez textu od nejnovějších. Samotný směr bez sloupce platí pro datum.
+         */
+        $razeni = isset($filters['sort_by']) || isset($filters['sort_direction'])
+            ? [$filters['sort_by'] ?? 'taken_at', $filters['sort_direction'] ?? 'desc']
+            : null;
+
+        $vysledek = $hledani->vyhledej(
+            $query->with(['variants' => fn ($q) => $q->where('type', 'thumbnail')]),
+            ($q && mb_strlen(trim($q)) >= 2) ? $q : '',
+            $razeni,
+            $perPage,
+            $page,
+        );
 
         return response()->json([
-            'data' => $paginated->items(),
+            // Skóre shody je pomocný sloupec řazení, ne údaj o fotce.
+            'data' => $vysledek['polozky']->makeHidden('skore')->values(),
             'meta' => [
-                'current_page' => $paginated->currentPage(),
-                'last_page' => $paginated->lastPage(),
-                'per_page' => $paginated->perPage(),
-                'total' => $paginated->total(),
+                'current_page' => $page,
+                'last_page' => max(1, (int) ceil($vysledek['celkem'] / $perPage)),
+                'per_page' => $perPage,
+                'total' => $vysledek['celkem'],
+                // `and` = našla se všechna slova, `or` = jen část (žádná fotka neměla všechna).
+                'uroven' => $vysledek['uroven'],
             ],
-            'facets' => $facets,
+            // Čtyři počty jedním dotazem (dřív čtyři `COUNT(*)` a pátý pro stránkování).
+            'facets' => [
+                'photos' => $vysledek['fazety']['photos'],
+                'videos' => $vysledek['fazety']['videos'],
+                'favorites' => $vysledek['fazety']['favorites'],
+                'with_gps' => $vysledek['fazety']['with_gps'],
+            ],
             'interpreted' => [
                 'query' => $q,
                 'filters' => $interpreted['filters'],
@@ -235,46 +231,51 @@ class SearchController extends Controller
         ]);
     }
 
+    /**
+     * Našeptávač. `url` vede na obrazovku aplikace (`TrasyPrototypu::url`) —
+     * stará stránka by jen přesměrovala; konkrétní záznam nese `id`.
+     */
     public function suggestions(Request $request): JsonResponse
     {
         $data = $request->validate(['q' => 'required|string|min:1|max:100']);
-        $space = $request->user()->gallerySpaces()->first();
+        $space = $this->prostor($request);
         $term = trim($data['q']);
         $like = "%{$term}%";
         $limit = 4;
 
         $results = collect()
             ->concat(Album::where('gallery_space_id', $space->id)->where('title', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
-                'type' => 'album', 'id' => $item->id, 'label' => $item->title, 'url' => "/albums/{$item->uuid}", 'icon' => '📁',
+                'type' => 'album', 'id' => $item->id, 'label' => $item->title, 'url' => TrasyPrototypu::url('albums'), 'icon' => '📁',
             ]))
-            ->concat(Person::where('gallery_space_id', $space->id)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
+            // Skrytá osoba „zmizí z hledání" — i z našeptávače.
+            ->concat(Person::where('gallery_space_id', $space->id)->where('is_hidden', false)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
                 'type' => 'person', 'id' => $item->id, 'label' => $item->name, 'filters' => ['person_ids' => [$item->id]], 'icon' => '👤',
             ]))
             ->concat(Place::where('gallery_space_id', $space->id)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
-                'type' => 'place', 'id' => $item->id, 'label' => $item->name, 'url' => "/places/{$item->id}", 'icon' => '📍',
+                'type' => 'place', 'id' => $item->id, 'label' => $item->name, 'url' => TrasyPrototypu::url('x-mista'), 'icon' => '📍',
             ]))
             ->concat(Tag::where('gallery_space_id', $space->id)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
                 'type' => 'tag', 'id' => $item->id, 'label' => $item->name, 'filters' => ['tag_ids' => [$item->id]], 'icon' => '🏷️',
             ]))
             ->concat(DB::table('trips')->where('gallery_space_id', $space->id)->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
-                'type' => 'trip', 'id' => $item->id, 'label' => $item->name, 'url' => "/trips?trip={$item->id}", 'icon' => '🗺️',
+                'type' => 'trip', 'id' => $item->id, 'label' => $item->name, 'url' => TrasyPrototypu::url('x-cesty'), 'icon' => '🗺️',
             ]))
             ->concat(Schema::hasTable('recipes') ? Recipe::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('status', 'published')->orWhere('created_by', $request->user()->id))
                 ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('cuisine', 'like', $like)->orWhereHas('ingredients', fn ($ingredients) => $ingredients->where('name', 'like', $like)))
                 ->limit($limit)->get()->map(fn ($item) => [
-                    'type' => 'recipe', 'id' => $item->id, 'label' => $item->title, 'url' => "/recipes/{$item->uuid}", 'icon' => '🍳',
+                    'type' => 'recipe', 'id' => $item->id, 'label' => $item->title, 'url' => TrasyPrototypu::url('x-kucharka'), 'icon' => '🍳',
                 ]) : [])
             ->concat(Schema::hasTable('shared_todos') ? SharedTodo::where('gallery_space_id', $space->id)
                 ->whereNotIn('status', ['completed', 'cancelled'])
                 ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('description', 'like', $like))
                 ->limit($limit)->get()->map(fn ($item) => [
-                    'type' => 'todo', 'id' => $item->id, 'label' => $item->title, 'url' => '/planning#todos', 'icon' => '✅',
+                    'type' => 'todo', 'id' => $item->id, 'label' => $item->title, 'url' => TrasyPrototypu::url('x-plan'), 'icon' => '✅',
                 ]) : [])
             ->concat(Schema::hasTable('entertainment_titles') ? EntertainmentTitle::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('title', 'like', $like)->orWhere('original_title', 'like', $like))
                 ->limit($limit)->get()->map(fn ($item) => [
-                    'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => '/watchlist', 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
+                    'type' => 'entertainment', 'id' => $item->id, 'label' => $item->title, 'url' => TrasyPrototypu::url('x-filmy'), 'icon' => $item->media_type === 'series' ? '📺' : '🎬',
                 ]) : [])
             // Rozpočty a jejich položky. Osobní rozpočet je soukromý, dokud ho vlastník
             // nesdílí — filtruje se stejnou podmínkou jako na stránce rozpočtů, aby
@@ -282,7 +283,7 @@ class SearchController extends Controller
             ->concat(Schema::hasTable('budgets') ? Budget::where('gallery_space_id', $space->id)
                 ->where(fn ($visible) => $visible->whereNull('owner_user_id')->orWhere('is_shared', true)->orWhere('owner_user_id', $request->user()->id))
                 ->where('name', 'like', $like)->limit($limit)->get()->map(fn ($item) => [
-                    'type' => 'budget', 'id' => $item->id, 'label' => $item->name, 'url' => '/rozpocty', 'icon' => '💰',
+                    'type' => 'budget', 'id' => $item->id, 'label' => $item->name, 'url' => TrasyPrototypu::url('x-rozpocty'), 'icon' => '💰',
                 ]) : [])
             ->concat(Schema::hasTable('budget_entries') ? BudgetEntry::whereHas('budget', fn ($budget) => $budget
                 ->where('gallery_space_id', $space->id)
@@ -292,7 +293,7 @@ class SearchController extends Controller
                 ->latest('spent_on')->limit($limit)->get()->map(fn ($item) => [
                     'type' => 'expense', 'id' => $item->id,
                     'label' => $item->note.' · '.number_format((float) $item->amount, 0, ',', ' ').' '.$item->currency,
-                    'url' => '/rozpocty', 'icon' => $item->kind === 'income' ? '💵' : '🧾',
+                    'url' => TrasyPrototypu::url('x-rozpocty'), 'icon' => $item->kind === 'income' ? '💵' : '🧾',
                 ]) : [])
             ->concat(SavedSearch::where('gallery_space_id', $space->id)
                 ->where(fn ($query) => $query->where('user_id', $request->user()->id)->orWhere('is_shared', true))
@@ -303,5 +304,24 @@ class SearchController extends Controller
             ->values();
 
         return response()->json($results);
+    }
+
+    /**
+     * Prostor, ve kterém se hledá — výchozí, jinak nejstarší (jako `UrcujePar`).
+     *
+     * Bylo tu `gallerySpaces()->first()` bez řazení: účet ve dvou prostorech
+     * mohl hledat jednou v jednom a podruhé ve druhém. Našeptávač navíc
+     * prostor vůbec nekontroloval a účet bez něj dostal 500 místo 403.
+     */
+    private function prostor(Request $request): GallerySpace
+    {
+        $prostor = $request->user()->gallerySpaces()
+            ->orderByDesc('gallery_spaces.is_default')
+            ->orderBy('gallery_spaces.id')
+            ->first();
+
+        abort_if($prostor === null, 403, 'Nemáte přiřazený prostor galerie.');
+
+        return $prostor;
     }
 }

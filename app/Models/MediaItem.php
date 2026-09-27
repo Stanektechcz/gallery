@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToGallerySpace;
+use App\Support\FulltextDotaz;
 use App\Support\Tabulky;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -174,6 +175,20 @@ class MediaItem extends Model
     public function scopeActive($query)
     {
         return $query->whereNull('trashed_at')->where('is_hidden', false);
+    }
+
+    /**
+     * Co se smí kopírovat do cizího cloudu (Disk, Dropbox, OneDrive, WebDAV).
+     *
+     * Ne koš a ne trezor — rozhodnutí 27. 9. 2026: „Fotky z trezoru nejdou na
+     * cloud." Stejná podmínka jako `active`, ale pojmenovaná zvlášť: kdo ji
+     * píše, má vědět, že tu jde o zálohu, ne o mřížku. Sloupce s tabulkou,
+     * aby prošla i v dotazech s joinem (chytrá alba).
+     */
+    public function scopeSmiDoCloudu($query)
+    {
+        return $query->whereNull($query->qualifyColumn('trashed_at'))
+            ->where($query->qualifyColumn('is_hidden'), false);
     }
 
     public function scopePhotos($query)
@@ -352,23 +367,71 @@ class MediaItem extends Model
 
     public function rebuildSearchText(): void
     {
-        $parts = array_filter([
+        $this->updateQuietly(['search_text' => $this->hledanyText()]);
+    }
+
+    /** Měsíce v 1. a 2. pádě — „srpen" i „srpna" (fotky ze srpna). */
+    private const MESICE = [
+        1 => 'leden ledna', 'únor února', 'březen března', 'duben dubna', 'květen května', 'červen června',
+        'červenec července', 'srpen srpna', 'září', 'říjen října', 'listopad listopadu', 'prosinec prosince',
+    ];
+
+    /** Roční doby i v 6. pádě, jak je člověk napíše: „v létě", „na jaře". */
+    private const DOBY = [
+        'zima zimě', 'zima zimě', 'jaro jaře', 'jaro jaře', 'jaro jaře', 'léto létě',
+        'léto létě', 'léto létě', 'podzim podzimu', 'podzim podzimu', 'podzim podzimu', 'zima zimě',
+    ];
+
+    /**
+     * Všechno, podle čeho jde fotku najít, jedním řetězcem pro `search_text`.
+     *
+     * Vazby se berou načtené, když jsou (`ObnovaHledani` je načte naráz
+     * pro celou dávku); jinak se načtou tady. Na konci je táž věc ještě
+     * jednou malými písmeny bez diakritiky (`FulltextDotaz::slozit()`), takže
+     * jeden sloupec a jeden FULLTEXT index slouží MySQL i SQLite — a „lyse
+     * hore" najde „Lysé hoře" i tam, kde `LIKE` diakritiku nesjednotí.
+     *
+     * Chyběla místa zapsaná v prototypu (`location_name`), alba mimo hlavní,
+     * měsíc, rok, roční doba, druh a přípona souboru — „srpen 2025 video"
+     * nenašlo nic, i když to na fotce bylo.
+     */
+    public function hledanyText(): string
+    {
+        $kdy = $this->taken_at;
+        $alba = $this->albums->pluck('title');
+        $cesta = $this->primaryAlbum?->full_display_path ?: $this->primaryAlbum?->title;
+
+        $casti = array_filter([
             $this->original_filename,
             $this->display_title,
             $this->description,
             $this->caption,
             $this->notes,
+            $this->location_name,
+            $this->location_country,
             $this->camera_make,
             $this->camera_model,
             $this->lens_model,
-            $this->primaryAlbum?->full_display_path,
+            $cesta,
+            $alba->reject(fn ($titul) => $cesta !== null && str_contains((string) $cesta, (string) $titul))->implode(' '),
             $this->tags->pluck('name')->implode(' '),
-            $this->people->pluck('name')->implode(' '),
+            // Skrytá osoba „zmizí z hledání" (viz `Knihovna::lideNaFotkach()`).
+            $this->people->reject(fn ($osoba) => (bool) $osoba->is_hidden)->pluck('name')->implode(' '),
             $this->places->pluck('name')->implode(' '),
             $this->places->pluck('city')->filter()->implode(' '),
             $this->places->pluck('country')->filter()->implode(' '),
-        ]);
+            $kdy ? self::MESICE[$kdy->month].' '.$kdy->year.' '.self::DOBY[$kdy->month - 1] : null,
+            match ($this->media_type) {
+                'video' => 'video',
+                'photo' => 'fotka',
+                default => null,
+            },
+            $this->extension,
+        ], fn ($cast) => $cast !== null && trim((string) $cast) !== '');
 
-        $this->updateQuietly(['search_text' => implode(' ', $parts)]);
+        $text = preg_replace('/\s+/u', ' ', implode(' ', $casti)) ?? '';
+        $slozeny = FulltextDotaz::slozit($text);
+
+        return trim($slozeny === $text ? $text : $text.' '.$slozeny);
     }
 }

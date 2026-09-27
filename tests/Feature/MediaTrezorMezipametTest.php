@@ -106,7 +106,7 @@ class MediaTrezorMezipametTest extends TestCase
 
         $this->actingAs($maki)->withSession($this->odemcenyTrezor($this->adri))
             ->get("/media/{$skryta->uuid}/full")
-            ->assertRedirect(route('vault.index'));
+            ->assertRedirect('/galerie/trezor');
     }
 
     private function odemceno(): static

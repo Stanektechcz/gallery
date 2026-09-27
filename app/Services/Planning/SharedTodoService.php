@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\SharedTodo;
 use App\Models\SharedTodoList;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -100,7 +101,7 @@ class SharedTodoService
                 'trip_id' => $todo->trip_id, 'title' => 'Úkol · '.$todo->title, 'description' => $todo->description,
                 'type' => 'todo', 'status' => 'planned', 'starts_at' => $startsAt, 'ends_at' => $startsAt->copy()->addMinutes($duration),
                 'timezone' => 'Europe/Prague', 'place_name' => $todo->location, 'color' => '#14b8a6', 'is_private' => false,
-                'metadata' => ['kind' => 'shared_todo', 'todo_uuid' => $todo->uuid, 'href' => '/planning#todos'],
+                'metadata' => ['kind' => 'shared_todo', 'todo_uuid' => $todo->uuid, 'href' => TrasyPrototypu::url('x-plan')],
             ]);
             if ($todo->remind_at && $todo->remind_at->isFuture()) {
                 /*

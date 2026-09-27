@@ -8,6 +8,7 @@ use App\Models\GallerySpace;
 use App\Models\StorageConnection;
 use App\Services\Storage\DropboxClient;
 use App\Services\Storage\StorageResolver;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -66,11 +67,11 @@ class DropboxOAuthController extends Controller
         // Compared with hash_equals and refused when either side is missing: a callback
         // arriving without a state is exactly the request this check exists to stop.
         if (! $expected || ! $request->filled('state') || ! hash_equals($expected, $request->string('state')->toString())) {
-            return redirect()->route('connections')->with('error', 'Přihlášení k Dropboxu se nepodařilo ověřit. Zkuste to prosím znovu.');
+            return redirect(TrasyPrototypu::url('storage'))->with('error', 'Přihlášení k Dropboxu se nepodařilo ověřit. Zkuste to prosím znovu.');
         }
 
         if ($request->filled('error')) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Dropbox přístup nepovolil: '.$request->string('error_description')->toString());
         }
 
@@ -85,7 +86,7 @@ class DropboxOAuthController extends Controller
         ]);
 
         if ($exchange->failed()) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Dropbox odmítl výměnu kódu: '.$exchange->json('error_description', 'neznámá chyba'));
         }
 
@@ -94,7 +95,7 @@ class DropboxOAuthController extends Controller
         // A connection without a refresh token is one that stops working overnight, so it
         // is refused here rather than stored to fail later.
         if (empty($tokens['refresh_token'])) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Dropbox nevrátil obnovovací token. Odpojte aplikaci v nastavení Dropboxu a zkuste to znovu.');
         }
 
@@ -121,7 +122,7 @@ class DropboxOAuthController extends Controller
 
         AuditLog::record('storage.dropbox.connected', null, ['account' => $account->json('email')]);
 
-        return redirect()->route('connections')->with('success', 'Dropbox připojen.');
+        return redirect(TrasyPrototypu::url('storage'))->with('success', 'Dropbox připojen.');
     }
 
     /**
@@ -138,20 +139,20 @@ class DropboxOAuthController extends Controller
             ->where('gallery_space_id', $space->id)->first();
 
         if (! $connection) {
-            return redirect()->route('connections')->with('error', 'Dropbox není připojený.');
+            return redirect(TrasyPrototypu::url('storage'))->with('error', 'Dropbox není připojený.');
         }
 
         $result = $client->probe($connection);
 
         if (! $result['ok']) {
-            return redirect()->route('connections')->with('error', 'Dropbox: '.$result['error']);
+            return redirect(TrasyPrototypu::url('storage'))->with('error', 'Dropbox: '.$result['error']);
         }
 
         $free = $result['allocated_bytes'] && $result['used_bytes'] !== null
             ? ' Volné místo: '.round(($result['allocated_bytes'] - $result['used_bytes']) / 1024 ** 3, 1).' GB.'
             : '';
 
-        return redirect()->route('connections')
+        return redirect(TrasyPrototypu::url('storage'))
             ->with('success', 'Dropbox odpovídá — '.($result['account'] ?? 'účet ověřen').'.'.$free);
     }
 
@@ -167,7 +168,7 @@ class DropboxOAuthController extends Controller
         StorageConnection::where('provider', 'dropbox')->where('gallery_space_id', $space->id)->delete();
         AuditLog::record('storage.dropbox.disconnected');
 
-        return redirect()->route('connections')->with('success', 'Dropbox odpojen. Soubory v Dropboxu zůstávají.');
+        return redirect(TrasyPrototypu::url('storage'))->with('success', 'Dropbox odpojen. Soubory v Dropboxu zůstávají.');
     }
 
     private function configured(): bool

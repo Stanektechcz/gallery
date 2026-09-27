@@ -51,14 +51,14 @@ class SouctyJakoCislaTest extends TestCase
         $this->assertSame(1, $den['videos']);
     }
 
+    /**
+     * Stránka `/stats` od 27. 9. 2026 jen vede do aplikace
+     * (`PresmerujStareRozhrani`) — `StatsController` se nespustí a součty
+     * nevydává nikomu. Statistiky aplikace počítá její vlastní API.
+     */
     public function test_statistiky_vraci_velikost_a_pocty_po_letech_jako_cisla(): void
     {
-        $stats = $this->get('/stats')->assertOk()->viewData('page')['props']['stats'];
-
-        $this->assertSame(3 * 4096, $stats['total_size']);
-        $this->assertSame(2026, $stats['per_year'][0]['year']);
-        $this->assertSame(2, $stats['per_year'][0]['photos']);
-        $this->assertSame(1, $stats['per_year'][0]['videos']);
+        $this->get('/stats')->assertRedirect('/galerie/statistiky');
     }
 
     public function test_navrhy_uklidu_vraci_bajty_jako_cisla(): void

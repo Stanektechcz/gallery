@@ -10,6 +10,7 @@ use App\Models\Payment;
 use App\Services\Billing\CheckoutService;
 use App\Services\Billing\ComgateGateway;
 use App\Services\Billing\EntitlementService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -94,7 +95,9 @@ class CheckoutController extends Controller
             default => ['warning', 'Platba zatím nebyla potvrzena. Jakmile ji banka potvrdí, tarif se aktivuje sám.'],
         };
 
-        return redirect('/settings/predplatne')->with($message[0], $message[1]);
+        // Tarif je v aplikaci v administraci prostoru; stará `/settings/predplatne`
+        // by sem vedla druhým přesměrováním a hláška by cestou zmizela.
+        return redirect(TrasyPrototypu::url('x-admin'))->with($message[0], $message[1]);
     }
 
     /**

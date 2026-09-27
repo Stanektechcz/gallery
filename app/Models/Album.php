@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use App\Models\Concerns\BelongsToGallerySpace;
+use App\Models\Concerns\ObnovujeHledaniFotek;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -11,7 +12,23 @@ use Illuminate\Support\Str;
 
 class Album extends Model
 {
-    use BelongsToGallerySpace, HasFactory, SoftDeletes;
+    use BelongsToGallerySpace, HasFactory, ObnovujeHledaniFotek, SoftDeletes;
+
+    /**
+     * Cesta podalb se mění přes `rebuildPaths()` a `update()` každého
+     * z nich — každé podalbum tak přepočítá svoje fotky samo.
+     */
+    protected function sloupceVHledani(): array
+    {
+        return ['title', 'full_display_path'];
+    }
+
+    /** Fotky zařazené spojovací tabulkou i ty, kterým je album hlavní. */
+    protected function fotkyVHledani(): iterable
+    {
+        return DB::table('album_media')->where('album_id', $this->id)->pluck('media_item_id')
+            ->merge(DB::table('media_items')->where('primary_album_id', $this->id)->pluck('id'));
+    }
 
     protected $fillable = [
         'uuid',

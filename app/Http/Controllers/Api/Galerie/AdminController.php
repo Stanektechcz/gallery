@@ -435,10 +435,12 @@ class AdminController extends Controller
 
         // Vysypat hned znamená vysypat hned: `purge_after` se posune do minulosti
         // a úklidová úloha zbytek dodělá, včetně smazání souborů z disku.
-        $pocet = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+        // Co vlastník schválil bez partnera, drží lhůta koše (`MazaniFotek::drziLhutu`) —
+        // úklid by to sice přeskočil, ale počet v hlášce má sedět.
+        $pocet = MazaniFotek::bezDrzeneLhuty(MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNotNull('trashed_at')
-            ->when(! $trezor, fn ($q) => $q->where('is_hidden', false))
+            ->when(! $trezor, fn ($q) => $q->where('is_hidden', false)))
             ->update(['purge_after' => now()->subMinute()]);
 
         SpustPlanovanouUlohu::dispatch('trash-purge');

@@ -3,7 +3,9 @@
 namespace App\Jobs;
 
 use App\Jobs\Media\InitiateDriveResumableUploadJob;
+use App\Models\CloudCopyDeletion;
 use App\Models\MediaItem;
+use App\Services\Media\KopieVCloudu;
 use App\Services\Storage\DropboxClient;
 use App\Services\Storage\OneDriveClient;
 use App\Services\Storage\StorageResolver;
@@ -14,6 +16,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -61,6 +64,12 @@ class MirrorMediaToCloud implements ShouldQueue
         // waits, and something in the bin is not a thing to push into somebody's cloud
         // on their behalf (the nightly backlog skips it for the same reason).
         if ($media->trashed_at !== null) {
+            return;
+        }
+
+        // Trezor do cloudu nejde (rozhodnutí 27. 9. 2026). Tady, ne jen při
+        // zařazení: do trezoru mohla položka odejít, zatímco úloha čekala.
+        if ($media->is_hidden) {
             return;
         }
 
@@ -145,11 +154,46 @@ class MirrorMediaToCloud implements ShouldQueue
             return;
         }
 
-        $media->variants()->create([
-            'type' => 'cloud_copy',
-            'disk' => $connection->provider,
-            'path' => $result['path'] ?? $remote,
-            'size_bytes' => $result['size'] ?? null,
-        ]);
+        $this->zapisKopii($media, $connection->provider, (string) ($result['path'] ?? $remote), $result['size'] ?? null);
+    }
+
+    /**
+     * Zapíše hotovou kopii — pokud položka mezitím neodešla do trezoru.
+     *
+     * Nahrávání trvá, a kliknutí „Do trezoru" během něj by jinak nechalo
+     * v cloudu kopii, o které trezor neví. Pod zámkem řádku, stejně jako
+     * `OdeberKopieVTrezoru`: buď kopii uvidí on, nebo ji tady zapíšeme ke
+     * smazání my.
+     */
+    private function zapisKopii(MediaItem $media, string $provider, string $path, mixed $size): void
+    {
+        $kopie = app(KopieVCloudu::class);
+
+        $ids = DB::transaction(function () use ($media, $provider, $path, $size, $kopie) {
+            $ted = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->withTrashed()
+                ->lockForUpdate()
+                ->find($media->id);
+
+            if ($ted === null || $ted->is_hidden) {
+                return [$kopie->zaznamenejJednu(
+                    $ted ?? $media,
+                    $provider,
+                    $path,
+                    $ted === null ? CloudCopyDeletion::DUVOD_SMAZANI : CloudCopyDeletion::DUVOD_TREZOR,
+                )];
+            }
+
+            $ted->variants()->create([
+                'type' => 'cloud_copy',
+                'disk' => $provider,
+                'path' => $path,
+                'size_bytes' => $size,
+            ]);
+
+            return [];
+        });
+
+        $kopie->zaradPoPotvrzeni($ids);
     }
 }

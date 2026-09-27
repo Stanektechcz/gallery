@@ -96,6 +96,9 @@ class AdministraceGalerie
             ->where('gallery_space_id', $prostor->id);
 
         $kos = (clone $media())->whereNotNull('trashed_at');
+        // Trezor se tu počítá schválně: do cloudu nejde (rozhodnutí 27. 9. 2026),
+        // takže opravdu leží jen v jedné kopii — pruh rizika to má přiznat,
+        // i když nejde o chybějící zálohu, kterou by šlo dohnat.
         $jednaKopie = (clone $media())->whereNull('trashed_at')->where('storage_status', 'local_only');
 
         // Růst za posledního půl roku. Prototyp počítá s 2,4 GB měsíčně napevno;
@@ -279,6 +282,7 @@ class AdministraceGalerie
         $media = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id);
 
+        // Včetně trezoru, stejně jako `mira()`: je opravdu jen v jedné kopii.
         $jednaKopie = (clone $media())->whereNull('trashed_at')->where('storage_status', 'local_only');
         $jednaKopieGb = round((int) (clone $jednaKopie)->sum('size_bytes') / 1_073_741_824, 1);
         $jednaKopiePocet = (clone $jednaKopie)->count();

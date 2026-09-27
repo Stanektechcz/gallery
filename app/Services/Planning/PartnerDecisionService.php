@@ -4,6 +4,7 @@ namespace App\Services\Planning;
 
 use App\Models\GallerySpace;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -65,7 +66,7 @@ class PartnerDecisionService
                 'key' => 'date-idea-'.$idea->uuid, 'type' => 'date_idea', 'source_key' => $idea->uuid,
                 'title' => $idea->title, 'description' => $idea->summary,
                 'context' => 'Randíčko · '.number_format((float) $idea->estimated_cost, 0, ',', ' ').' '.$idea->currency.' · '.(int) $idea->estimated_minutes.' min',
-                'due_at' => $idea->suggested_starts_at, 'href' => '/date-ideas', 'accent' => 'pink',
+                'due_at' => $idea->suggested_starts_at, 'href' => TrasyPrototypu::url('x-randicka'), 'accent' => 'pink',
                 'options' => [
                     ['value' => 'love', 'label' => '❤️ Chci', 'tone' => 'positive'],
                     ['value' => 'maybe', 'label' => 'Možná', 'tone' => 'neutral'],
@@ -91,7 +92,7 @@ class PartnerDecisionService
                 'context' => ($title->media_type === 'series' ? 'Seriál' : 'Film')
                     .($title->release_year ? ' · '.$title->release_year : '')
                     .($title->runtime_minutes ? ' · '.$title->runtime_minutes.' min' : ''),
-                'cover_url' => $title->poster_url, 'href' => '/watchlist', 'accent' => 'violet',
+                'cover_url' => $title->poster_url, 'href' => TrasyPrototypu::url('x-filmy'), 'accent' => 'violet',
                 'options' => [
                     ['value' => 'love', 'label' => 'Chci vidět', 'tone' => 'positive'],
                     ['value' => 'maybe', 'label' => 'Možná', 'tone' => 'neutral'],
@@ -115,7 +116,7 @@ class PartnerDecisionService
                 'key' => 'viewing-date-'.$proposal->uuid, 'type' => 'viewing_date', 'source_key' => $proposal->uuid,
                 'title' => 'Termín pro „'.$proposal->title.'“', 'description' => $proposal->note,
                 'context' => $proposal->venue === 'cinema' ? 'Kino · '.($proposal->place_name ?: 'Cinema City') : 'Filmový večer doma',
-                'due_at' => $proposal->starts_at, 'href' => '/watchlist', 'accent' => 'violet',
+                'due_at' => $proposal->starts_at, 'href' => TrasyPrototypu::url('x-filmy'), 'accent' => 'violet',
                 'options' => [
                     ['value' => 'yes', 'label' => 'Termín mi sedí', 'tone' => 'positive'],
                     ['value' => 'maybe', 'label' => 'Možná', 'tone' => 'neutral'],
@@ -142,7 +143,7 @@ class PartnerDecisionService
         return $polls->map(fn ($poll) => [
             'key' => 'poll-'.$poll->uuid, 'type' => 'poll', 'source_key' => $poll->uuid,
             'title' => $poll->question, 'context' => 'Společné hlasování', 'due_at' => $poll->closes_at,
-            'href' => '/planning', 'accent' => 'teal',
+            'href' => TrasyPrototypu::url('x-rozhodnuti'), 'accent' => 'teal',
             'options' => $options->get($poll->id, collect())->map(fn ($option) => [
                 'value' => (string) $option->id, 'label' => $option->title, 'tone' => 'choice',
             ])->values()->all(),

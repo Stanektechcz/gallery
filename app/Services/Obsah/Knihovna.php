@@ -12,6 +12,7 @@ use App\Support\SpaceContext;
 use App\Support\Tabulky;
 use App\Support\Trezor;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -244,6 +245,38 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->all();
     }
 
+    /**
+     * Dlaždice mřížky pro libovolný výběr fotek — tvar přesně jako `PHOTOS`.
+     *
+     * Hledání na serveru (`GET /api/hledat`) vrací fotky, které v první
+     * várce mřížky být nemusí; prototyp je kreslí týmž kódem jako mřížku,
+     * takže musí mít tentýž tvar. Rozsah (koš, trezor) hlídá volající.
+     *
+     * @param  Collection<int, MediaItem>  $media
+     * @param  int  $poradiOd  kolik dlaždic bylo na předchozích stránkách (pole `n`)
+     * @return list<array<string, mixed>>
+     */
+    public function dlazdice(Collection $media, int $poradiOd = 0): array
+    {
+        if ($media->isEmpty()) {
+            return [];
+        }
+
+        $media = new EloquentCollection($media->values()->all());
+        $media->loadMissing(self::VAZBY_DLAZDICE);
+        $this->nactiOblibene($media);
+
+        return $this->fotky($media, $this->dny($media), $poradiOd);
+    }
+
+    /**
+     * Vazby, které dlaždice čte.
+     *
+     * `uuid` musí být v načtených sloupcích: `albaFotky()` ho čte
+     * u každé fotky a bez něj by se dotazoval po jedné.
+     */
+    private const VAZBY_DLAZDICE = ['uploader:id,name', 'primaryAlbum:id,title,uuid'];
+
     /** @return Collection<int, MediaItem> */
     private function media(GallerySpace $prostor): Collection
     {
@@ -251,9 +284,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
             ->where('is_hidden', false)
-            // `uuid` musí být v načtených sloupcích: `albaFotky()` ho čte
-            // u každé fotky a bez něj by se dotazoval po jedné.
-            ->with(['uploader:id,name', 'primaryAlbum:id,title,uuid'])
+            ->with(self::VAZBY_DLAZDICE)
             ->orderByDesc('taken_at')
             ->orderByDesc('uploaded_at')
             ->limit(self::FOTEK)
@@ -296,7 +327,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
      * @param  Collection<string, array<string, mixed>>  $dny
      * @return list<array<string, mixed>>
      */
-    private function fotky(Collection $media, Collection $dny): array
+    private function fotky(Collection $media, Collection $dny, int $poradiOd = 0): array
     {
         $stitky = $this->stitky($media);
         $lideNaFotce = $this->lideNaFotkach($media);
@@ -308,7 +339,7 @@ class Knihovna implements MaPrazdneKolekce, PoskytovatelObsahu
         $this->zjistiVidea($media->where('media_type', 'video')->pluck('id')->map(fn ($i) => (int) $i)->all());
         $navrhujici = $this->navrhujici($media);
         $ja = auth()->id() === null ? null : (int) auth()->id();
-        $poradi = 0;
+        $poradi = $poradiOd;
 
         return $media->map(function (MediaItem $m) use ($dny, $stitky, $lideNaFotce, $vAlbu, $vOdkazech, $navrhujici, $ja, &$poradi) {
             $poradi++;

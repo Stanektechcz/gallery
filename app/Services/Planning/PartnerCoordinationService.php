@@ -6,6 +6,7 @@ use App\Models\GallerySpace;
 use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -139,7 +140,7 @@ class PartnerCoordinationService
             ->get(['todo.uuid', 'todo.title', 'todo.due_at', 'todo.priority', 'todo.assigned_to', 'assignee.name as assignee_name', 'list.title as list_title'])
             ->map(fn ($todo) => $this->action(
                 'shared_todo', $todo->uuid, $todo->title, $todo->list_title ?: 'Společné úkoly', $todo->due_at,
-                $todo->priority, $todo->assigned_to, $todo->assignee_name, '/planning#todos', ['todo_uuid' => $todo->uuid]
+                $todo->priority, $todo->assigned_to, $todo->assignee_name, TrasyPrototypu::url('x-plan'), ['todo_uuid' => $todo->uuid]
             ));
     }
 
@@ -161,7 +162,7 @@ class PartnerCoordinationService
                 $query->where('event.starts_at', '<=', $now->copy()->addDays(60))->orWhere('task.due_at', '<=', $now->copy()->addDays(60));
             })->limit(60)
             ->get(['task.id', 'task.title', 'task.due_at', 'task.priority', 'task.assigned_to', 'assignee.name as assignee_name', 'event.uuid as event_uuid', 'event.title as event_title', 'event.starts_at'])
-            ->map(fn ($task) => $this->action('event_task', $task->id, $task->title, $task->event_title, $task->due_at ?: $task->starts_at, $task->priority, $task->assigned_to, $task->assignee_name, '/calendar/events/'.$task->event_uuid, ['event_uuid' => $task->event_uuid, 'task_id' => (int) $task->id]));
+            ->map(fn ($task) => $this->action('event_task', $task->id, $task->title, $task->event_title, $task->due_at ?: $task->starts_at, $task->priority, $task->assigned_to, $task->assignee_name, TrasyPrototypu::url('calendar'), ['event_uuid' => $task->event_uuid, 'task_id' => (int) $task->id]));
     }
 
     private function packingItems(GallerySpace $space, Carbon $now): Collection
@@ -176,7 +177,7 @@ class PartnerCoordinationService
             ->where('trip.start_date', '<=', $now->copy()->addDays(90)->toDateString())->where('item.is_packed', false)
             ->orderByDesc('item.is_essential')->orderBy('trip.start_date')->limit(60)
             ->get(['item.id', 'item.title', 'item.is_essential', 'item.assigned_to', 'assignee.name as assignee_name', 'trip.id as trip_id', 'trip.name as trip_name', 'trip.start_date'])
-            ->map(fn ($item) => $this->action('packing_item', $item->id, $item->title, 'Balení · '.$item->trip_name, $item->start_date.' 08:00:00', $item->is_essential ? 'high' : 'normal', $item->assigned_to, $item->assignee_name, '/trips/'.$item->trip_id.'/plan', ['trip_id' => (int) $item->trip_id, 'packing_item_id' => (int) $item->id]));
+            ->map(fn ($item) => $this->action('packing_item', $item->id, $item->title, 'Balení · '.$item->trip_name, $item->start_date.' 08:00:00', $item->is_essential ? 'high' : 'normal', $item->assigned_to, $item->assignee_name, TrasyPrototypu::url('x-cesty'), ['trip_id' => (int) $item->trip_id, 'packing_item_id' => (int) $item->id]));
     }
 
     private function planningItems(GallerySpace $space, Carbon $now): Collection
@@ -206,7 +207,7 @@ class PartnerCoordinationService
             $eventUuid = $item->event_uuid ?? null;
             $tripId = $item->trip_id ?? null;
 
-            return $this->action('planning_item', $item->uuid, $item->title, $item->event_title ?: ($item->trip_name ?: 'Společný podklad'), $item->starts_at ?: (($item->start_date ?? null) ? $item->start_date.' 08:00:00' : null), 'normal', $item->assigned_to ?? null, $item->assignee_name ?? null, $eventUuid ? '/calendar/events/'.$eventUuid : ($tripId ? '/trips/'.$tripId.'/plan' : '/travel-inbox'), ['inbox_uuid' => $item->uuid, 'event_uuid' => $eventUuid, 'trip_id' => $tripId ? (int) $tripId : null]);
+            return $this->action('planning_item', $item->uuid, $item->title, $item->event_title ?: ($item->trip_name ?: 'Společný podklad'), $item->starts_at ?: (($item->start_date ?? null) ? $item->start_date.' 08:00:00' : null), 'normal', $item->assigned_to ?? null, $item->assignee_name ?? null, TrasyPrototypu::url($eventUuid ? 'calendar' : ($tripId ? 'x-cesty' : 'x-inbox-cesty')), ['inbox_uuid' => $item->uuid, 'event_uuid' => $eventUuid, 'trip_id' => $tripId ? (int) $tripId : null]);
         });
     }
 
@@ -226,7 +227,7 @@ class PartnerCoordinationService
             $query->leftJoin('users as assignee', 'assignee.id', '=', 'document.assigned_to');
         }
 
-        return $query->get($select)->map(fn ($document) => $this->action('trip_document', $document->id, $document->title, 'Doklady · '.$document->trip_name, ($document->expires_on ?: $document->start_date).' 08:00:00', 'high', $document->assigned_to ?? null, $document->assignee_name ?? null, '/trips/'.$document->trip_id.'/plan', ['trip_id' => (int) $document->trip_id, 'document_id' => (int) $document->id]));
+        return $query->get($select)->map(fn ($document) => $this->action('trip_document', $document->id, $document->title, 'Doklady · '.$document->trip_name, ($document->expires_on ?: $document->start_date).' 08:00:00', 'high', $document->assigned_to ?? null, $document->assignee_name ?? null, TrasyPrototypu::url('x-cesty'), ['trip_id' => (int) $document->trip_id, 'document_id' => (int) $document->id]));
     }
 
     private function gifts(GallerySpace $space, User $viewer, Carbon $now): Collection
@@ -247,7 +248,7 @@ class PartnerCoordinationService
             $query->leftJoin('users as assignee', 'assignee.id', '=', 'gift.assigned_to');
         }
 
-        return $query->get($select)->map(fn ($gift) => $this->action('gift', $gift->uuid, $gift->title, $gift->occasion ? 'Dárek · '.$gift->occasion : 'Nápad na dárek', $gift->due_date ? $gift->due_date.' 18:00:00' : null, 'normal', $gift->assigned_to ?? null, $gift->assignee_name ?? null, '/planning', ['gift_uuid' => $gift->uuid]));
+        return $query->get($select)->map(fn ($gift) => $this->action('gift', $gift->uuid, $gift->title, $gift->occasion ? 'Dárek · '.$gift->occasion : 'Nápad na dárek', $gift->due_date ? $gift->due_date.' 18:00:00' : null, 'normal', $gift->assigned_to ?? null, $gift->assignee_name ?? null, TrasyPrototypu::url('x-darky'), ['gift_uuid' => $gift->uuid]));
     }
 
     private function settlements(GallerySpace $space): Collection
@@ -272,7 +273,7 @@ class PartnerCoordinationService
                 'Vyrovnat '.number_format((float) $settlement->amount, 2, ',', ' ').' '.$settlement->currency.' s '.$settlement->creditor_name,
                 'Finance · '.$settlement->trip_name,
                 $settlement->end_date.' 20:00:00', 'high', $settlement->from_user_id, $settlement->debtor_name,
-                '/trips/'.$settlement->trip_id.'/plan#partner-finance',
+                TrasyPrototypu::url('x-cesty'),
                 ['trip_id' => (int) $settlement->trip_id, 'settlement_id' => (int) $settlement->id, 'assignment_locked' => true]
             ));
     }
@@ -291,6 +292,11 @@ class PartnerCoordinationService
             ->map(fn ($item) => ['uuid' => $item->uuid, 'user_id' => (int) $item->user_id, 'user_name' => $item->user_name, 'check_in_on' => $item->check_in_on, 'mood' => $item->mood, 'energy' => $item->energy !== null ? (int) $item->energy : null, 'capacity' => $item->capacity, 'focus' => $item->focus, 'note' => $item->note, 'is_shared' => (bool) $item->is_shared]);
     }
 
+    /**
+     * Jeden krok do společného seznamu. `href` je obrazovka aplikace
+     * (`TrasyPrototypu::url`) — detail úkolu, události ani cesty adresu nemá,
+     * záznam nese `source_key` a `extra`.
+     */
     private function action(string $type, int|string $key, string $title, string $context, mixed $dueAt, string $priority, mixed $assignedTo, ?string $assigneeName, string $href, array $extra = []): array
     {
         return array_merge([

@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Storage\DriveStructureService;
 use App\Services\Storage\GoogleOAuthService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -78,6 +79,10 @@ class GoogleOAuthController extends Controller
     /**
      * GET /oauth/google/callback
      * Handle OAuth callback, store tokens.
+     *
+     * Vrací rovnou na obrazovku Úložiště v aplikaci (`TrasyPrototypu::url`):
+     * stará stránka nastavení od 27. 9. 2026 jen přesměrovává a hláška
+     * v sezení by druhé přesměrování nepřežila.
      */
     public function callback(Request $request): RedirectResponse
     {
@@ -99,7 +104,7 @@ class GoogleOAuthController extends Controller
         if (! is_string($ocekavany) || ! is_string($prisly) || ! hash_equals($ocekavany, $prisly)) {
             Log::warning('Google OAuth callback bez platného state', ['user_id' => $request->user()->id]);
 
-            return redirect()->route('settings.storage.google')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Připojení Google Disku nepatří k tomuhle přihlášení. Spusťte ho prosím znovu z nastavení.');
         }
 
@@ -113,13 +118,13 @@ class GoogleOAuthController extends Controller
         if ($request->has('error')) {
             Log::warning('Google OAuth error', ['error' => Str::limit((string) $request->input('error'), 64, '')]);
 
-            return redirect()->route('settings.storage.google')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Autorizace Google byla zrušena nebo odmítnuta. Připojení můžete spustit znovu.');
         }
 
         $code = $request->input('code');
         if (! $code) {
-            return redirect()->route('settings.storage.google')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Chybí autorizační kód od Google.');
         }
 
@@ -142,14 +147,14 @@ class GoogleOAuthController extends Controller
                 'root_id' => $structure['root_id'],
             ]);
 
-            return redirect()->route('settings.storage.google')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('success', "Google Drive připojen. Účet: {$connection->account_email}. Existující média byla zařazena k synchronizaci.");
         } catch (\Throwable $e) {
             // Podrobnosti do logu, ne do stránky — text výjimky nese adresy,
             // tokeny i SQL (viz `hlaskaSelhani()`).
             report($e);
 
-            return redirect()->route('settings.storage.google')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', $this->hlaskaSelhani('Připojení Google Disku se nepodařilo dokončit.'));
         }
     }

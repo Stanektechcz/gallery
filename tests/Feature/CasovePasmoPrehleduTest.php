@@ -20,6 +20,12 @@ use Tests\TestCase;
  * jen hodina, ale těsně po půlnoci v Praze UTC pořád ukazuje včerejšek —
  * cesta, která dnes skončila, tak vypadala jako už dávno po termínu, a
  * výročí, které je dnes, vycházelo jako „zítra".
+ *
+ * Od 27. 9. 2026 stránka `/prehled` nic nevykresluje a vede do aplikace
+ * (`PresmerujStareRozhrani`), takže `DashboardController` se nespustí a jeho
+ * výpočty nejsou odnikud dosažitelné. Testy tu hlídají, že i v hraničních
+ * okamžicích (pražská půlnoc) stránka jen přesměruje; dnešek a pozdrav
+ * aplikace počítá `Obsah\Dnes` a hlídají ho jeho testy.
  */
 class CasovePasmoPrehleduTest extends TestCase
 {
@@ -48,11 +54,7 @@ class CasovePasmoPrehleduTest extends TestCase
         // UTC hodina 4 je pořád „Dobrou noc" — hranice, na které se bug pozná.
         $this->travelTo(CarbonImmutable::parse('2026-01-15 05:30', 'Europe/Prague'));
 
-        $odpoved = $this->actingAs($this->uzivatel)->get('/prehled');
-        $odpoved->assertOk();
-
-        $data = $odpoved->viewData('page')['props']['data'];
-        $this->assertSame('Dobré ráno', $data['greeting']);
+        $this->actingAs($this->uzivatel)->get('/prehled')->assertRedirect('/');
     }
 
     public function test_nadchazejici_cesta_pocita_dnesek_mistne(): void
@@ -74,11 +76,9 @@ class CasovePasmoPrehleduTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $odpoved = $this->actingAs($this->uzivatel)->get('/prehled');
-        $odpoved->assertOk();
-
-        $data = $odpoved->viewData('page')['props']['data'];
-        $this->assertNull($data['upcoming_trip'], 'Cesta, která skončila včera místně, se pořád tváří jako nadcházející.');
+        $this->actingAs($this->uzivatel)->get('/prehled')
+            ->assertRedirect('/')
+            ->assertDontSee('Víkend');
     }
 
     public function test_vyroci_dnes_ma_nula_dni_do_data(): void
@@ -97,11 +97,8 @@ class CasovePasmoPrehleduTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $odpoved = $this->actingAs($this->uzivatel)->get('/prehled');
-        $odpoved->assertOk();
-
-        $milestone = $odpoved->viewData('page')['props']['data']['partner_hub']['milestones'][0] ?? null;
-        $this->assertNotNull($milestone);
-        $this->assertSame(0, $milestone['days_until'], 'Výročí, které je dnes místně, počítá s UTC dnem a vychází jako zítřejší.');
+        $this->actingAs($this->uzivatel)->get('/prehled')
+            ->assertRedirect('/')
+            ->assertDontSee('Výročí');
     }
 }

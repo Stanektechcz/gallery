@@ -2,11 +2,26 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ObnovujeHledaniFotek;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Person extends Model
 {
+    use ObnovujeHledaniFotek;
+
     protected $table = 'people';
+
+    /** Skrytá osoba se do hledání neskládá, takže i skrytí je změna textu. */
+    protected function sloupceVHledani(): array
+    {
+        return ['name', 'is_hidden'];
+    }
+
+    protected function fotkyVHledani(): iterable
+    {
+        return DB::table('media_person')->where('person_id', $this->id)->pluck('media_item_id');
+    }
 
     protected $fillable = [
         'gallery_space_id', 'name', 'nickname', 'birth_date',

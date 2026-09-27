@@ -4,6 +4,7 @@ namespace App\Console\Commands;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Services\Media\MazaniFotek;
 use App\Services\Media\MediaPurger;
 use App\Support\SpaceContext;
 use Illuminate\Console\Command;
@@ -37,12 +38,14 @@ class PurgeTrashCommand extends Command
 
         // Řádek bez `purge_after` (starší mazání) se posuzuje podle `trashed_at`,
         // jinak by v koši zůstal navždy.
-        $fronta = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+        // Co vlastník schválil bez partnera, se smaže až po celé lhůtě koše od
+        // schválení — i s kratším `--dny` a i po „Vysypat koš" (`MazaniFotek::drziLhutu`).
+        $fronta = MazaniFotek::bezDrzeneLhuty(MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->whereNotNull('trashed_at')
             ->where(function ($dotaz) use ($hranice) {
                 $dotaz->where('purge_after', '<=', now())
                     ->orWhere(fn ($bez) => $bez->whereNull('purge_after')->where('trashed_at', '<=', $hranice));
-            });
+            }));
 
         $smazano = 0;
         $bajtu = 0;

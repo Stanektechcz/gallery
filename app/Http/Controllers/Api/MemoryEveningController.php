@@ -10,6 +10,7 @@ use App\Models\MemoryEvening;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Media\MemoryDiscoveryService;
 use App\Services\Memories\MemoryEveningService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -138,15 +139,16 @@ class MemoryEveningController extends Controller
             'uuid' => $evening->uuid, 'title' => $evening->title, 'description' => $evening->description,
             'source_type' => $evening->source_type, 'scheduled_for' => $evening->scheduled_for?->toIso8601String(),
             'status' => $evening->status, 'repeat_annually' => $evening->repeat_annually, 'started_at' => $evening->started_at?->toIso8601String(), 'completed_at' => $evening->completed_at?->toIso8601String(),
-            'event' => $eventUuid ? ['uuid' => $eventUuid, 'href' => '/calendar/events/'.$eventUuid] : null,
-            'album' => $albumUuid ? ['uuid' => $albumUuid, 'href' => '/albums/'.$albumUuid] : null,
-            'shared_memory' => $momentUuid ? ['uuid' => $momentUuid, 'href' => '/shared-memories'] : null,
+            // Odkazy vedou na obrazovky aplikace (`TrasyPrototypu::url`), detail nese `uuid`.
+            'event' => $eventUuid ? ['uuid' => $eventUuid, 'href' => TrasyPrototypu::url('calendar')] : null,
+            'album' => $albumUuid ? ['uuid' => $albumUuid, 'href' => TrasyPrototypu::url('albums')] : null,
+            'shared_memory' => $momentUuid ? ['uuid' => $momentUuid, 'href' => TrasyPrototypu::url('x-vzpominky')] : null,
             'items' => $items->map(function ($item) use ($votes, $models, $viewerId) {
                 $itemVotes = collect($votes->get($item->id, []));
                 $model = $models->get($item->media_id);
 
                 return ['uuid' => $item->uuid, 'media_type' => $item->media_type, 'title' => $item->display_title ?: $item->original_filename, 'taken_at' => $item->taken_at,
-                    'thumbnail_url' => $model?->thumbnail_url, 'detail_url' => '/media/'.$item->uuid, 'status' => $item->status,
+                    'thumbnail_url' => $model?->thumbnail_url, 'detail_url' => TrasyPrototypu::url('all'), 'status' => $item->status,
                     'selected_count' => $itemVotes->where('is_selected', true)->count(), 'my_vote' => ($mine = $itemVotes->firstWhere('user_id', $viewerId)) ? (bool) $mine->is_selected : null];
             })->values(),
             'reflections' => $reflections->map(fn ($item) => (array) $item + ['is_mine' => (int) $item->user_id === $viewerId])->values(),

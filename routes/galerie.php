@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\Galerie\DataController;
 use App\Http\Controllers\Api\Galerie\DenikController;
 use App\Http\Controllers\Api\Galerie\DomaciPraceController;
 use App\Http\Controllers\Api\Galerie\FinanceAkceController;
+use App\Http\Controllers\Api\Galerie\HledaniController;
 use App\Http\Controllers\Api\Galerie\ImportVypisuController;
 use App\Http\Controllers\Api\Galerie\KategorieUkoluController;
 use App\Http\Controllers\Api\Galerie\KosController;
@@ -108,6 +109,15 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1,api-galerie'])->pr
     Route::get('data/{skupina}', DataController::class)
         ->whereAlpha('skupina')
         ->name('galerie.data');
+
+    /*
+     * Hledání fotek v celé knihovně.
+     *
+     * Prototyp dosud filtroval jen 240 nejnovějších fotek, které měl
+     * v prohlížeči; starší se nenašla nikdy. Rozsah jako mřížka (bez koše
+     * a trezoru), dlaždice v tvaru `PHOTOS` — viz HledaniController.
+     */
+    Route::get('hledat', HledaniController::class)->name('galerie.hledat');
 
     /*
      * „Spustit teď" u automatizace.
@@ -355,6 +365,8 @@ Route::middleware(['auth:sanctum', 'dvojice', 'throttle:120,1,api-galerie'])->pr
         // Návrhy ke smazání se vyřizují v koši: souhlas druhého, nebo ponechat.
         Route::post('schvalit', [MazaniController::class, 'schvalit'])->name('schvalit');
         Route::post('ponechat', [MazaniController::class, 'ponechat'])->name('ponechat');
+        // Partner nemá přístup: vlastník schválí sám, s potvrzením a záznamem v protokolu.
+        Route::post('schvalit-sam', [MazaniController::class, 'schvalitSam'])->name('schvalit-sam');
     });
 
     /*

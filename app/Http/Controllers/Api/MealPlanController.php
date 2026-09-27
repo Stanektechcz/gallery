@@ -13,6 +13,7 @@ use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Recipes\MealPlanService;
 use App\Services\Recipes\RecipeService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -81,7 +82,7 @@ class MealPlanController extends Controller
                 'description' => 'Součást jídelního plánu cesty „'.$trip->name.'“ pro '.$data['servings'].' porcí.'.(! empty($data['notes']) ? "\n\n".$data['notes'] : ''),
                 'type' => 'meal', 'status' => 'planned', 'starts_at' => $plannedFor, 'ends_at' => $plannedFor->copy()->addMinutes($duration),
                 'timezone' => 'Europe/Prague', 'color' => '#f59e0b', 'is_private' => false,
-                'metadata' => ['kind' => 'trip_recipe_meal', 'source' => 'meal_plan', 'recipe_uuid' => $recipe->uuid, 'planned_meal_uuid' => $meal->uuid, 'trip_id' => $trip->id, 'href' => '/recipes/'.$recipe->uuid],
+                'metadata' => ['kind' => 'trip_recipe_meal', 'source' => 'meal_plan', 'recipe_uuid' => $recipe->uuid, 'planned_meal_uuid' => $meal->uuid, 'trip_id' => $trip->id, 'href' => TrasyPrototypu::url('x-kucharka')],
             ]);
             $session = RecipeCookingSession::create([
                 'recipe_id' => $recipe->id, 'created_by' => $request->user()->id, 'calendar_event_id' => $event->id,

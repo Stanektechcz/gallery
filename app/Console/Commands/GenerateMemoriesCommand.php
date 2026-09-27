@@ -7,6 +7,7 @@ use App\Models\GeneratedMemory;
 use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Memories\MemoryGeneratorService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
@@ -85,7 +86,7 @@ class GenerateMemoriesCommand extends Command
             $member->notify(new GalleryNotification(
                 type: 'memories.ready',
                 message: $best->subtitle ? "{$best->title} — {$best->subtitle}" : $best->title,
-                link: $best->link ?? '/memories',
+                link: $best->link ?? TrasyPrototypu::url('x-vzpominky'),
                 icon: $best->icon ?? '📸',
                 extra: ['memory_uuid' => $best->uuid, 'kind' => $best->kind],
             ));

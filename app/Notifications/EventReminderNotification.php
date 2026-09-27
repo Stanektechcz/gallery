@@ -5,6 +5,7 @@ namespace App\Notifications;
 use App\Models\CalendarEvent;
 use App\Support\Cas;
 use App\Support\Tabulky;
+use App\Support\TrasyPrototypu;
 use Carbon\CarbonImmutable;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
@@ -28,7 +29,8 @@ class EventReminderNotification extends Notification
         return [
             'type' => 'calendar.reminder',
             'message' => "Připomínka: {$this->event->title}",
-            'link' => '/calendar/events/'.$this->event->uuid,
+            // Obrazovka aplikace (`TrasyPrototypu::url`); událost nese `extra.event_uuid`.
+            'link' => TrasyPrototypu::url('calendar'),
             'icon' => '⏰',
             'category' => 'planning',
             'priority' => 'high',
@@ -50,7 +52,7 @@ class EventReminderNotification extends Notification
             ->greeting("Ahoj {$notifiable->name},")
             ->line('Blíží se společná akce '.$this->event->title.'.')
             ->line('Začátek: '.self::zacatek($this->event)?->locale('cs')->translatedFormat('j. F Y, H:i'))
-            ->action('Otevřít akci', url('/calendar/events/'.$this->event->uuid));
+            ->action('Otevřít akci', url(TrasyPrototypu::url('calendar')));
     }
 
     /**

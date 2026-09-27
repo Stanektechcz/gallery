@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\Auth\PristupDoGalerie;
+use App\Support\TrasyPrototypu;
 use App\Support\Trezor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -81,7 +82,8 @@ class AuthenticatedSessionController extends Controller
 
         $request->session()->regenerate();
 
-        return redirect()->intended('/timeline');
+        // Rovnou do aplikace, ne přes starou `/timeline` (viz `TrasyPrototypu::url`).
+        return redirect()->intended(TrasyPrototypu::url('timeline'));
     }
 
     public function destroy(Request $request): RedirectResponse
@@ -92,6 +94,7 @@ class AuthenticatedSessionController extends Controller
         $request->session()->invalidate();
         $request->session()->regenerateToken();
 
-        return redirect('/login');
+        // Přihlašuje se v aplikaci; `/login` by sem jen přesměroval.
+        return redirect(TrasyPrototypu::url('home'));
     }
 }

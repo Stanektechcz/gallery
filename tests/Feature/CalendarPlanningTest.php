@@ -11,7 +11,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CalendarPlanningTest extends TestCase
@@ -146,10 +145,12 @@ class CalendarPlanningTest extends TestCase
 
         $this->travel(61)->minutes();
         $this->artisan(DeliverPlanningRemindersCommand::class)->assertSuccessful();
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard/Index')
-            ->where('data.partner_hub.reminders.0.id', $reminderId)
-            ->where('data.partner_hub.reminders.0.status', 'delivered'));
+        // Dřív přes stránku `/prehled`, která od 27. 9. 2026 jen přesměruje do
+        // aplikace; stav připomínky nese i API události.
+        $this->getJson("/api/v1/calendar/events/{$event['uuid']}")
+            ->assertOk()
+            ->assertJsonPath('reminders.0.id', $reminderId)
+            ->assertJsonPath('reminders.0.status', 'delivered');
 
         $this->postJson("/api/v1/reminders/{$reminderId}/acknowledge")
             ->assertOk()->assertJsonPath('status', 'acknowledged');

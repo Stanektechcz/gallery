@@ -60,25 +60,25 @@
                           "name":  "Fotky a nahrĂˇvĂˇnĂ­",
                           "short_name":  "Fotky",
                           "description":  "OtevĹ™Ă­t spoleÄŤnou galerii a nahrĂˇvĂˇnĂ­",
-                          "url":  "/timeline"
+                          "url":  "/galerie/casova-osa"
                       },
                       {
                           "name":  "SpoleÄŤnĂ˝ kalendĂˇĹ™",
                           "short_name":  "KalendĂˇĹ™",
                           "description":  "OtevĹ™Ă­t udĂˇlosti, vĂ˝roÄŤĂ­ a pĹ™ipomĂ­nky",
-                          "url":  "/calendar"
+                          "url":  "/galerie/kalendar"
                       },
                       {
                           "name":  "NaplĂˇnovat cestu",
                           "short_name":  "Cesty",
                           "description":  "OtevĹ™Ă­t cestovnĂ­ plĂˇnovĂˇnĂ­",
-                          "url":  "/trips"
+                          "url":  "/galerie/cesty"
                       },
                       {
                           "name":  "NaĹˇe kuchaĹ™ka",
                           "short_name":  "Recepty",
                           "description":  "OtevĹ™Ă­t spoleÄŤnĂ© recepty",
-                          "url":  "/recipes"
+                          "url":  "/galerie/kucharka"
                       },
                       {
                           "name":  "Rychlý zápis",

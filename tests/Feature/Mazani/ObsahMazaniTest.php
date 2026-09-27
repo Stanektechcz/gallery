@@ -59,6 +59,8 @@ class ObsahMazaniTest extends TestCase
             'navrhRezimu' => null,
             'cekaNaMe' => 0,
             'cekaNaPartnera' => 0,
+            'partnerBezPristupu' => false,
+            'partnerBezPristupuLhuta' => false,
         ], $mazani);
     }
 
@@ -229,6 +231,8 @@ class ObsahMazaniTest extends TestCase
             'navrhRezimu' => null,
             'cekaNaMe' => 0,
             'cekaNaPartnera' => 0,
+            'partnerBezPristupu' => false,
+            'partnerBezPristupuLhuta' => false,
         ], $prazdne['MAZANI']);
         $this->assertSame([], $prazdne['KE_SCHVALENI']);
         $this->assertContains('MAZANI', app(System::class)->uplne());

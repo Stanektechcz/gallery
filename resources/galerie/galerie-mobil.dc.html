@@ -2178,6 +2178,9 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       <sc-if value="{{ k.moje }}">
                         <button onClick="{{ k.ponechat }}" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-line); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:inherit" style-hover="background:var(--g-panel)">Stáhnout návrh</button>
                       </sc-if>
+                      <sc-if value="{{ k.samOn }}">
+                        <button onClick="{{ k.schvalitSam }}" aria-label="Schválit sám (partner nemá přístup)" style="flex:none; min-height:44px; padding:0 10px; border:1px solid var(--g-mag); border-radius:2px; background:transparent; cursor:pointer; font-family:inherit; font-size:12.5px; color:var(--g-mag)" style-hover="background:var(--g-panel)">Schválit sám</button>
+                      </sc-if>
                     </div>
                   </sc-for>
                 </div>
@@ -4193,6 +4196,8 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                   <button onClick="{{ vaultLock }}" class="btn btn-secondary btn-block" style="min-height:44px; margin-top:18px">Zamknout</button>
                 </div>
               </sc-if>
+              <!-- Zamčené i odemčené: záloha do cloudu trezor schválně vynechává. -->
+              <div style="display:flex; align-items:flex-start; gap:8px; margin:18px 2px 8px; font-size:12.5px; color:var(--g-ink2); text-wrap:pretty"><i class="ph-duotone ph-cloud-slash" style="font-size:16px; flex:none; color:var(--g-ink3)"></i><span>Fotky v trezoru se do cloudu nekopírují — zůstávají jen na serveru.</span></div>
             </div>
           </sc-if>
 
@@ -4841,6 +4846,26 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                       </sc-for>
                     </div>
                   </sc-if>
+                  <!-- Fotky z hledání v celé knihovně (GET /api/hledat); prohlížeč se otevře nad hledáním. -->
+                  <sc-if value="{{ srFotkyOn }}">
+                    <div style="padding:12px 0 6px">
+                      <div style="font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--g-ink3); padding-bottom:7px">{{ srFotkyHead }}</div>
+                      <sc-if value="{{ srFotkyPozn }}">
+                        <div style="font-size:12px; color:var(--g-ink3); padding-bottom:8px; text-wrap:pretty">{{ srFotkyPozn }}</div>
+                      </sc-if>
+                      <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:3px">
+                        <sc-for list="{{ srFotky }}" as="f" hint-placeholder-count="8">
+                          <button onClick="{{ f.tap }}" aria-label="{{ f.aria }}" style="position:relative; aspect-ratio:1; border:0; padding:0; cursor:pointer; border-radius:2px; background:{{ f.bg }}">
+                            <sc-if value="{{ f.video }}"><i class="ph-duotone ph-play-circle" style="position:absolute; right:4px; bottom:4px; font-size:15px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
+                            <sc-if value="{{ f.fav }}"><i class="ph-duotone ph-heart-straight" style="position:absolute; right:4px; top:4px; font-size:13px; color:#fff; filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))"></i></sc-if>
+                          </button>
+                        </sc-for>
+                      </div>
+                      <sc-if value="{{ srFotkyDalsi }}">
+                        <button onClick="{{ srFotkyNacist }}" style="width:100%; min-height:44px; margin-top:8px; border:1px solid var(--g-line); border-radius:2px; background:transparent; color:inherit; cursor:pointer; font-family:inherit; font-size:13px">{{ srFotkyDalsiLabel }}</button>
+                      </sc-if>
+                    </div>
+                  </sc-if>
                   <sc-for list="{{ searchResults }}" as="r" hint-placeholder-count="4">
                     <button onClick="{{ r.go }}" style="display:flex; align-items:center; gap:12px; width:100%; min-height:52px; padding:12px 2px; border:0; border-bottom:1px solid var(--g-line2); background:transparent; cursor:pointer; text-align:left; font-family:inherit; color:inherit">
                       <i class="ph-duotone {{ r.icon }}" style="flex:none; font-size:20px; color:var(--g-acc)"></i>
@@ -5066,6 +5091,12 @@ button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,
                 <div style="display:flex; gap:10px; margin-top:16px">
                   <button onClick="{{ odhlasZustat }}" class="btn btn-secondary" style="flex:1; min-height:48px">Zůstat přihlášen</button>
                   <button onClick="{{ odhlasZahodit }}" class="btn btn-primary" style="flex:1; min-height:48px; background:var(--g-mag); border-color:var(--g-mag)">Odhlásit a zahodit</button>
+                </div>
+              </sc-if>
+              <sc-if value="{{ sheetIsSchvalitSam }}">
+                <div style="display:flex; gap:10px; margin-top:16px">
+                  <button onClick="{{ samZrusit }}" class="btn btn-secondary" style="flex:1; min-height:48px">Zrušit</button>
+                  <button onClick="{{ samPotvrdit }}" class="btn btn-primary" style="flex:1; min-height:48px; background:var(--g-mag); border-color:var(--g-mag)">Schválit sám</button>
                 </div>
               </sc-if>
             </div>
@@ -7578,8 +7609,8 @@ class Component extends DCLogic {
     // které se počítají, je pořadí i text proměnlivý: „12 fotek bez data" se
     // zítra jmenuje jinak a rozhodnutí o tom řádku má platit dál.
     const src = (kind === 'ser' ? [] : (AL[key] || [])).map((r, i) => ({ t: r[0], m: r[1], g: r[2] || null, id: r[7] || (key + '-' + i), klic: r[7] || null }));
-    const q = (s.allQuery || '').trim().toLowerCase();
-    const rows = (q ? src.filter(r => (r.t + ' ' + r.m).toLowerCase().indexOf(q) >= 0) : src);
+    const q = (s.allQuery || '').trim();
+    const rows = (q ? src.filter(r => this.shoda([r.t, r.m], q)) : src);
     // Travel inbox dvojice má skutečné akce (přidat, archivovat), ne přeškrtnutí v telefonu.
     const inboxNaServeru = key === 'travelInbox' && this.galerieNaServeru();
     const tkNaServeru = key === 'ticket' && this.galerieNaServeru();
@@ -10459,13 +10490,21 @@ class Component extends DCLogic {
    * „Ponechat" u vlastního návrhu je jeho stažení, u cizího odmítnutí — obojí
    * fotku nechá v knihovně a hlášku rozliší server. Souhlas posílá fotky do
    * koše na třicet dní; vzít ho zpět znamená vrátit je z koše.
+   *
+   * `schvalit-sam` je souhlas vlastníka, když partner nemá přístup — jen po
+   * potvrzení v listu (`sheetIsSchvalitSam`), a proto s výslovným příznakem;
+   * odpověď má týž tvar jako `schvalit`.
    */
   navrhVyrid(akce, ids, hotovo) {
     const api = window.GalerieApi;
     const seznam = (ids || []).filter(id => /^[0-9a-f-]{36}$/.test(String(id)));
     if (!api || !api.post || api.mode !== 'http' || !seznam.length) { this.toast('Návrhy ke smazání vyřizuje jen server', { icon: 'ph-info' }); return; }
-    const schvalit = akce === 'schvalit';
-    api.post(schvalit ? 'kos/schvalit' : 'kos/ponechat', { ids: seznam }).then(res => {
+    const sam = akce === 'schvalit-sam';
+    const schvalit = akce === 'schvalit' || sam;
+    const pozadavek = sam
+      ? api.post('kos/schvalit-sam', { ids: seznam, potvrzuji_bez_partnera: true })
+      : api.post(schvalit ? 'kos/schvalit' : 'kos/ponechat', { ids: seznam });
+    pozadavek.then(res => {
       const smazane = schvalit && res && Array.isArray(res.ids) ? res.ids : [];
       if (smazane.length) {
         const zbytek = PHOTOS.filter(p => smazane.indexOf(p.id) < 0);
@@ -12082,6 +12121,112 @@ class Component extends DCLogic {
       })
     };
   }
+  /*
+   * Shoda textu s tím, co kdo napsal do políčka „Hledat".
+   *
+   * Seznamy a sekce filtrovaly malými písmeny a celou frázi — „kavarna"
+   * nenašlo „Kavárnu Alma". Tady bez diakritiky a velikosti písmen a po
+   * slovech: každé slovo dotazu musí v textu být, na pořadí nezáleží.
+   * Prázdný dotaz platí na všechno; `text` může být i pole.
+   */
+  shoda(text, q) {
+    const fold = t => String(t == null ? '' : t).normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
+    const slova = fold(q).split(/[\s,.;:!?„“"'()]+/).filter(Boolean);
+    if (!slova.length) return true;
+    const kde = fold(Array.isArray(text) ? text.join(' ') : text);
+    return slova.every(w => kde.indexOf(w) >= 0);
+  }
+  /*
+   * Fotky v hledání — `GET /api/hledat` v celé knihovně.
+   *
+   * Hledání větou na telefonu našlo cesty, platby, dny i zápisy, ale ani
+   * jednu fotku. Server hledá v popiscích, lidech, místech, štítcích
+   * i měsících všech fotek, ne jen v těch, co telefon načetl.
+   *
+   * Výsledky jsou v `this._hl`, ne ve stavu (ten se ukládá dvojici).
+   * Dotaz odchází 250 ms po posledním úhozu, odpověď na starší dotaz
+   * (`seq`) se zahodí; když server neodpoví, skupina fotek se prostě
+   * neukáže — bez hlášky a bez opakování.
+   */
+  hledatNaServeru() { return this.galerieNaServeru() && !!window.GalerieApi.get; }
+  // Z věty jen to, co hledá fotky: „fotky z července, kde jsme oba" → „července".
+  hledaniDotaz() {
+    const raw = String(this.state.query || '').trim();
+    const n = this.mNl();
+    if (!n.tokens.length) return raw;
+    // Jméno jen v prvním pádě („Makinka") — to je člověk na fotce, ne autor.
+    const kdo = n.tokens.find(t => t.kind === 'who' && t.value !== 'oba');
+    const osoba = kdo && String(kdo.word).toLowerCase() === this.krestni(kdo.value).toLowerCase() ? kdo.word : '';
+    const video = n.tokens.some(t => t.kind === 'scope' && /^vide/.test(String(t.word)));
+    // Místo jen jménem: „Chorvatsko 2026" (cesta) → „Chorvatsko" — jinak by chtělo slova navíc.
+    const misto = n.place ? String(n.place).split(',')[0].replace(/\s+\d{4}$/, '') : '';
+    return [n.resid, osoba, misto, n.month ? MMONN[n.month] : '', n.year, video ? 'video' : '']
+      .filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
+  }
+  /** Stav hledání pro aktuální dotaz, nebo `null` (krátký dotaz, bez serveru, server neodpověděl). */
+  hledani() {
+    const q = this.hledaniDotaz();
+    const h = this._hl || (this._hl = { q: '', seq: 0, zname: {}, vysledek: null, nacita: false, chyba: false });
+    if (q.length < 2 || !this.hledatNaServeru()) {
+      if (h.q) { clearTimeout(h.casovac); h.q = ''; h.seq++; h.vysledek = null; h.nacita = false; h.chyba = false; }
+      return null;
+    }
+    if (h.q !== q) {
+      clearTimeout(h.casovac);
+      h.q = q; h.seq++; h.vysledek = null; h.nacita = true; h.chyba = false;
+      const seq = h.seq;
+      h.casovac = setTimeout(() => this.hledaniNacti(seq, 1), 250);
+    }
+    return h.chyba ? null : h;
+  }
+  hledaniNacti(seq, strana) {
+    const h = this._hl;
+    if (!h || h.seq !== seq) return;
+    h.nacita = true;
+    window.GalerieApi.get('hledat?q=' + encodeURIComponent(h.q) + '&strana=' + strana + '&limit=60')
+      .then(res => {
+        if (h.seq !== seq) return;
+        // Dlaždice počítače → fotka telefonu, jako `Knihovna::mobil()` na serveru.
+        const nove = (res && Array.isArray(res.polozky) ? res.polozky : []).map(f => this.hledaniNaTelefon(f));
+        const dosud = strana > 1 && h.vysledek ? h.vysledek.polozky : [];
+        const uz = {};
+        dosud.forEach(p => { uz[p.id] = 1; });
+        nove.forEach(p => { h.zname[p.id] = p; });
+        h.vysledek = {
+          polozky: dosud.concat(nove.filter(p => !uz[p.id])),
+          celkem: Number(res && res.celkem) || 0,
+          uroven: res && res.uroven === 'or' ? 'or' : 'and',
+          strana: strana,
+          dalsi: !!(res && res.dalsi)
+        };
+        h.nacita = false;
+        this.forceUpdate();
+      })
+      .catch(() => {
+        if (h.seq !== seq) return;
+        h.nacita = false;
+        if (strana === 1) h.chyba = true;
+        else if (h.vysledek) h.vysledek = Object.assign({}, h.vysledek, { dalsi: false });
+        this.forceUpdate();
+      });
+  }
+  hledaniDalsi() {
+    const h = this._hl;
+    if (!h || h.nacita || !h.vysledek || !h.vysledek.dalsi) return;
+    this.hledaniNacti(h.seq, h.vysledek.strana + 1);
+    this.forceUpdate();
+  }
+  hledaniNaTelefon(f) {
+    return {
+      id: f.id, di: -1, day: f.dayLabel || '', nahrano: f.nahrano || null, place: f.place || '',
+      video: !!f.isVideo, dur: f.dur || null, fav: !!f.fav, seed: f.n || 0, bg: f.bg, full: f.full || null,
+      play: f.video || null, tags: f.tags && f.tags.length ? f.tags : null, people: f.people && f.people.length ? f.people : null,
+      uprava: f.uprava || null, poster: f.poster || null, author: f.author || null, dev: f.dev || null,
+      navrhSmazat: f.navrhSmazat || null, caption: f.caption || ''
+    };
+  }
+  // Fotka z výsledků hledání podle id — prohlížeč ji otevře, i když v načtené knihovně není.
+  hledaniFotka(id) { return ((this._hl || {}).zname || {})[id] || null; }
   // ── hledání v přirozeném jazyce ──
   mNlPlaces() {
     if (this._nlPl) return this._nlPl;
@@ -12126,8 +12271,9 @@ class Component extends DCLogic {
     let year = null;
     const ym = low.match(/ (20\d\d) /);
     if (ym) { year = ym[1]; tokens.push({ kind: 'year', label: ym[1], value: ym[1], word: ym[1] }); cut.push(ym[1]); }
-    else if (/ (letos|tenhle rok) /.test(low)) { year = String(this.ukazka() ? 2026 : new Date().getFullYear()); tokens.push({ kind: 'year', label: 'Letos', value: year, word: 'letos' }); cut.push('letos', 'tenhle rok'); }
-    else if (/ (loni|minulý rok) /.test(low)) { year = '2025'; tokens.push({ kind: 'year', label: 'Loni', value: '2025', word: 'loni' }); cut.push('loni', 'minulý rok'); }
+    // „Letos" a „loni" podle dnešního data (`dnes()`) — napsaný rok by za rok hledal o rok vedle.
+    else if (/ (letos|tenhle rok) /.test(low)) { year = String(this.dnes().getFullYear()); tokens.push({ kind: 'year', label: 'Letos (' + year + ')', value: year, word: 'letos' }); cut.push('letos', 'tenhle rok'); }
+    else if (/ (loni|loňsk\S*|minulý rok) /.test(low)) { year = String(this.dnes().getFullYear() - 1); tokens.push({ kind: 'year', label: 'Loni (' + year + ')', value: year, word: 'loni' }); cut.push('loni', 'loňsk', 'minulý rok'); }
     let month = null;
     for (const m of MMON) {
       const g = m[1].slice(0, 5), l = m[3].slice(0, 5);
@@ -12841,7 +12987,7 @@ class Component extends DCLogic {
     // — lightbox —
     // Otevřený výběr (promítání, výroční album) listuje svými fotkami, ne celou mřížkou.
     const lbZdroj = Array.isArray(s.lbList) && s.lbList.length
-      ? s.lbList.map(id => lib.find(p => p.id === id)).filter(Boolean) : shown;
+      ? s.lbList.map(id => lib.find(p => p.id === id) || this.hledaniFotka(id)).filter(Boolean) : shown;
     const lbIdx = s.lb ? lbZdroj.findIndex(p => p.id === s.lb) : -1;
     const lbP = lbIdx >= 0 ? lbZdroj[lbIdx] : null;
     const lbStep = d => { const n = lbZdroj[(lbIdx + d + lbZdroj.length) % lbZdroj.length]; if (n) this.setState({ lb: n.id }); };
@@ -12974,8 +13120,8 @@ class Component extends DCLogic {
 
     // — hledání v přirozeném jazyce —
     const nl = this.mNl();
-    const q = (nl.resid || '').trim().toLowerCase();
-    const hit = txt => !q || String(txt).toLowerCase().indexOf(q) >= 0;
+    const q = (nl.resid || '').trim();
+    const hit = txt => this.shoda(txt, q);
     const monthHit = txt => !nl.month || String(txt).indexOf(MMONN[nl.month]) >= 0;
     // Platby mají datum číslem („29. 8.“) — měsíc bereme z txOrd.
     const txMonthHit = t => !nl.month || Math.floor(this.txOrd(t.date) / 100) === nl.month;
@@ -12983,6 +13129,10 @@ class Component extends DCLogic {
     const yearHit = txt => !nl.year || String(txt).indexOf(nl.year) >= 0;
     const scopeOk = k => !nl.scope || nl.scope === k;
     const results = [];
+    // Fotky z celé knihovny na serveru — jen když věta fotky nevylučuje („kolik jsme dali", „co jsme nedotáhli").
+    const srHl = scopeOk('photos') && !nl.todo && !nl.agg ? this.hledani() : null;
+    const srHlVysl = srHl && srHl.vysledek;
+    const srHlFotky = srHlVysl ? srHlVysl.polozky : [];
     const anyFilter = q || nl.month || nl.place || nl.year || nl.scope || nl.todo;
     if (anyFilter && !nl.todo) {
       if (scopeOk('trip')) Object.keys(TRIPS).forEach(id => {
@@ -14398,6 +14548,11 @@ class Component extends DCLogic {
          */
         const ceka = Array.isArray((window.GalerieData || {}).KE_SCHVALENI) ? (window.GalerieData || {}).KE_SCHVALENI : [];
         const naMe = ceka.filter(k => !k.ja).length;
+        // Partner nemá přístup (posílá se jen vlastníkovi): vlastní návrh jde schválit sám — po potvrzení v listu.
+        const mazaniStav = (window.GalerieData || {}).MAZANI || {};
+        const bezPartnera = !!mazaniStav.partnerBezPristupu;
+        // Přístup nemá, ale čekací lhůta ještě běží — tlačítko chybí, věta řekne proč.
+        const lhutaBezPartnera = !bezPartnera && !!mazaniStav.partnerBezPristupuLhuta && ceka.some(k => k.ja);
         return {
           trashRows: kos.map(r => ({
             name: r.name, meta: r.from + ' · ' + r.by + ' · ' + r.when + ' · trvale za ' + r.left,
@@ -14410,14 +14565,16 @@ class Component extends DCLogic {
           ksch: ceka.map(k => ({
             name: k.name || '', bg: k.bg || 'var(--g-panel)',
             meta: (k.from || 'Fotka') + ' · ' + (k.ja ? 'navrhli jste vy' : 'navrhuje ' + (k.by || 'druhý z vás')) + (k.when ? ' · ' + k.when : ''),
-            cizi: !k.ja, moje: !!k.ja,
+            cizi: !k.ja, moje: !!k.ja, samOn: bezPartnera && !!k.ja,
             schvalit: () => this.navrhVyrid('schvalit', [k.id]),
+            schvalitSam: () => this.setState({ sheet: 'schvalitSam', mSamDlg: [k.id] }),
             ponechat: () => this.navrhVyrid('ponechat', [k.id])
           })),
           kschHas: ceka.length > 0,
           kschMeta: naMe
             ? this.pl(naMe, 'návrh čeká na vás', 'návrhy čekají na vás', 'návrhů čeká na vás') + ' — smaže se až s vaším souhlasem'
             : 'Čeká, až to potvrdí ' + (((window.GalerieData || {}).MAZANI || {}).partner || 'druhý z vás')
+              + (lhutaBezPartnera ? ' · partner nemá přístup — schválit sami můžete po 14 dnech bez přístupu' : '')
         };
       })() : {}),
       shareRows: this.sharesList().map(r => ({
@@ -14919,19 +15076,28 @@ class Component extends DCLogic {
 
       // sheety
       sheetOn: !!s.sheet,
-      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : s.sheet === 'odhlasit' ? 'Odhlásit se?' : '',
+      sheetTitle: s.sheet === 'filter' ? 'Filtry' : s.sheet === 'upload' ? 'Nahrát' : s.sheet === 'search' ? 'Hledat' : s.sheet === 'tx' ? (txOpen ? txOpen.name : 'Platba') : s.sheet === 'cyc' ? cycEditTitleVal : s.sheet === 'add' ? spec[0] : s.sheet === 'sort' ? 'Řazení' : s.sheet === 'export' ? 'Záloha a export' : s.sheet === 'vypis' ? 'Výpis z banky' : s.sheet === 'odhlasit' ? 'Odhlásit se?' : s.sheet === 'schvalitSam' ? 'Schválit bez partnera?' : '',
       sheetNote: s.sheet === 'upload' ? 'Originály se přenesou na server, jen když je Wi-Fi nebo to povolíte.'
         : s.sheet === 'vypis' ? 'Na který účet? Pak vyberete soubor z banky (CSV, XLS nebo XLSX) — co už v knize je, se nezdvojí.'
         : s.sheet === 'sort' ? ({ memories: 'Vzpomínky', finance: 'Transakce', trips: 'Cesty', places: 'Místa', albums: 'Alba' }[screen] || null)
         // U dvojice se všechny čtyři volby stáhnou hned (tisk, ZIP, CSV, itineráře);
         // e-mail s odkazem patří ukázce, aplikace ho neposílá.
         : s.sheet === 'export' ? (this.galerieNaServeru() ? 'Připraví se rovnou tady — tisk otevře dialog, ostatní se stáhnou do telefonu.' : 'Připraví se na serveru, odkaz přijde do e-mailu.')
-        : s.sheet === 'odhlasit' ? (s.odhlasText || null) : null,
+        : s.sheet === 'odhlasit' ? (s.odhlasText || null)
+        : s.sheet === 'schvalitSam' ? 'Partner do galerie nemá přístup, a tak návrh schválit nemůže. Položka půjde do koše bez jeho souhlasu a do protokolu se zapíše, že jste to schválili sami. Trvale smazat z koše ji půjde až po 30 dnech.' : null,
       closeSheet: () => this.setState({ sheet: null }),
       // Neodeslané změny při odhlášení — viz `odhlasitSe`.
       sheetIsOdhlasit: s.sheet === 'odhlasit',
       odhlasZustat: () => this.setState({ sheet: null, odhlasText: null }),
       odhlasZahodit: () => this.odhlasitSe(true),
+      // „Schválit sám" u vlastního návrhu, když partner nemá přístup (rozhodnutí 27. 9. 2026).
+      sheetIsSchvalitSam: s.sheet === 'schvalitSam',
+      samZrusit: () => this.setState({ sheet: null, mSamDlg: null }),
+      samPotvrdit: () => {
+        const ids = Array.isArray(s.mSamDlg) ? s.mSamDlg : [];
+        this.setState({ sheet: null, mSamDlg: null });
+        this.navrhVyrid('schvalit-sam', ids);
+      },
       sheetIsFilter: s.sheet === 'filter', sheetIsUpload: s.sheet === 'upload',
       sheetIsSearch: s.sheet === 'search', sheetIsTx: s.sheet === 'tx', sheetIsAdd: s.sheet === 'add',
       sheetIsCyc: s.sheet === 'cyc', sheetIsVypis: s.sheet === 'vypis',
@@ -14956,9 +15122,22 @@ class Component extends DCLogic {
       setQuery: e => this.setState({ query: e.target.value }),
       queryKey: e => { if (e.key === 'Escape') this.setState({ sheet: null }); },
       searchMeta: (s.query || '').trim()
-        ? this.pl(results.length, 'výsledek', 'výsledky', 'výsledků')
+        ? this.pl(results.length + (srHlVysl ? srHlVysl.celkem : 0), 'výsledek', 'výsledky', 'výsledků')
         : 'Zkuste větu: „fotky z Chorvatska v červenci“ nebo „kolik jsme dali za restaurace v srpnu“',
       searchResults: results.slice(0, 8),
+      // Fotky z hledání v celé knihovně: klepnutí otevře prohlížeč nad hledáním, listuje se jen výsledky.
+      srFotkyOn: !!(srHl && (srHl.nacita || srHlFotky.length)),
+      srFotkyHead: srHlVysl ? 'Fotky a videa · ' + srHlVysl.celkem : 'Fotky a videa',
+      srFotkyPozn: srHl && srHl.nacita && !srHlVysl ? 'Hledám v celé knihovně…'
+        : srHlVysl && srHlVysl.uroven === 'or' && srHlFotky.length ? 'Nic neobsahuje všechna slova — ukazuji nejbližší shody' : '',
+      srFotky: srHlFotky.map(p => ({
+        bg: this.tlo(p), video: p.video, fav: this.isFav(p),
+        aria: (p.video ? 'Video' : 'Fotka') + [p.day, p.place].filter(Boolean).map(x => ', ' + x).join(''),
+        tap: () => this.setState({ lb: p.id, lbList: srHlFotky.map(x => x.id), lbAuto: false })
+      })),
+      srFotkyDalsi: !!(srHlVysl && srHlVysl.dalsi),
+      srFotkyDalsiLabel: srHl && srHl.nacita && srHlVysl ? 'Načítám…' : 'Načíst další',
+      srFotkyNacist: () => this.hledaniDalsi(),
       nlAny: nl.tokens.length > 0,
       nlResid: nl.resid ? 'volný text: „' + nl.resid + '“' : 'bez dalšího textu',
       nlTokens: nl.tokens.map(t => ({
@@ -15305,12 +15484,12 @@ class Component extends DCLogic {
         const def = this.section(s.secId);
         const tab = def.tabs[Math.min(s.secTab, def.tabs.length - 1)];
         const all = this.secRowsOf(tab[1]);
-        const q = (s.secQuery || '').trim().toLowerCase();
+        const q = (s.secQuery || '').trim();
         const filt = s.secFilter || 'all';
         const rows = all.filter(r => {
           if (filt === 'open' && r.done) return false;
           if (filt === 'done' && !r.done) return false;
-          return !q || (r.title + ' ' + r.meta).toLowerCase().indexOf(q) >= 0;
+          return this.shoda([r.title, r.meta], q);
         });
         const done = all.filter(r => r.done).length;
         const pct = all.length ? Math.round((done / all.length) * 100) : 0;

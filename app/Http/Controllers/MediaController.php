@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Jobs\Media\ApplyMediaEditJob;
+use App\Jobs\Media\ObnovHledaniJob;
 use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
@@ -10,6 +11,7 @@ use App\Models\MediaItem;
 use App\Models\MediaVariant;
 use App\Models\StorageConnection;
 use App\Models\User;
+use App\Services\Hledani\ObnovaHledani;
 use App\Services\Media\ImageVariantService;
 use App\Services\Media\MazaniFotek;
 use App\Services\Media\MediaPurger;
@@ -33,6 +35,9 @@ use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class MediaController extends Controller
 {
+    /** Hromadné akce, které mění něco, co je v `search_text`. */
+    private const HROMADNE_DO_HLEDANI = ['tag', 'untag', 'add_to_album', 'move', 'add_person', 'add_place', 'shift_date', 'set_location'];
+
     public function show(Request $request, string $uuid): Response
     {
         $media = MediaItem::where('uuid', $uuid)
@@ -281,7 +286,8 @@ class MediaController extends Controller
             $media->people()->sync($data['person_ids']);
         }
 
-        $media->rebuildSearchText();
+        // Starší API (`PATCH /api/v1/media/{uuid}`) hledá stejně jako aplikace.
+        app(ObnovaHledani::class)->obnovJednu($media);
 
         AuditLog::record('media.update', $media, array_keys($data));
 
@@ -351,6 +357,8 @@ class MediaController extends Controller
             403,
             'Trvale odstranit smí jen správce prostoru. Do koše to zatím zůstane.'
         );
+        // Schválená vlastníkem bez partnera: trvale až po lhůtě koše (`MazaniFotek::drziLhutu`).
+        abort_if(app(MazaniFotek::class)->drziLhutu($media), 422, MazaniFotek::DRZENA_LHUTA);
 
         // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
         // jména z protokolu vypisuje i se zamčeným trezorem. Předmět (id) zůstává.
@@ -763,6 +771,7 @@ class MediaController extends Controller
         $hoursOffset = (float) ($data['hours_offset'] ?? 0);
         $ratingVal = $data['rating'] ?? null;
         $processed = 0;
+        $zpracovane = [];
 
         foreach ($media as $item) {
             try {
@@ -817,8 +826,19 @@ class MediaController extends Controller
                 };
 
                 $processed++;
+                $zpracovane[] = $item->id;
             } catch (\Throwable $e) {
                 // Skip items we can't process, continue with others
+            }
+        }
+
+        // Štítky, lidé, místa, alba, datum a poloha jsou v `search_text`; dřív
+        // zůstal po hromadné akci starý a fotka se podle nového štítku nenašla.
+        if (in_array($action, self::HROMADNE_DO_HLEDANI, true) && $zpracovane !== []) {
+            try {
+                ObnovHledaniJob::naplanuj($zpracovane);
+            } catch (\Throwable $e) {
+                Log::warning('Přepočet hledaného textu po hromadné akci se nepodařilo zařadit', ['akce' => $action, 'chyba' => $e->getMessage()]);
             }
         }
 

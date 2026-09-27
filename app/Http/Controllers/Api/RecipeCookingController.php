@@ -12,6 +12,7 @@ use App\Models\RecipeCookingSession;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Recipes\RecipeService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -45,7 +46,7 @@ class RecipeCookingController extends Controller
                     'description' => 'Společné vaření receptu pro '.$data['servings'].' porcí.'.(! empty($data['notes']) ? "\n\n".$data['notes'] : ''),
                     'type' => 'meal', 'status' => 'planned', 'starts_at' => $planned, 'ends_at' => $planned->copy()->addMinutes($duration),
                     'timezone' => 'Europe/Prague', 'color' => '#f59e0b', 'is_private' => false,
-                    'metadata' => ['kind' => 'recipe_cooking', 'source' => 'recipe', 'recipe_uuid' => $recipe->uuid, 'cooking_session_uuid' => $session->uuid, 'href' => '/recipes/'.$recipe->uuid],
+                    'metadata' => ['kind' => 'recipe_cooking', 'source' => 'recipe', 'recipe_uuid' => $recipe->uuid, 'cooking_session_uuid' => $session->uuid, 'href' => TrasyPrototypu::url('x-kucharka')],
                 ]);
                 // Termín vaření jsou pražské hodiny (`datetime-local`, tak se ukládá
                 // i `starts_at`); plánovač porovnává `remind_at` s `now()` v UTC.

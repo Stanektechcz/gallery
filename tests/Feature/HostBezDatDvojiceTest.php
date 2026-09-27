@@ -87,18 +87,26 @@ class HostBezDatDvojiceTest extends TestCase
 
     /**
      * Staré webové rozhraní vydávalo alba, koš, trezor i export přímo ze serveru.
-     * Host se odhlásí a přihlašovací formulář mu řekne proč.
+     *
+     * Jeho stránky od 27. 9. 2026 nic nevykreslují a vedou do aplikace
+     * (`PresmerujStareRozhrani`) — hosta stejně jako dvojici; aplikace ho pak
+     * odmítne sama. Webové cesty, které zůstaly (výběr po sdílení do PWA,
+     * zápisy), hosta dál odhlásí a přihlášení mu řekne proč.
      */
     public function test_host_se_do_stareho_rozhrani_nedostane(): void
     {
         foreach (['/albums', '/trash', '/vault', '/prehled', '/timeline', '/favorites'] as $cesta) {
-            $this->actingAs($this->host)
-                ->get($cesta)
-                ->assertRedirect(route('login'))
-                ->assertSessionHasErrors('email');
+            $odpoved = $this->actingAs($this->host)->get($cesta);
 
-            $this->assertGuest();
+            $this->assertTrue($odpoved->isRedirect(), $cesta.' se hostovi vykreslila.');
+            $this->assertStringNotContainsString('/login', (string) $odpoved->headers->get('Location'));
         }
+
+        $this->actingAs($this->host)
+            ->get('/share-target')
+            ->assertRedirect(route('login'))
+            ->assertSessionHasErrors('email');
+        $this->assertGuest();
 
         $this->actingAs($this->host)
             ->postJson('/export/download')
@@ -119,7 +127,8 @@ class HostBezDatDvojiceTest extends TestCase
 
     public function test_dvojice_stare_rozhrani_pouziva_dal(): void
     {
-        $this->actingAs($this->vlastnik)->get('/albums')->assertOk();
+        // `/albums` od 27. 9. 2026 vede do aplikace; strom alb zůstal.
+        $this->actingAs($this->vlastnik)->get('/albums/tree')->assertOk();
         $this->assertAuthenticatedAs($this->vlastnik);
     }
 }

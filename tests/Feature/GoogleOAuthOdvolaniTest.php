@@ -102,7 +102,7 @@ class GoogleOAuthOdvolaniTest extends TestCase
         $this->actingAs($this->adri)
             ->withSession(['oauth.google.state' => 'spravny'])
             ->get('/oauth/google/callback?code=kod&state=spravny')
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('error', fn (string $zprava) => $this->bezDetailu($zprava));
     }
 

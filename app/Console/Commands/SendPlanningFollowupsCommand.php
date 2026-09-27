@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\AutomationRegistryService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -48,7 +49,7 @@ class SendPlanningFollowupsCommand extends Command
             if (! $recipient) {
                 continue;
             }
-            $recipient->notify(new GalleryNotification('calendar.task.overdue', "Úkol po termínu: {$task->title} ({$task->event_title})", "/calendar/events/{$task->event_uuid}", '⚠️'));
+            $recipient->notify(new GalleryNotification('calendar.task.overdue', "Úkol po termínu: {$task->title} ({$task->event_title})", TrasyPrototypu::url('calendar'), '⚠️'));
             DB::table('event_tasks')->where('id', $task->id)->update(['last_escalated_at' => now(), 'updated_at' => now()]);
             $sent++;
         }
@@ -65,7 +66,7 @@ class SendPlanningFollowupsCommand extends Command
             // Bez převodu pásma — termín je zapsaný podle pražských hodin, stejně
             // jako začátek akce, ze kterého se často odvozuje (viz `App\Support\Cas`).
             $when = Carbon::parse($task->due_at)->format('j. n. \v H:i');
-            $recipient->notify(new GalleryNotification('calendar.task.due_soon', "Brzy je potřeba dokončit: {$task->title} ({$task->event_title}) · termín {$when}", "/calendar/events/{$task->event_uuid}", '⏰'));
+            $recipient->notify(new GalleryNotification('calendar.task.due_soon', "Brzy je potřeba dokončit: {$task->title} ({$task->event_title}) · termín {$when}", TrasyPrototypu::url('calendar'), '⏰'));
             DB::table('event_tasks')->where('id', $task->id)->update(['last_reminded_at' => now(), 'updated_at' => now()]);
             $sent++;
         }
@@ -87,7 +88,7 @@ class SendPlanningFollowupsCommand extends Command
             if (! $user) {
                 continue;
             }
-            $user->notify(new GalleryNotification('gift.reminder', "Dárek „{$gift->title}“ je potřeba vyřešit za {$remaining} dní.", '/planning', '🎁'));
+            $user->notify(new GalleryNotification('gift.reminder', "Dárek „{$gift->title}“ je potřeba vyřešit za {$remaining} dní.", TrasyPrototypu::url('x-darky'), '🎁'));
             DB::table('gift_ideas')->where('id', $gift->id)->update(['last_reminded_at' => now(), 'updated_at' => now()]);
             $sent++;
         }

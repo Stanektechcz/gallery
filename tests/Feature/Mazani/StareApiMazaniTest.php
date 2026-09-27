@@ -8,7 +8,6 @@ use App\Support\SpaceContext;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Storage;
-use Inertia\Testing\AssertableInertia;
 use Laravel\Sanctum\Sanctum;
 use Tests\Feature\Planovani\DvojiceSHostem;
 use Tests\TestCase;
@@ -354,18 +353,18 @@ class StareApiMazaniTest extends TestCase
         $this->assertNotNull($this->radek($ciziVKosi->id));
     }
 
+    /**
+     * Stará obrazovka koše (a s ní příznak `can_purge`) od 27. 9. 2026 jen vede
+     * do aplikace (`PresmerujStareRozhrani`); kdo smí mazat natrvalo, hlídá
+     * API výš. Tady zbývá, že ani jeden z dvojice starou obrazovku nedostane.
+     */
     public function test_obrazovka_kose_nabidne_trvale_smazani_jen_spravci(): void
     {
         [$vlastnik, $partner] = $this->dvojiceSHostem();
         $partner->forceFill(['role' => 'owner'])->save();
 
-        $this->actingAs($partner)->get('/trash')
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $stranka) => $stranka->where('can_purge', false));
-
-        $this->actingAs($vlastnik)->get('/trash')
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $stranka) => $stranka->where('can_purge', true));
+        $this->actingAs($partner)->get('/trash')->assertRedirect('/galerie/kos');
+        $this->actingAs($vlastnik)->get('/trash')->assertRedirect('/galerie/kos');
     }
 
     /**

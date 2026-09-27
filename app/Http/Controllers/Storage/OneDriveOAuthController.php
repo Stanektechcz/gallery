@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Models\StorageConnection;
 use App\Services\Storage\StorageResolver;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Crypt;
@@ -64,12 +65,12 @@ class OneDriveOAuthController extends Controller
         $expected = $request->session()->pull('onedrive.state');
 
         if (! $expected || ! $request->filled('state') || ! hash_equals($expected, $request->string('state')->toString())) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'Přihlášení k OneDrive se nepodařilo ověřit. Zkuste to prosím znovu.');
         }
 
         if ($request->filled('error')) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'OneDrive přístup nepovolil: '.$request->string('error_description')->toString());
         }
 
@@ -87,14 +88,14 @@ class OneDriveOAuthController extends Controller
         ]);
 
         if ($exchange->failed()) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'OneDrive odmítl výměnu kódu: '.$exchange->json('error_description', 'neznámá chyba'));
         }
 
         $tokens = $exchange->json();
 
         if (empty($tokens['refresh_token'])) {
-            return redirect()->route('connections')
+            return redirect(TrasyPrototypu::url('storage'))
                 ->with('error', 'OneDrive nevrátil obnovovací token. Zkontrolujte, že aplikace žádá o oprávnění offline_access.');
         }
 
@@ -120,7 +121,7 @@ class OneDriveOAuthController extends Controller
 
         AuditLog::record('storage.onedrive.connected', null, ['account' => $me->json('userPrincipalName')]);
 
-        return redirect()->route('connections')->with('success', 'OneDrive připojen.');
+        return redirect(TrasyPrototypu::url('storage'))->with('success', 'OneDrive připojen.');
     }
 
     public function disconnect(Request $request): RedirectResponse
@@ -134,7 +135,7 @@ class OneDriveOAuthController extends Controller
         StorageConnection::where('provider', 'onedrive')->where('gallery_space_id', $space->id)->delete();
         AuditLog::record('storage.onedrive.disconnected');
 
-        return redirect()->route('connections')->with('success', 'OneDrive odpojen. Soubory v OneDrive zůstávají.');
+        return redirect(TrasyPrototypu::url('storage'))->with('success', 'OneDrive odpojen. Soubory v OneDrive zůstávají.');
     }
 
     private function space(Request $request): GallerySpace

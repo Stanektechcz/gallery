@@ -90,4 +90,82 @@ class FulltextDotazTest extends TestCase
     {
         $this->assertNull(FulltextDotaz::zBooleovskeho("\xC3\x28"));
     }
+
+    public function test_nebo_dotaz_nema_povinna_slova(): void
+    {
+        $dotaz = (string) FulltextDotaz::zNeboDotazu('Chata Lysá xyzzy');
+
+        $this->assertStringNotContainsString('+', $dotaz);
+        // Kmen a bez diakritiky: „Chata" → `chat*`, „Lysá" → `lysa*` (po utržení by zbyly tři znaky).
+        $this->assertSame('chat* lysa* xyzz*', $dotaz);
+    }
+
+    public function test_nebo_dotaz_bez_slov_vrati_null(): void
+    {
+        $this->assertNull(FulltextDotaz::zNeboDotazu('a b'));
+    }
+
+    public function test_kmen_utrhne_koncovku_jen_kdyz_zbydou_ctyri_znaky(): void
+    {
+        $this->assertSame('výlet', FulltextDotaz::kmen('výletech'));
+        $this->assertSame('prah', FulltextDotaz::kmen('prahy'));
+        // „hoře" by po utržení „e" měla jen tři znaky — zůstane celá.
+        $this->assertSame('hoře', FulltextDotaz::kmen('hoře'));
+        $this->assertSame('2025', FulltextDotaz::kmen('2025'));
+        // Přídavná jména: „krásné" i „krásná" skončí u „krásn".
+        $this->assertSame('krásn', FulltextDotaz::kmen('krásné'));
+    }
+
+    public function test_hledana_slova_jsou_bez_diakritiky_mala_a_zkracena(): void
+    {
+        $this->assertSame(['lyse', 'hore', 'vylet'], FulltextDotaz::hledanaSlova('LYSÉ hoře, výletech a'));
+    }
+
+    /** @return array<string, array{0: string}> */
+    public static function znakyKtereSeSkladajiNaOperatory(): array
+    {
+        return [
+            'modifikační apostrof' => ['rockʼnʼroll chata'],
+            'modifikační uvozovky' => ['ʺchataʺ louka'],
+            'zlomek' => ['½ chata 1½kg'],
+            'ochranná známka' => ['Nikon™ chata'],
+            'ligatura' => ['ﬁlm chata'],
+            'emoji' => ['🏔️ chata 🎉 hory🌲'],
+        ];
+    }
+
+    /**
+     * Po složení bez diakritiky nesmí zbýt nic jiného než `[a-z0-9_]`.
+     *
+     * `Str::ascii` dělá z modifikačních písmen (`ʼ ʺ`) a z `½` apostrof,
+     * uvozovky a lomítko — v booleovském režimu InnoDB je `"` operátor
+     * a neuzavřená uvozovka shodí dotaz na 500.
+     */
+    #[DataProvider('znakyKtereSeSkladajiNaOperatory')]
+    public function test_slozena_slova_nesou_jen_bezpecne_znaky(string $text): void
+    {
+        foreach (FulltextDotaz::hledanaSlova($text) as $slovo) {
+            $this->assertMatchesRegularExpression('/^[a-z0-9_]+$/', $slovo, "„{$text}“ → „{$slovo}“");
+        }
+
+        $this->assertContains('chat', FulltextDotaz::hledanaSlova($text));
+
+        foreach ([FulltextDotaz::zNeboDotazu($text), FulltextDotaz::zeSlov(FulltextDotaz::hledanaSlova($text), true)] as $dotaz) {
+            $this->assertMatchesRegularExpression('/^[a-z0-9_+* ]+$/', (string) $dotaz, "„{$text}“ → „{$dotaz}“");
+        }
+    }
+
+    public function test_booleovsky_dotaz_nenese_operator_z_modifikacnich_znaku(): void
+    {
+        // `zBooleovskeho()` diakritiku nechává (viz test výš) — ale žádný znak mimo písmena, číslice a `_`.
+        $dotaz = (string) FulltextDotaz::zBooleovskeho('rockʼnʼroll ʺchataʺ ½ Nikon™ ﬁlm 🎉');
+
+        $this->assertDoesNotMatchRegularExpression('/["\'\/()<>~@\-]/', $dotaz);
+        $this->assertStringContainsString('+chata*', $dotaz);
+    }
+
+    public function test_slozeni_textu_bez_diakritiky(): void
+    {
+        $this->assertSame('chata na lyse hore', FulltextDotaz::slozit('Chata na Lysé hoře'));
+    }
 }

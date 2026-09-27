@@ -7,6 +7,7 @@ use App\Models\CoupleDateIdea;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -120,7 +121,7 @@ class DateIdeaPlanningService
 
         if ($created) {
             $event->participants()->whereKeyNot($actor->id)->get()->each(function (User $participant) use ($actor, $event) {
-                $participant->notify(new GalleryNotification('date_idea.planned', $actor->name.' naplánoval/a nové randíčko: '.$event->title, '/calendar/events/'.$event->uuid));
+                $participant->notify(new GalleryNotification('date_idea.planned', $actor->name.' naplánoval/a nové randíčko: '.$event->title, TrasyPrototypu::url('calendar')));
             });
         }
 

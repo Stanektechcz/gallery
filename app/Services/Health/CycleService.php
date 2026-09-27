@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Support\Cas;
 use App\Support\Cestina;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
@@ -353,7 +354,7 @@ class CycleService
             $partner->notify(new GalleryNotification(
                 'health.cycle',
                 $owner->name.' má první den cyklu.',
-                '/cyklus',
+                TrasyPrototypu::url('x-cyklus'),
                 '🩸',
                 ['owner_id' => $owner->id],
             ));

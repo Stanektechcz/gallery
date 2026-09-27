@@ -11,7 +11,6 @@ use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class RelationshipAnniversaryRecapTest extends TestCase
@@ -48,9 +47,9 @@ class RelationshipAnniversaryRecapTest extends TestCase
             ->assertJsonCount(2, 'candidates')->json();
         $this->assertEqualsCanonicalizing([$summer->uuid, $spring->uuid], collect($overview['candidates'])->pluck('uuid')->all());
         $this->assertTrue(collect($overview['candidates'])->contains(fn ($item) => $item['uuid'] === $summer->uuid && $item['suggested']));
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.anniversary_recap.year', 2)
-            ->where('data.partner_hub.anniversary_recap.candidate_count', 2));
+        // Rozcestník `/prehled` nabízel ohlédnutí taky; od 27. 9. 2026 jen vede
+        // do aplikace (`PresmerujStareRozhrani`), nabídku nese API výš.
+        $this->get('/prehled')->assertRedirect('/');
 
         $created = $this->postJson('/api/v1/relationship-milestones/relationship-anniversary/recap', [
             'gallery_space_id' => $space->id, 'title' => 'Druhý rok nás dvou',
@@ -83,8 +82,7 @@ class RelationshipAnniversaryRecapTest extends TestCase
             ->assertJsonPath('album.memory.uuid', $created['memory']['uuid']);
         $this->getJson('/api/v1/shared-memory-moments')->assertOk()
             ->assertJsonPath('0.album.uuid', $created['album']['uuid']);
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.anniversary_recap', null));
+        $this->get('/prehled')->assertRedirect('/');
     }
 
     private function media(GallerySpace $space, User $owner, string $filename, string $takenAt, bool $favorite = false, ?int $rating = null): MediaItem

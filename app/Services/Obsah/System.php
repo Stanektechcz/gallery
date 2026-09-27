@@ -58,6 +58,8 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         'navrhRezimu' => null,
         'cekaNaMe' => 0,
         'cekaNaPartnera' => 0,
+        'partnerBezPristupu' => false,
+        'partnerBezPristupuLhuta' => false,
     ];
 
     /**
@@ -332,6 +334,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $ostatni = self::ostatniZDvojice($prostor, $ja);
         $navrh = $stav['navrh'];
         $navrhl = $navrh === null || $navrh['navrhl'] === null ? null : (int) $navrh['navrhl'];
+        $vlastnik = $ja !== null && $ja === (int) $prostor->owner_id;
 
         $cekajici = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
@@ -352,6 +355,15 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ],
             'cekaNaMe' => $ja === null ? 0 : (clone $cekajici)->where('trash_requested_by', '!=', $ja)->count(),
             'cekaNaPartnera' => $ja === null ? 0 : (clone $cekajici)->where('trash_requested_by', $ja)->count(),
+            /*
+             * Partner nemá přístup (aspoň `MazaniFotek::LHUTA_BEZ_PRISTUPU_DNI`
+             * dní) a dívá se vlastník — obrazovka mu u vlastních návrhů nabídne
+             * „Schválit sám" (`kos/schvalit-sam`, rozhodnutí 27. 9. 2026).
+             * `…Lhuta`: přístup nemá, ale lhůta ještě běží — obrazovka řekne,
+             * proč tlačítko chybí. Jinému než vlastníkovi obojí `false`.
+             */
+            'partnerBezPristupu' => $vlastnik && $this->mazaniFotek->partnerBezPristupu($prostor),
+            'partnerBezPristupuLhuta' => $vlastnik && $this->mazaniFotek->partnerCekaNaLhutu($prostor),
         ];
     }
 
@@ -884,7 +896,13 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at');
 
-        $pocet = fn (callable $kde) => (int) $kde((clone $polozky))->count();
+        /*
+         * Dlaždice počítají knihovnu bez trezoru: „Fotky z trezoru nejdou na
+         * cloud" (rozhodnutí 27. 9. 2026), takže by jinak navždy visely jako
+         * „originál se přenese později". Kapacita níž trezor počítá dál — místo
+         * na serveru zabírá.
+         */
+        $pocet = fn (callable $kde) => (int) $kde((clone $polozky)->where('is_hidden', false))->count();
 
         /*
          * Čtyři dlaždice musí **rozdělit celou knihovnu**, ne jen popsat čtyři
@@ -931,8 +949,15 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
             'connected' => $pripojeno,
             'account' => $disk->account_email ?? null,
 
+            /*
+             * Originály leží na serveru (disk `public`), cloud nese jen druhou
+             * kopii. Dřív tu stálo, že originály jsou na Google účtu a galerie
+             * si drží jen náhledy — to nikdy neplatilo, a u trezoru by to
+             * slibovalo kopii, která tam schválně není.
+             */
             'intro' => $pripojeno
-                ? 'Originály fotek a videí leží na Google účtu '.$disk->account_email.'. Galerie si u sebe drží jen náhledy.'
+                ? 'Originály fotek a videí leží tady na serveru, druhá kopie na Google účtu '.$disk->account_email
+                    .'. Položky v trezoru se do cloudu nekopírují.'
                 : 'Google Disk není připojený. Originály leží jen tady — druhou kopii nemá kdo udělat.',
 
             'headline' => $pripojeno
@@ -1754,6 +1779,9 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
         $jednaKopie = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
             ->whereNull('trashed_at')
+            // Trezor jen v jedné kopii je schválně („Fotky z trezoru nejdou na
+            // cloud", 27. 9. 2026) — jako chybějící zálohu ho nehlásíme.
+            ->where('is_hidden', false)
             // Jedna kopie znamená „nemá to na Disku své id". Ptát se na
             // `storage_status = 'local_only'` míjelo řádky, které mají
             // `local` nebo výchozí `pending` — tři zápisy téhož.
@@ -1782,7 +1810,7 @@ class System implements MaPrazdneKolekce, PoskytovatelObsahu
                 (int) $jednaKopie->pocet > 0
                     ? ['Originály jen v jedné kopii', $this->gb((int) $jednaKopie->bajtu).' · riziko',
                         $zabrano > 0 ? (int) round((int) $jednaKopie->bajtu / $zabrano * 100) : 0, 1]
-                    : ['Originály jen v jedné kopii', 'žádné — vše je ve dvou', 0, 2],
+                    : ['Originály jen v jedné kopii', 'žádné — vše mimo trezor je ve dvou', 0, 2],
                 $this->radekPosledniKopie($prostor),
                 $this->radekPredpoved($prostor, $zabrano, $limit),
             ], fn ($v) => $v !== null)),

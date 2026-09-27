@@ -3,6 +3,7 @@
 namespace App\Http\Middleware;
 
 use App\Models\MediaItem;
+use App\Support\TrasyPrototypu;
 use App\Support\Trezor;
 use Closure;
 use Illuminate\Http\Request;
@@ -41,7 +42,8 @@ class ProtectVaultMedia
                 return response()->json(['message' => 'Trezor je uzamčený.'], 423);
             }
 
-            return redirect()->route('vault.index');
+            // Rovnou na trezor v aplikaci; stará stránka `/vault` jen přesměrovává.
+            return redirect(TrasyPrototypu::url('x-trezor'));
         }
 
         return $next($request);

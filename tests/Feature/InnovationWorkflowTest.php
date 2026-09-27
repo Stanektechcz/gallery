@@ -92,8 +92,10 @@ class InnovationWorkflowTest extends TestCase
 
     public function test_ticket_pages_and_provider_fallbacks_never_return_404(): void
     {
-        $this->get('/tickets')->assertOk()->assertInertia(fn ($page) => $page->component('Tickets/Index'));
-        $this->get('/jizdenky')->assertOk()->assertInertia(fn ($page) => $page->component('Tickets/Index'));
+        // Stránky jízdenek od 27. 9. 2026 vedou do aplikace (`PresmerujStareRozhrani`)
+        // — pořád ne 404; jízdenky jsou v aplikaci u Cest.
+        $this->get('/tickets')->assertRedirect('/galerie/cesty');
+        $this->get('/jizdenky')->assertRedirect('/galerie/cesty');
 
         Cache::put('rj_cities_v2', [], 60);
         Cache::put('fb_city:'.md5('praha'), [], 60);

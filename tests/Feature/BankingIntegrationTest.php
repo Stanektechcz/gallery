@@ -336,7 +336,8 @@ CSV;
         $this->assertNotNull($callback);
         $parts = parse_url($callback);
         $callbackPath = ($parts['path'] ?? '').(isset($parts['query']) ? '?'.$parts['query'] : '');
-        $this->get($callbackPath)->assertRedirect("/trips/{$this->tripId}/plan#bank-finance");
+        // Rovnou na Cesty v aplikaci — stará stránka plánu jen přesměrovává.
+        $this->get($callbackPath)->assertRedirect('/galerie/cesty');
 
         $connection = BankConnection::firstOrFail();
         $this->assertSame('active', $connection->status);
@@ -408,7 +409,7 @@ CSV;
         $parts = parse_url((string) $callback);
 
         $this->get($parts['path'].'?'.$parts['query'])
-            ->assertRedirect('/finances#connection')
+            ->assertRedirect('/galerie/finance')
             ->assertSessionMissing('success')
             ->assertSessionHas('error', fn (string $zprava) => str_contains($zprava, 'je připojený') && str_contains($zprava, 'Zkusí se znovu'));
 

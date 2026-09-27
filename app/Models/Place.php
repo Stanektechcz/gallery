@@ -2,10 +2,24 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ObnovujeHledaniFotek;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Place extends Model
 {
+    use ObnovujeHledaniFotek;
+
+    protected function sloupceVHledani(): array
+    {
+        return ['name', 'city', 'country'];
+    }
+
+    protected function fotkyVHledani(): iterable
+    {
+        return DB::table('media_place')->where('place_id', $this->id)->pluck('media_item_id');
+    }
+
     protected $fillable = [
         'gallery_space_id',
         'name',

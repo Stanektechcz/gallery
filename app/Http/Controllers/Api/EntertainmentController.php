@@ -10,6 +10,7 @@ use App\Models\GallerySpace;
 use App\Services\Entertainment\CinemaCityProgramService;
 use App\Services\Entertainment\EntertainmentMetadataService;
 use App\Services\Planning\CalendarEventCreationService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -458,7 +459,7 @@ class EntertainmentController extends Controller
 
     private function eventPayload(CalendarEvent $event): array
     {
-        return ['uuid' => $event->uuid, 'title' => $event->title, 'starts_at' => $event->starts_at, 'href' => '/calendar/events/'.$event->uuid];
+        return ['uuid' => $event->uuid, 'title' => $event->title, 'starts_at' => $event->starts_at, 'href' => TrasyPrototypu::url('calendar')];
     }
 
     private function members(GallerySpace $space): array

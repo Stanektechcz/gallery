@@ -7,7 +7,6 @@ use App\Models\User;
 use App\Services\Integrations\FreeTravelDataService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Http;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class IntegrationSettingsTest extends TestCase
@@ -17,28 +16,26 @@ class IntegrationSettingsTest extends TestCase
     public function test_admin_can_store_encrypted_provider_configuration_and_test_keyless_provider(): void
     {
         $admin = $this->provozovatel();
-        $this->actingAs($admin)->get('/admin/integrations')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Admin/Integrations')
-            // Counted from the registry rather than written out, so adding a provider
-            // does not fail a test that was never about how many there are.
-            ->has('providers', count(FreeTravelDataService::PROVIDERS))
-        );
+
+        /*
+         * Stránka `/admin/integrations` od 27. 9. 2026 jen vede do aplikace
+         * (`PresmerujStareRozhrani`). Katalog, ze kterého ji `IntegrationController`
+         * skládal, se proto kontroluje přímo; ukládání a test klíčů níž zůstávají.
+         */
+        $this->actingAs($admin)->get('/admin/integrations')->assertRedirect('/galerie/administrace');
 
         // Looked up rather than indexed. The previous version asserted which provider sat
         // at position 0, so adding one with a higher priority failed a test that was never
-        // about the order — the same reason the count above is taken from the registry.
-        $byProvider = collect($this->actingAs($admin)->get('/admin/integrations')
-            ->viewData('page')['props']['providers'])->keyBy('provider');
+        // about the order.
+        $byProvider = collect(FreeTravelDataService::PROVIDERS);
 
         $this->assertSame('Secret ID', $byProvider['gocardless_bank_data']['credential_meta']['secret_id']['label']);
         $this->assertSame('TMDB API klíč (v3 auth)', $byProvider['tmdb']['credential_meta']['api_key']['label']);
         $this->assertArrayHasKey('cinema_city', $byProvider);
 
-        // The two that the chat depends on must actually reach the screen.
-        $providers = collect($this->actingAs($admin)->get('/admin/integrations')
-            ->viewData('page')['props']['providers'])->pluck('provider');
-        $this->assertContains('tenor', $providers);
-        $this->assertContains('discord', $providers);
+        // The two that the chat depends on must stay in the catalogue.
+        $this->assertArrayHasKey('tenor', $byProvider);
+        $this->assertArrayHasKey('discord', $byProvider);
         $this->putJson('/admin/integrations/openrouteservice', ['is_enabled' => true, 'config' => ['api_key' => 'secret-route-key']])->assertOk()->assertJsonPath('is_enabled', true);
         $stored = IntegrationSetting::where('provider', 'openrouteservice')->firstOrFail();
         $this->assertNotSame('secret-route-key', $stored->encrypted_config);

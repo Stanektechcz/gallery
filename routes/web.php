@@ -223,6 +223,12 @@ Route::middleware([])->withoutMiddleware([HandleInertiaRequests::class])->group(
 });
 
 /*
+ | Stránky starého rozhraní (od tohoto místa níž, ale i `/login`) se od 27. 9.
+ | 2026 nevykreslují — `App\Http\Middleware\PresmerujStareRozhrani` je podle
+ | jména cesty přesměruje do aplikace. Cesty tu zůstávají kvůli jménům
+ | (`route('dashboard')` ve starém kódu) a kvůli zápisům starých klientů.
+ | Seznam, co se přesměruje a co zůstává, je v té třídě.
+ |
  | Dosavadní rozcestník. Zůstává pod jménem `dashboard`, protože na něj míří
  | odkazy v celém starém rozhraní — jen se přestěhoval z kořene.
  |
@@ -324,8 +330,13 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
     Route::post('/settings/storage/onedrive/disconnect', [OneDriveOAuthController::class, 'disconnect'])->name('storage.onedrive.disconnect');
 
     Route::get('/settings/propojeni/{provider}/start', function (string $provider) {
+        /*
+         * Google Disk se připojuje z obrazovky Úložiště v aplikaci. Dřív tu stálo
+         * `route('storage.google')`, jenže ta cesta se jmenuje `settings.storage.google`
+         * — karta Google Disku tak končila chybou 500.
+         */
         if ($provider === 'google_drive') {
-            return redirect()->route('storage.google');
+            return redirect(TrasyPrototypu::url('storage'));
         }
         if ($provider === 'dropbox') {
             return app(DropboxOAuthController::class)->start(request());
@@ -339,7 +350,8 @@ Route::middleware(['auth', 'dvojice:web'])->group(function () {
 
         $name = ProviderRegistry::PROVIDERS[$provider]['name'];
 
-        return redirect()->route('connections')
+        // Rovnou do nastavení aplikace — stará stránka propojení jen přesměrovává.
+        return redirect(TrasyPrototypu::url('settings'))
             ->with('error', $name.': přihlášení přes tuto službu zatím není dokončené.');
     })->name('connections.start');
     Route::get('/discord/pripojit', [DiscordOAuthController::class, 'redirect'])->name('discord.connect');

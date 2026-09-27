@@ -9,6 +9,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Queue;
+use Inertia\Testing\AssertableInertia as Assert;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -130,11 +131,21 @@ class PozvankaCizihoUctuTest extends TestCase
 
         $this->travel(8)->days();
 
-        $this->get('/invite/'.$klara->invitation_token)->assertRedirect('/login');
+        /*
+         * Neplatnost se řekne na stránce pozvánky: přihlášení v aplikaci na `/`
+         * hlášku ze sezení neukáže. Odtud vede odkaz rovnou do aplikace.
+         */
+        $this->get('/invite/'.$klara->invitation_token)
+            ->assertOk()
+            ->assertInertia(fn (Assert $stranka) => $stranka
+                ->component('Auth/Invitation')
+                ->where('token', null)
+                ->where('prihlaseni', '/')
+                ->where('chyba', fn (string $chyba) => str_contains($chyba, 'neplatná')));
         $this->post('/invite/'.$klara->invitation_token, [
             'password' => 'nove-heslo-klary',
             'password_confirmation' => 'nove-heslo-klary',
-        ])->assertRedirect('/login');
+        ])->assertRedirect('/invite/'.$klara->invitation_token);
 
         $this->assertSame($heslo, $klara->refresh()->password);
         $this->assertNull($klara->invitation_accepted_at);
@@ -156,7 +167,9 @@ class PozvankaCizihoUctuTest extends TestCase
         $this->post('/invite/'.$klara->invitation_token, [
             'password' => 'dost-dlouhe-heslo',
             'password_confirmation' => 'dost-dlouhe-heslo',
-        ])->assertRedirect('/timeline');
+        ])->assertRedirect('/galerie/casova-osa')
+            // Hláška jde s jediným přesměrováním až do aplikace (dřív ji druhé ztratilo).
+            ->assertSessionHas('success', 'Vítejte! Váš účet byl aktivován.');
 
         $this->assertTrue(Hash::check('dost-dlouhe-heslo', $klara->refresh()->password));
     }

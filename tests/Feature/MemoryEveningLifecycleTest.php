@@ -10,7 +10,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class MemoryEveningLifecycleTest extends TestCase
@@ -38,9 +37,13 @@ class MemoryEveningLifecycleTest extends TestCase
         $this->assertDatabaseCount('event_participants', 2);
         $this->assertDatabaseCount('event_reminders', 4);
         $this->assertDatabaseCount('curation_board_items', 3);
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.memory_evening.uuid', $evening['uuid'])
-            ->where('data.partner_hub.memory_evening.media_count', 3));
+        // Dřív přes rozcestník `/prehled`, který od 27. 9. 2026 jen vede do
+        // aplikace (`PresmerujStareRozhrani`); večer i jeho fotky vydá API.
+        $this->get('/prehled')->assertRedirect('/');
+        $this->getJson('/api/v1/memory-evenings/'.$evening['uuid'])
+            ->assertOk()
+            ->assertJsonPath('uuid', $evening['uuid'])
+            ->assertJsonCount(3, 'items');
 
         $this->actingAs($partner)->postJson('/api/v1/memory-evenings/'.$evening['uuid'].'/start')->assertOk()->assertJsonPath('status', 'active');
         $this->putJson('/api/v1/memory-evenings/'.$evening['uuid'].'/media/'.$media[0]->uuid, ['is_selected' => true])->assertOk()->assertJsonPath('items.0.my_vote', true);

@@ -29,6 +29,9 @@ class EnqueueAlbumDriveSyncJob implements ShouldQueue
         }
 
         $assistant->mediaQuery($album)
+            // Běžné album trezor vynechává samo, chytré album nemusí — a trezor
+            // na Disk nejde (rozhodnutí 27. 9. 2026).
+            ->smiDoCloudu()
             ->whereNull('drive_file_id')
             ->select('id')
             ->lazyById(100)

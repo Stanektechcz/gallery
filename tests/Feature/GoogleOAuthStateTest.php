@@ -20,6 +20,9 @@ use Tests\TestCase;
  * Disk k účtu oběti a hned zařadil synchronizaci všech jejích galerií —
  * celá knihovna fotek by odtekla na cizí Disk. Discord a Dropbox v téže
  * aplikaci `state` mají; Google jako jediný ne, a právě ten přenáší fotky.
+ *
+ * Návrat vede od 27. 9. 2026 rovnou na Úložiště v aplikaci (`/galerie/uloziste`),
+ * ne na starou stránku nastavení, která jen přesměrovává.
  */
 class GoogleOAuthStateTest extends TestCase
 {
@@ -44,7 +47,7 @@ class GoogleOAuthStateTest extends TestCase
 
         $this->actingAs($this->adri)
             ->get('/oauth/google/callback?code=kod-utocnika')
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('error');
 
         $this->assertSame(0, StorageConnection::count());
@@ -57,7 +60,7 @@ class GoogleOAuthStateTest extends TestCase
         $this->actingAs($this->adri)
             ->withSession([self::KLIC => 'moje-cekajici-prihlaseni'])
             ->get('/oauth/google/callback?code=kod-utocnika&state=jiny')
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('error');
 
         $this->assertSame(0, StorageConnection::count());
@@ -69,8 +72,8 @@ class GoogleOAuthStateTest extends TestCase
         $this->sluzba()->shouldReceive('handleCallback')->once()->andThrow(new \RuntimeException('Google nedostupný'));
 
         $this->actingAs($this->adri)->withSession([self::KLIC => 'spravny']);
-        $this->get('/oauth/google/callback?code=kod&state=spravny')->assertRedirect(route('settings.storage.google'));
-        $this->get('/oauth/google/callback?code=kod&state=spravny')->assertRedirect(route('settings.storage.google'));
+        $this->get('/oauth/google/callback?code=kod&state=spravny')->assertRedirect('/galerie/uloziste');
+        $this->get('/oauth/google/callback?code=kod&state=spravny')->assertRedirect('/galerie/uloziste');
     }
 
     /**
@@ -86,7 +89,7 @@ class GoogleOAuthStateTest extends TestCase
         $this->actingAs($this->adri)
             ->withSession([self::KLIC => 'spravny'])
             ->get('/oauth/google/callback?error=access_denied&state=spravny&error_description='.rawurlencode('Účet zablokován, volejte 777 123 456'))
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('error', fn (string $zprava) => ! str_contains($zprava, '777') && str_contains($zprava, 'zrušena'));
     }
 
@@ -97,7 +100,7 @@ class GoogleOAuthStateTest extends TestCase
         $this->actingAs($this->adri)
             ->withSession([self::KLIC => 'moje-cekajici-prihlaseni'])
             ->get('/oauth/google/callback?error=access_denied&error_description=cokoli')
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('error', fn (string $zprava) => str_contains($zprava, 'nepatří k tomuhle přihlášení'));
 
         $this->assertNull(session(self::KLIC), 'Stav se spotřebuje i u chybového návratu.');

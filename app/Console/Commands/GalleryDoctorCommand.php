@@ -39,6 +39,7 @@ class GalleryDoctorCommand extends Command
         $this->checkThumbnailCoverage();
         $this->checkWebServer();
         $this->checkCloudCopyDeletions();
+        $this->checkTrezorBezCloudu();
         $this->checkGoogleDrive();
 
         // Summary
@@ -570,8 +571,11 @@ class GalleryDoctorCommand extends Command
     private function checkDriveCoverage(): void
     {
         try {
+            // Trezor se nepočítá: do cloudu nejde (rozhodnutí 27. 9. 2026), takže
+            // mu kopie „chybět" nemůže. Trezor s kopií hlásí `checkTrezorBezCloudu`.
             $sendable = DB::table('media_items')
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereExists(fn ($q) => $q->select(DB::raw(1))
                     ->from('media_variants')
                     ->whereColumn('media_variants.media_item_id', 'media_items.id')
@@ -586,6 +590,7 @@ class GalleryDoctorCommand extends Command
 
             $onDrive = DB::table('media_items')
                 ->whereNull('trashed_at')
+                ->where('is_hidden', false)
                 ->whereNotNull('drive_file_id')
                 ->count();
 
@@ -654,6 +659,54 @@ class GalleryDoctorCommand extends Command
             );
         } catch (\Throwable $e) {
             $this->check('Mazání kopií v cloudu nejde přečíst ('.$e->getMessage().')', false, 'WARN');
+        }
+    }
+
+    /**
+     * Položky v trezoru, které mají pořád kopii v cloudu.
+     *
+     * „Fotky z trezoru nejdou na cloud" (27. 9. 2026). Kopie zůstane, když
+     * originál na serveru nešel ověřit, když se odebrání nezařadilo, nebo jde
+     * o položky schované ještě před tímhle pravidlem. FAIL, ne varování: je to
+     * slib dvojici, který aplikace právě neplní. Včetně koše — i z něj se dá
+     * položka jen obnovit, ne ji dostat z cloudu.
+     */
+    private function checkTrezorBezCloudu(): void
+    {
+        try {
+            $sKopii = DB::table('media_items')
+                ->where('is_hidden', true)
+                ->where(fn ($q) => $q->whereNotNull('drive_file_id')
+                    ->orWhereExists(fn ($v) => $v->select(DB::raw(1))
+                        ->from('media_variants')
+                        ->whereColumn('media_variants.media_item_id', 'media_items.id')
+                        ->where('media_variants.type', 'cloud_copy')
+                        ->where('media_variants.disk', '!=', 'public')))
+                ->count();
+
+            $this->check(
+                $sKopii === 0
+                    ? 'Trezor: žádná položka nemá kopii v cloudu'
+                    : "Trezor: položek s kopií v cloudu {$sKopii} — přehled: php artisan gallery:trezor-z-cloudu, odebrat ověřené: php artisan gallery:trezor-z-cloudu --provest",
+                $sKopii === 0,
+            );
+
+            // Odkaz z položky už je pryč (`OdeberKopieVTrezoru`), ale smazání
+            // v cloudu selhalo nebo den visí — kopie tam dál leží a výše by se
+            // nepočítala. Čerstvé čekající jsou v pořádku.
+            $nedokonceno = CloudCopyDeletion::where('reason', CloudCopyDeletion::DUVOD_TREZOR)
+                ->where(fn ($q) => $q->where('status', CloudCopyDeletion::STATUS_FAILED)
+                    ->orWhere(fn ($visi) => $visi->visi()))
+                ->count();
+
+            if ($nedokonceno > 0) {
+                $this->check(
+                    "Trezor: nedokončené mazání kopií v cloudu {$nedokonceno} — zkusit znovu: php artisan gallery:cloud-mazani --znovu, důvody: php artisan gallery:cloud-mazani, originály: php artisan gallery:trezor-z-cloudu",
+                    false,
+                );
+            }
+        } catch (\Throwable $e) {
+            $this->check('Trezor v cloudu nejde přečíst ('.$e->getMessage().')', false, 'WARN');
         }
     }
 

@@ -2,10 +2,15 @@ import { Head, useForm } from '@inertiajs/react';
 import { Heart } from 'lucide-react';
 import { FormEvent } from 'react';
 
-/** Props mirror InvitationController::show(). */
-type Props = { token: string; name: string };
+/**
+ * Props mirror InvitationController::show().
+ *
+ * Neplatná pozvánka přijde bez tokenu, s `chyba` a odkazem na přihlášení
+ * v aplikaci — hlášku ze sezení by aplikace na `/` neukázala.
+ */
+type Props = { token: string | null; name: string | null; chyba?: string; prihlaseni?: string };
 
-export default function Invitation({ token, name }: Props) {
+export default function Invitation({ token, name, chyba, prihlaseni }: Props) {
     const { data, setData, post, processing, errors } = useForm({
         password: '',
         password_confirmation: '',
@@ -14,6 +19,26 @@ export default function Invitation({ token, name }: Props) {
     function submit(e: FormEvent) {
         e.preventDefault();
         post(`/invite/${token}`);
+    }
+
+    if (!token) {
+        return (
+            <>
+                <Head title="Pozvánka neplatí" />
+                <div className="min-h-screen flex items-center justify-center bg-[var(--color-bg-primary)] px-4">
+                    <div className="w-full max-w-sm glass rounded-2xl p-6 text-center space-y-4">
+                        <h1 className="text-xl font-semibold text-[var(--color-text-primary)]">Pozvánka neplatí</h1>
+                        <p className="text-sm text-[var(--color-text-secondary)]">{chyba}</p>
+                        <a
+                            href={prihlaseni ?? '/'}
+                            className="inline-block w-full bg-[var(--color-accent)] hover:bg-[var(--color-accent-hover)] text-[var(--color-accent-contrast)] font-medium py-2.5 rounded-lg text-sm transition-colors"
+                        >
+                            Přejít na přihlášení
+                        </a>
+                    </div>
+                </div>
+            </>
+        );
     }
 
     const field = 'w-full bg-[var(--color-surface-muted)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-[var(--color-text-primary)] text-sm focus:outline-none focus:border-[var(--color-accent)] transition-colors';

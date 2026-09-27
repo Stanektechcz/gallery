@@ -73,6 +73,8 @@ class TrashController extends Controller
     {
         $space = $this->prostorSpravce($request);
         $media = $this->vKosi($space)->where('uuid', $uuid)->firstOrFail();
+        // Schválená vlastníkem bez partnera: trvale až po lhůtě koše (`MazaniFotek::drziLhutu`).
+        abort_if(app(MazaniFotek::class)->drziLhutu($media), 422, MazaniFotek::DRZENA_LHUTA);
 
         // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
         // jména z protokolu vypisuje i se zamčeným trezorem. Předmět (id) zůstává.
@@ -88,7 +90,8 @@ class TrashController extends Controller
 
     public function emptyTrash(Request $request): JsonResponse
     {
-        $items = $this->vKosi($this->prostorSpravce($request))->get();
+        // Co vlastník schválil bez partnera, zůstává do konce lhůty koše (`MazaniFotek::drziLhutu`).
+        $items = MazaniFotek::bezDrzeneLhuty($this->vKosi($this->prostorSpravce($request)))->get();
 
         foreach ($items as $item) {
             AuditLog::record('media.purge', $item, ['via' => 'empty_trash']);

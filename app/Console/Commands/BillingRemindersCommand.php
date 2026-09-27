@@ -7,6 +7,7 @@ use App\Models\GallerySpace;
 use App\Models\SpaceSubscription;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Schema;
@@ -86,7 +87,8 @@ class BillingRemindersCommand extends Command
             Notification::send($owner, new GalleryNotification(
                 type: 'billing.reminder',
                 message: $notice['message'],
-                link: '/settings/predplatne',
+                // Tarif je v aplikaci v administraci (viz `TrasyPrototypu::url`).
+                link: TrasyPrototypu::url('x-admin'),
                 icon: $notice['icon'],
             ));
 

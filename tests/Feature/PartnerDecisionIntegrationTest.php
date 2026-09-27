@@ -10,7 +10,6 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class PartnerDecisionIntegrationTest extends TestCase
@@ -71,9 +70,9 @@ class PartnerDecisionIntegrationTest extends TestCase
             ->assertOk()->assertJsonPath('summary.total', 4)->assertJsonPath('summary.date_ideas', 1)
             ->assertJsonPath('summary.watchlist', 2)->assertJsonPath('summary.polls', 1);
         $this->assertSame(['viewing_date', 'poll', 'date_idea', 'entertainment_title'], collect($inbox->json('items'))->pluck('type')->all());
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.decisions.summary.total', 4)
-            ->where('data.partner_hub.decisions.items.0.type', 'viewing_date'));
+        // Rozcestník `/prehled` ukazoval totéž; od 27. 9. 2026 jen vede do
+        // aplikace (`PresmerujStareRozhrani`) a rozhodnutí nese API výš.
+        $this->get('/prehled')->assertRedirect('/');
 
         $this->putJson('/api/v1/coordination/decisions/date_idea/'.$idea->uuid, [
             'gallery_space_id' => $space->id, 'response' => 'love',

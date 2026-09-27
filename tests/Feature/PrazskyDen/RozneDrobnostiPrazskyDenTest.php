@@ -31,7 +31,12 @@ class RozneDrobnostiPrazskyDenTest extends TestCase
         $this->actingAs($this->owner);
     }
 
-    /** Nedokončená (aktivní) cesta se nabídne k ohlédnutí, jakmile skončila podle pražského dne. */
+    /**
+     * Nedokončená (aktivní) cesta se nabízela k ohlédnutí na rozcestníku `/prehled`.
+     *
+     * Ten od 27. 9. 2026 jen vede do aplikace (`PresmerujStareRozhrani`) a jeho
+     * kontroler se nespustí; test hlídá, že i o pražské půlnoci jen přesměruje.
+     */
     public function test_dashboard_pripominka_ohlednuti_pouziva_prazsky_dnesek(): void
     {
         // Server v UTC má ještě 24. září — cesta skončená ten den by bez opravy
@@ -43,8 +48,7 @@ class RozneDrobnostiPrazskyDenTest extends TestCase
             'created_at' => now(), 'updated_at' => now(),
         ]);
 
-        $this->get('/prehled')->assertOk()
-            ->assertInertia(fn ($page) => $page->where('data.partner_hub.reflection_prompt.name', 'Loňský výlet'));
+        $this->get('/prehled')->assertRedirect('/')->assertDontSee('Loňský výlet');
     }
 
     /** Nová událost dnes má nula dní dopředu podle pražského, ne UTC dne. */

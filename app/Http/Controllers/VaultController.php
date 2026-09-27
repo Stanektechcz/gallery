@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\AuditLog;
 use App\Models\MediaItem;
+use App\Services\Media\KopieTrezoru;
 use App\Services\Provoz\PokusyOvereni;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
@@ -15,6 +16,8 @@ use Inertia\Response;
 
 class VaultController extends Controller
 {
+    public function __construct(private readonly KopieTrezoru $kopie) {}
+
     public function index(Request $request): Response
     {
         if (! $this->isUnlocked($request)) {
@@ -70,6 +73,15 @@ class VaultController extends Controller
             return response()->json(['message' => 'Trezor je uzamčený.'], 423);
         }
         $media->update(['is_hidden' => ! $media->is_hidden]);
+
+        // „Fotky z trezoru nejdou na cloud": vložení odebere kopie v cloudu
+        // (po ověření originálu na serveru), vyjmutí rozběhne zrcadlení znovu.
+        if ($media->wasChanged('is_hidden')) {
+            $media->is_hidden
+                ? $this->kopie->vlozeno([$media->id])
+                : $this->kopie->vyjmuto([$media->id]);
+        }
+
         // Bez jména souboru: přehled „Dnes" jména z protokolu vypisuje i se
         // zamčeným trezorem, takže by prozradil, co se právě schovalo. Předmět
         // (id položky) zůstává — jako u trvalého smazání.

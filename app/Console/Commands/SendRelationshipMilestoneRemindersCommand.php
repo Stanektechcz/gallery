@@ -8,6 +8,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\AutomationRegistryService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
@@ -83,7 +84,7 @@ class SendRelationshipMilestoneRemindersCommand extends Command
                     $message = $isBirthday
                         ? "{$milestone->title} jsou {$when}. Je čas doladit přání nebo dárek."
                         : "Výročí „{$milestone->title}“ je {$when}.";
-                    $user->notify(new GalleryNotification($isBirthday ? 'relationship.birthday' : 'relationship.milestone', $message, '/milestones', $milestone->icon ?: ($isBirthday ? '🎂' : '❤️')));
+                    $user->notify(new GalleryNotification($isBirthday ? 'relationship.birthday' : 'relationship.milestone', $message, TrasyPrototypu::url('x-milniky'), $milestone->icon ?: ($isBirthday ? '🎂' : '❤️')));
                     $sent++;
                 }
             }

@@ -7,6 +7,7 @@ use App\Models\MediaVariant;
 use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -125,7 +126,8 @@ class FavoritesController extends Controller
             $owner?->notify(new GalleryNotification(
                 'media.favorited',
                 "{$user->name} označil/a vaši fotku jako oblíbenou",
-                "/media/{$media->uuid}",
+                // Oblíbené v aplikaci (`TrasyPrototypu::url`); fotku nese `media_uuid`.
+                TrasyPrototypu::url('favorites'),
                 null,
                 ['media_uuid' => $media->uuid],
             ));

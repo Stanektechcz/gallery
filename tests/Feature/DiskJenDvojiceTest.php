@@ -102,7 +102,7 @@ class DiskJenDvojiceTest extends TestCase
         $this->actingAs($this->host)
             ->withSession(['oauth.google.state' => 'spravny'])
             ->get('/oauth/google/callback?code=kod&state=spravny')
-            ->assertRedirect(route('settings.storage.google'))
+            ->assertRedirect('/galerie/uloziste')
             ->assertSessionHas('success');
 
         $this->assertNotContains($this->prostor->id, $this->zarazeneProstory());

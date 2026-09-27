@@ -53,10 +53,16 @@ class ProvozovatelTest extends TestCase
     {
         $this->actingAs($this->zakaznik);
 
-        $this->get('/admin/users')->assertForbidden();
-        $this->get('/admin/audit')->assertForbidden();
-        $this->get('/admin/integrations')->assertForbidden();
-        $this->get('/admin')->assertForbidden();
+        /*
+         * Stránky provozu od 27. 9. 2026 nic nevykreslují a vedou každého do
+         * aplikace (`PresmerujStareRozhrani`), kde administraci hlídá její API.
+         * Zápisy provozu ve `routes/web.php` zůstaly — ty dál jen provozovateli.
+         */
+        foreach (['/admin/users', '/admin/audit', '/admin/integrations', '/admin'] as $cesta) {
+            $this->get($cesta)->assertRedirect('/galerie/administrace')->assertDontSee($this->zakaznik->email);
+        }
+        $this->putJson('/admin/integrations/google_drive', [])->assertForbidden();
+        $this->postJson('/admin/integrations/google_drive/test')->assertForbidden();
     }
 
     /**
@@ -82,7 +88,8 @@ class ProvozovatelTest extends TestCase
         $this->getJson('/api/v1/admin/billing/revenue')->assertOk();
         $this->postJson('/api/admin/jobs/trash-purge/run')->assertOk();
 
-        $this->actingAs($provoz)->get('/admin/users')->assertOk();
+        // Stránka provozu vede od 27. 9. 2026 do aplikace i provozovatele.
+        $this->actingAs($provoz)->get('/admin/users')->assertRedirect('/galerie/administrace');
     }
 
     /** Bez nastavení je provozovatelem vlastník instalace — dnešní stav. */

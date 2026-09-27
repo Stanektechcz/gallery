@@ -124,7 +124,9 @@ class EntityMatcher
      */
     private function lide(GallerySpace $space): Collection
     {
+        // Skrytá osoba „zmizí z hledání": jako filtr by její fotky prozradila.
         return Person::where('gallery_space_id', $space->id)
+            ->where('is_hidden', false)
             ->get(['id', 'name', 'nickname'])
             ->map(fn (Person $o) => [
                 'id' => (int) $o->id,

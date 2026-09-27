@@ -10,7 +10,6 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ExperienceLifecycleIntegrationTest extends TestCase
@@ -72,10 +71,13 @@ class ExperienceLifecycleIntegrationTest extends TestCase
         $this->assertDatabaseHas('albums', ['id' => $event->fresh()->album_id, 'default_place_id' => $place->id]);
         $this->assertDatabaseHas('places', ['id' => $place->id, 'next_time_note' => 'Objednat znovu dezert.']);
 
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.experience_follow_up.uuid', $event->uuid)
-            ->where('data.partner_hub.experience_follow_up.next_action', 'review_place')
-            ->where('data.partner_hub.experience_follow_up.progress_percent', 80));
+        // Dřív přes rozcestník `/prehled`, který od 27. 9. 2026 jen vede do
+        // aplikace (`PresmerujStareRozhrani`); týž stav zážitku nese API události.
+        $this->get('/prehled')->assertRedirect('/');
+        $this->getJson("/api/v1/calendar/events/{$event->uuid}")
+            ->assertOk()
+            ->assertJsonPath('experience.next_action', 'review_place')
+            ->assertJsonPath('experience.progress_percent', 80);
 
         $this->postJson("/api/v1/places/{$place->id}/reviews", [
             'status' => 'published', 'place_plan_uuid' => $planUuid, 'overall_rating' => 5,

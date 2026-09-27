@@ -513,7 +513,9 @@ class PravidlaDokumentuPrototypuTest extends TestCase
 
         $this->assertStringNotContainsString('importu výpisů z banky, který galerie zatím nemá', $pocitac);
         $this->assertStringContainsString("this.setState({ route: 'x-transakce', appTab: 0, txQuery: r[0],", $pocitac);
-        $this->assertStringContainsString('if (!q.split(/\\s+/).every(slovo => kde.includes(slovo))) return false;', $pocitac);
+        // Po slovech (a bez diakritiky) přes společný pomocník `shoda()` — viz HledaniVPrototypuTest.
+        $this->assertStringContainsString('if (q && !this.shoda([r.name, r.cat, r.account, r.note], q)) return false;', $pocitac);
+        $this->assertStringContainsString('return slova.every(w => kde.indexOf(w) >= 0);', $pocitac);
     }
 
     /** Úkol odškrtnutý na telefonu se uzavře na serveru, ne jen v `done` telefonu. */

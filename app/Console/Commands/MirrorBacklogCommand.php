@@ -45,11 +45,11 @@ class MirrorBacklogCommand extends Command
 
             // Only what is finished and still here. Media still processing has no original
             // to copy, and something in the bin is not a thing to push into somebody's
-            // Dropbox on their behalf.
+            // Dropbox on their behalf. Trezor také ne — „Fotky z trezoru nejdou na cloud".
             $pending = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
                 ->where('gallery_space_id', $space->id)
                 ->where('status', 'ready')
-                ->whereNull('trashed_at')
+                ->smiDoCloudu()
                 // Google Drive keeps its copy in `drive_file_id`, not as a variant on its
                 // disk, so the variant test matched every photo already on the Drive and
                 // the limit was spent on them night after night. An upload still running

@@ -3,6 +3,7 @@
 use App\Http\Middleware\EnsureModuleEnabled;
 use App\Http\Middleware\HandleInertiaRequests;
 use App\Http\Middleware\JenDvojice;
+use App\Http\Middleware\PresmerujStareRozhrani;
 use App\Http\Middleware\PreventRequestForgery;
 use App\Http\Middleware\RequireAdminRole;
 use App\Http\Middleware\SecurityHeaders;
@@ -30,8 +31,16 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(SecurityHeaders::class);
+        /*
+         * `PresmerujStareRozhrani` je ve skupině, ne u jednotlivých cest: seznam
+         * starých stránek je tak na jednom místě (v té třídě). Rozhoduje se dřív
+         * než `dvojice:web` nebo `can:operator`; jen `auth` má v Laravelu přednost
+         * a nepřihlášeného pošle na `/login`, který sem patří taky — skončí tedy
+         * rovněž v aplikaci. Podle jména cesty, takže zápisy a API míjí.
+         */
         $middleware->web(append: [
             HandleInertiaRequests::class,
+            PresmerujStareRozhrani::class,
             TrackLastSeen::class,
             AddLinkHeadersForPreloadedAssets::class,
         ]);

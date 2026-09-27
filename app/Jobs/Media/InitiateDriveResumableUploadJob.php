@@ -61,6 +61,12 @@ class InitiateDriveResumableUploadJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // Trezor na Disk nejde (rozhodnutí 27. 9. 2026) — ani když do něj
+        // položka odešla až během čekání ve frontě.
+        if ($media->is_hidden) {
+            return;
+        }
+
         // A completed Drive upload is immutable. Re-dispatches from preview
         // repair and metadata jobs must not create duplicate remote files.
         if ($media->drive_file_id) {
@@ -105,7 +111,8 @@ class InitiateDriveResumableUploadJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
-        $provider = new GoogleDriveStorageProvider($connection);
+        // Přes kontejner, aby šel poskytovatel v testech nahradit (jako v RemoveCloudCopy).
+        $provider = app(GoogleDriveStorageProvider::class, ['connection' => $connection]);
 
         try {
             // Determine Drive parent folder

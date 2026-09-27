@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Services\Auth\PotvrzeniZamkem;
 use App\Services\Auth\PristupDoGalerie;
 use App\Support\SpaceContext;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
@@ -44,6 +45,21 @@ class MazaniFotek
 
     public const REZIMY = [self::SPOLECNE, self::KAZDY];
 
+    /**
+     * Kolik dní musí být partner bez přístupu, než vlastník smí schválit sám.
+     *
+     * Záměrná čekací lhůta. Přístup partnerovi odebírá sám vlastník a tím
+     * ruší i jeho přihlášení a upozornění — bez lhůty by „odebrat přístup,
+     * schválit, vrátit přístup" byla zkratka kolem společného schválení, o které
+     * by se partner nedozvěděl. Dva týdny jsou dost dlouhé na to, aby si toho
+     * partner všiml, a pro opravdu opuštěnou galerii pořád snesitelné.
+     * Smazaný účet (v prostoru už není) se nečeká: s tím dohoda možná není.
+     */
+    public const LHUTA_BEZ_PRISTUPU_DNI = 14;
+
+    /** Odmítnutí trvalého smazání položky, kterou drží `drziLhutu()`. */
+    public const DRZENA_LHUTA = 'Tuhle položku vlastník schválil ke smazání bez partnera — trvale smazat ji jde až po uplynutí lhůty koše. Do té doby ji jde z koše vrátit.';
+
     /** Víc uuid v jednom `whereIn` MySQL zvládne, ale transakce se zbytečně táhne. */
     private const DAVKA = 500;
 
@@ -75,6 +91,112 @@ class MazaniFotek
     public function muzeSam(GallerySpace $prostor, User $kdo): bool
     {
         return $this->rezim($prostor) === self::KAZDY || $this->pocetDvojice($prostor) <= 1;
+    }
+
+    /**
+     * Smí vlastník schválit sám, protože druhý z dvojice přístup nemá?
+     *
+     * Pravda, jen když v prostoru kromě vlastníka **někdo** z dvojice je
+     * (role `owner`/`admin`/`editor` v členství) a **každý** z nich je bez
+     * přístupu aspoň `LHUTA_BEZ_PRISTUPU_DNI` dní — `users.is_active = false`
+     * a `access_revoked_at` tak starý („Odebrat přístup" v administraci,
+     * `AdministraceZasahy::nastavPristup`). Odebraný přístup bez data se
+     * nepočítá. Účet, který už neexistuje, přístup nemá hned. Účet jen pro
+     * čtení přístup má: přihlásí se a vidí, jen neschvaluje. Vlastník sám
+     * přístup ztratit nemůže.
+     */
+    public function partnerBezPristupu(GallerySpace $prostor): bool
+    {
+        return $this->stavPartnera($prostor) === 'bez_pristupu';
+    }
+
+    /**
+     * Partner je bez přístupu, ale čekací lhůta ještě neuběhla (nebo se neví,
+     * odkdy). Obrazovka podle toho vysvětlí, proč „Schválit sám" chybí.
+     */
+    public function partnerCekaNaLhutu(GallerySpace $prostor): bool
+    {
+        return $this->stavPartnera($prostor) === 'lhuta';
+    }
+
+    /**
+     * Drží položku lhůta koše, protože ji vlastník schválil bez partnera?
+     *
+     * Taková se trvale nesmaže ručně ani vysypáním koše, dokud neuběhne celá
+     * lhůta koše od schválení — partner, kterému se vrátí přístup, ji tak
+     * pořád najde v koši. Noční úklid ji po lhůtě smaže jako každou jinou.
+     */
+    public function drziLhutu(MediaItem $m): bool
+    {
+        return self::drzenaLhutou($this->fotky()->withTrashed()->whereKey($m->id))->exists();
+    }
+
+    /**
+     * Omezí dotaz na položky, které lze trvale smazat — bez těch, které drží
+     * `drziLhutu()`. Pro vysypání koše a noční úklid.
+     *
+     * @template T of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<T>  $dotaz
+     * @return Builder<T>
+     */
+    public static function bezDrzeneLhuty(Builder $dotaz): Builder
+    {
+        return $dotaz->where(fn (Builder $q) => $q->whereNull('trash_approved_alone_at')
+            ->orWhere('trash_approved_alone_at', '<=', self::zacatekLhutyKose()));
+    }
+
+    /**
+     * @return 'ma_pristup'|'lhuta'|'bez_pristupu'
+     */
+    private function stavPartnera(GallerySpace $prostor): string
+    {
+        $ostatni = DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
+            ->where('user_id', '!=', (int) $prostor->owner_id)
+            ->pluck('user_id');
+
+        if ($ostatni->isEmpty()) {
+            return 'ma_pristup';
+        }
+
+        $hranice = now()->subDays(self::LHUTA_BEZ_PRISTUPU_DNI);
+        $stav = 'bez_pristupu';
+
+        // Chybějící účet v seznamu není — přístup nemá a nečeká se.
+        foreach (User::query()->whereIn('id', $ostatni)->get(['id', 'is_active', 'access_revoked_at']) as $ucet) {
+            // `null` je čerstvý účet, kterému výchozí hodnotu doplnila databáze — ten přístup má.
+            if ($ucet->is_active !== false) {
+                return 'ma_pristup';
+            }
+
+            $odkdy = $ucet->access_revoked_at;
+            if ($odkdy === null || CarbonImmutable::parse($odkdy)->gt($hranice)) {
+                $stav = 'lhuta';
+            }
+        }
+
+        return $stav;
+    }
+
+    /** Od kdy se počítá lhůta koše: co bylo schválené dřív, už ji má za sebou. */
+    private static function zacatekLhutyKose(): CarbonImmutable
+    {
+        return CarbonImmutable::now()->subDays((int) config('gallery.trash_retention_days', 30));
+    }
+
+    /**
+     * @template T of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  Builder<T>  $dotaz
+     * @return Builder<T>
+     */
+    private static function drzenaLhutou(Builder $dotaz): Builder
+    {
+        return $dotaz->whereNotNull('trashed_at')
+            ->whereNotNull('trash_approved_alone_at')
+            ->where('trash_approved_alone_at', '>', self::zacatekLhutyKose());
     }
 
     /**
@@ -196,6 +318,59 @@ class MazaniFotek
             403,
             'Vlastní návrh schválit nemůžete — musí ho potvrdit druhý z vás.'
         );
+
+        return $vysledek;
+    }
+
+    /**
+     * Přebití vlastníkem se záznamem (rozhodnutí 27. 9. 2026).
+     *
+     * Partner s odebraným přístupem se do dvojice počítá dál (`pocetDvojice`),
+     * schválit ale nemůže — vlastníkovy návrhy by tak čekaly navždy. Vlastník
+     * prostoru je proto smí schválit sám, jen když partner přístup opravdu
+     * nemá (`partnerBezPristupu`), jen s výslovným potvrzením a každý se zapíše
+     * do protokolu jako `media.trash_approved_alone`. Do koše jde fotka týmž
+     * podmíněným zápisem jako při běžném souhlasu (`schvalJednu`). Návrh, který
+     * partner podal ještě s přístupem, je obyčejný souhlas jako v `schval()`.
+     *
+     * Pořadí odmítnutí: cizí/host/jen pro čtení 403, ne vlastník 403, partner
+     * bez přístupu kratší dobu než `LHUTA_BEZ_PRISTUPU_DNI` 403, partner
+     * přístup má 403 — a teprve pak chybějící potvrzení 422. Co se takhle
+     * schválí, nese `trash_approved_alone_at` a trvale smazat to jde až po
+     * lhůtě koše (`drziLhutu`).
+     *
+     * @param  iterable<string>  $uuids
+     */
+    public function schvalSam(GallerySpace $prostor, User $kdo, iterable $uuids, bool $trezor, bool $potvrzeno): VysledekMazani
+    {
+        $this->overClena($prostor, $kdo);
+        abort_unless((int) $prostor->owner_id === (int) $kdo->id, 403, 'Návrh bez partnera může schválit jen vlastník galerie.');
+        $partnerStav = $this->stavPartnera($prostor);
+        abort_if($partnerStav === 'lhuta', 403, 'Partner je bez přístupu teprve krátce — schválit sám půjde po '.self::LHUTA_BEZ_PRISTUPU_DNI.' dnech bez přístupu.');
+        abort_unless($partnerStav === 'bez_pristupu', 403, 'Partner do galerie přístup má — návrh musí schválit on.');
+        abort_unless($potvrzeno, 422, 'Partner do galerie nemá přístup, a tak návrh schválit nemůže. Potvrďte, že ho schvalujete sám — zapíše se to do protokolu.');
+
+        $partner = $this->ostatniZDvojice($prostor, $kdo);
+        $vysledek = new VysledekMazani;
+
+        foreach ($this->davky($uuids) as $davka) {
+            $vysledek = $vysledek->spoj(DB::transaction(function () use ($prostor, $kdo, $davka, $trezor, $partner) {
+                $nactene = $this->nacti($prostor, $davka)->whereNotNull('trash_requested_by');
+                [$skryte, $polozky] = $this->rozdelTrezor($nactene, $trezor);
+                $schvaleno = [];
+
+                foreach ($polozky as $m) {
+                    $navrhl = (int) $m->trash_requested_by;
+                    $sam = $navrhl === (int) $kdo->id ? $partner : null;
+
+                    if ($this->schvalJednu($m, $navrhl, $kdo, null, $sam)) {
+                        $schvaleno[] = $m->uuid;
+                    }
+                }
+
+                return new VysledekMazani(schvaleno: $schvaleno, preskoceno: $skryte);
+            }));
+        }
 
         return $vysledek;
     }
@@ -469,37 +644,84 @@ class MazaniFotek
         return new VysledekMazani(navrzeno: $navrzeno, uzNavrzeno: $uz, schvaleno: $schvaleno);
     }
 
-    /** Do koše, jen pokud návrh pořád platí a podal ho ten, s kým souhlasím. */
-    private function schvalJednu(MediaItem $m, int $navrhl, User $kdo, ?string $odkud): bool
+    /**
+     * Do koše, jen pokud návrh pořád platí a podal ho ten, s kým souhlasím.
+     *
+     * S `$bezPartnera` (id partnerů bez přístupu, jen ze `schvalSam`) smí jít
+     * i vlastní návrh — a protokol to řekne jinou akcí, ať se přebití nikdy
+     * netváří jako souhlas partnera.
+     *
+     * @param  list<int>|null  $bezPartnera
+     */
+    private function schvalJednu(MediaItem $m, int $navrhl, User $kdo, ?string $odkud, ?array $bezPartnera = null): bool
     {
         $zmeneno = $this->fotky()->whereKey($m->id)
             ->whereNull('trashed_at')
             ->where('trash_requested_by', $navrhl)
-            ->where('trash_requested_by', '!=', $kdo->id)
-            ->update($this->doKoseHodnoty($kdo));
+            ->when($bezPartnera === null, fn (Builder $q) => $q->where('trash_requested_by', '!=', $kdo->id))
+            ->update($this->doKoseHodnoty($kdo, $bezPartnera !== null));
 
         if ($zmeneno !== 1) {
             return false;
         }
 
-        AuditLog::record('media.trash_approved', $m, array_filter([
+        $zaznam = array_filter([
             'navrhl' => $navrhl,
             'schvalil' => (int) $kdo->id,
             'odkud' => $odkud,
-        ], fn ($hodnota) => $hodnota !== null) + $this->soubor($m));
+        ], fn ($hodnota) => $hodnota !== null);
+
+        if ($bezPartnera === null) {
+            AuditLog::record('media.trash_approved', $m, $zaznam + $this->soubor($m));
+        } else {
+            AuditLog::record('media.trash_approved_alone', $m, $zaznam + [
+                'duvod' => 'partner_bez_pristupu',
+                'partner' => $bezPartnera,
+            ] + $this->soubor($m));
+        }
 
         return true;
     }
 
-    /** @return array<string, mixed> */
-    private function doKoseHodnoty(User $kdo): array
+    /**
+     * Id ostatních z dvojice (bez `$kdo`) — do protokolu přebití, kdo souhlas dát nemohl.
+     *
+     * @return list<int>
+     */
+    private function ostatniZDvojice(GallerySpace $prostor, User $kdo): array
     {
+        return DB::table('gallery_space_user')
+            ->where('gallery_space_id', $prostor->id)
+            ->whereIn('role', PristupDoGalerie::ROLE_DVOJICE)
+            ->where('user_id', '!=', (int) $kdo->id)
+            ->orderBy('user_id')
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Hodnoty přesunu do koše — jediné místo, kde se `trashed_at` nastavuje.
+     *
+     * `trash_approved_alone_at` nese jen schválení vlastníkem bez partnera
+     * (`schvalSam`); každý jiný přesun ho maže, takže znovu vyhozená fotka
+     * nezdědí starou pojistku (`drziLhutu`).
+     *
+     * @return array<string, mixed>
+     */
+    private function doKoseHodnoty(User $kdo, bool $bezPartnera = false): array
+    {
+        $ted = now();
+
         return [
-            'trashed_at' => now(),
-            'purge_after' => now()->addDays((int) config('gallery.trash_retention_days', 30)),
+            'trashed_at' => $ted,
+            'purge_after' => $ted->copy()->addDays((int) config('gallery.trash_retention_days', 30)),
             'trashed_by' => $kdo->id,
             'trash_requested_by' => null,
             'trash_requested_at' => null,
+            'trash_approved_alone_at' => $bezPartnera ? $ted : null,
         ];
     }
 

@@ -70,10 +70,20 @@ class AlbumPolicyHostTest extends TestCase
         $this->assertSame('Jejich léto', $this->ciziAlbum->fresh()->title);
     }
 
+    /*
+     * Stránka `/albums/{uuid}` od 27. 9. 2026 jen přesměruje do aplikace
+     * (`PresmerujStareRozhrani`); tentýž `AlbumController::show` ale dál
+     * obsluhuje starší API `/api/v1/albums/{uuid}`, takže se zákaz hlídá tam.
+     */
     public function test_host_nesmi_ani_otevrit_cizi_album(): void
     {
         $this->actingAs($this->vlastnik)
             ->get('/albums/'.$this->ciziAlbum->uuid)
+            ->assertRedirect('/galerie/alba')
+            ->assertDontSee('Jejich léto');
+
+        $this->actingAs($this->vlastnik, 'sanctum')
+            ->getJson('/api/v1/albums/'.$this->ciziAlbum->uuid)
             ->assertForbidden();
     }
 

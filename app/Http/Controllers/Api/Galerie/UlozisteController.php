@@ -44,9 +44,11 @@ class UlozisteController extends Controller
             ], 422);
         }
 
+        // Bez koše a trezoru — „Fotky z trezoru nejdou na cloud", takže je
+        // nelze ani počítat mezi čekající.
         $ceka = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
+            ->smiDoCloudu()
             ->whereNull('drive_file_id')
             ->count();
 
@@ -62,7 +64,7 @@ class UlozisteController extends Controller
         // i po povedeném přenosu a varovný pruh by nezmizel nikdy.
         MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
+            ->smiDoCloudu()
             ->whereNull('drive_file_id')
             ->whereNotNull('processing_error')
             ->update(['processing_error' => null]);

@@ -4,6 +4,7 @@ namespace App\Services\Integrations;
 
 use App\Models\IntegrationSetting;
 use App\Services\Storage\StorageResolver;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -50,7 +51,9 @@ class ProviderRegistry
             // Its own page: re-syncing a library and rebuilding a folder tree are not
             // things to put behind a modal somebody can dismiss halfway through.
             'mode' => 'page',
-            'url' => '/settings/storage/google',
+            // Úložiště v aplikaci; stará stránka nastavení jen přesměrovává.
+            // Konstanta, takže poskládané z `TrasyPrototypu`, ne voláním `url()`.
+            'url' => '/'.TrasyPrototypu::ZAKLAD.'/'.TrasyPrototypu::ADRESY['storage'],
             'brand' => '#1fa463',
             'summary' => 'Fotky a videa ve vašem Disku.',
             'help' => 'Připojí se přes Google účet a platí pro celý prostor.',

@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Planning\SharedTodoService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -185,7 +186,7 @@ class SharedTodoController extends Controller
         $comment = SharedTodoComment::create(['todo_id' => $todo->id, 'user_id' => $request->user()->id, 'body' => $data['body']]);
         foreach (array_unique(array_filter([$todo->created_by, $todo->assigned_to])) as $recipientId) {
             if ((int) $recipientId !== $request->user()->id) {
-                User::find($recipientId)?->notify(new GalleryNotification('todo.comment', $request->user()->name.' přidal/a komentář k úkolu: '.$todo->title, '/planning#todos', '💬'));
+                User::find($recipientId)?->notify(new GalleryNotification('todo.comment', $request->user()->name.' přidal/a komentář k úkolu: '.$todo->title, TrasyPrototypu::url('x-plan'), '💬'));
             }
         }
 
@@ -264,14 +265,15 @@ class SharedTodoController extends Controller
             'list' => $todo->list, 'children' => $todo->children?->map(fn ($child) => array_merge($child->toArray(), ['assignee' => $child->assignee ? ['id' => $child->assignee->id, 'name' => $child->assignee->name] : null]))->values(),
             'comments' => $todo->comments?->map(fn ($comment) => ['uuid' => $comment->uuid, 'body' => $comment->body, 'created_at' => $comment->created_at, 'user' => $comment->user ? ['id' => $comment->user->id, 'name' => $comment->user->name] : null])->values(),
             'dependencies' => $dependencies, 'is_blocked' => $dependencies->contains(fn ($dependency) => $dependency->status !== 'completed'),
-            'href' => $todo->calendar_event_id ? '/calendar/events/'.CalendarEvent::whereKey($todo->calendar_event_id)->value('uuid') : ($todo->trip_id ? '/trips/'.$todo->trip_id.'/plan' : '/planning#todos'),
+            // Obrazovka aplikace (`TrasyPrototypu::url`); detail události ani cesty adresu nemá.
+            'href' => TrasyPrototypu::url($todo->calendar_event_id ? 'calendar' : ($todo->trip_id ? 'x-cesty' : 'x-plan')),
         ]);
     }
 
     private function notifyAssignment(SharedTodo $todo, int $actorId, string $prefix = 'Nový společný úkol'): void
     {
         if ($todo->assigned_to && $todo->assigned_to !== $actorId) {
-            User::find($todo->assigned_to)?->notify(new GalleryNotification('todo.assigned', $prefix.': '.$todo->title, '/planning#todos', '✅', ['todo_uuid' => $todo->uuid]));
+            User::find($todo->assigned_to)?->notify(new GalleryNotification('todo.assigned', $prefix.': '.$todo->title, TrasyPrototypu::url('x-plan'), '✅', ['todo_uuid' => $todo->uuid]));
         }
     }
 

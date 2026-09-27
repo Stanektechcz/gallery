@@ -94,7 +94,7 @@ class MazaniVPocitaciTest extends TestCase
 
         // „Necháváme obě" = `*` spolu s uzavřením nálezu, jinak by server vybral vítěze sám.
         $this->assertStringContainsString("dupKeep: { ...keep, [g.id]: '*' }", $pocitac);
-        $this->assertStringNotContainsString("this.setState({ dupDone: done.concat(g.id) });", $pocitac);
+        $this->assertStringNotContainsString('this.setState({ dupDone: done.concat(g.id) });', $pocitac);
         // Sloučení: vítěz v témže zápisu jako `dupDone` (posílají se jen změněné klíče).
         $this->assertMatchesRegularExpression('/dupDone: done\.concat\(list\.map\(g => g\.id\)\), dupKeep: vitezove/', $pocitac);
     }
@@ -125,6 +125,33 @@ class MazaniVPocitaciTest extends TestCase
         $this->assertStringContainsString('Čeká na schválení', $pocitac);
     }
 
+    /**
+     * Přebití vlastníkem se záznamem (rozhodnutí 27. 9. 2026): partner nemá
+     * přístup → u vlastního návrhu „Schválit sám", přes potvrzovací dialog
+     * a s výslovným `potvrzuji_bez_partnera: true`.
+     */
+    public function test_vlastnik_schvali_sam_kdyz_partner_nema_pristup(): void
+    {
+        $pocitac = self::dokument();
+        $sekce = self::metoda($pocitac, 'keSchvaleniVals(');
+
+        $this->assertStringContainsString('.partnerBezPristupu', $sekce);
+        $this->assertStringContainsString('this.setState({ confirm: {', $sekce);
+        $this->assertStringContainsString("this.kosVolej('schvalit-sam', { ids", $sekce);
+        $this->assertStringContainsString('potvrzuji_bez_partnera: true', $sekce);
+        // Během čekací lhůty tlačítko chybí — a obrazovka řekne proč.
+        $this->assertStringContainsString('.partnerBezPristupuLhuta', $sekce);
+        $this->assertStringContainsString('po 14 dnech bez přístupu', $sekce);
+        $this->assertStringContainsString('Schválit sám (partner nemá přístup)', $pocitac);
+        $this->assertStringContainsString('<sc-if value="{{ k.samOn }}">', $pocitac);
+        $this->assertStringContainsString('onClick="{{ k.schvalitSam }}"', $pocitac);
+
+        // Schválené odchází z knihovny stejně jako po běžném souhlasu.
+        $kos = self::metoda($pocitac, 'kosVolej(');
+        $this->assertStringContainsString("akce === 'schvalit-sam'", $kos);
+        $this->assertSame(1, substr_count($pocitac, "\n  keSchvaleniVals("), 'Druhá definice by tiše přepsala první.');
+    }
+
     public function test_pravidlo_mazani_se_meni_v_nastaveni(): void
     {
         $pocitac = self::dokument();
@@ -143,7 +170,7 @@ class MazaniVPocitaciTest extends TestCase
 
         // Kód zámku (nebo heslo) jde jen do požadavku — dialog je v `acDlg`, který se nesdílí.
         $potvrzeni = self::metoda($pocitac, 'mazaniPotvrzeniVals(');
-        $this->assertStringContainsString("{ kod: hodnota } : { heslo: hodnota }", $potvrzeni);
+        $this->assertStringContainsString('{ kod: hodnota } : { heslo: hodnota }', $potvrzeni);
         $this->assertStringNotContainsString('localStorage', $potvrzeni);
         $this->assertStringNotContainsString('setVals', $potvrzeni);
         $this->assertStringContainsString("if (d.mode === 'mazani-potvrdit') return this.mazaniPotvrzeniVals(d);", $pocitac);

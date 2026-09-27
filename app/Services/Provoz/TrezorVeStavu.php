@@ -4,6 +4,7 @@ namespace App\Services\Provoz;
 
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
+use App\Services\Media\KopieTrezoru;
 use App\Support\SpaceContext;
 
 /**
@@ -19,6 +20,8 @@ class TrezorVeStavu
 {
     /** Klíče, které patří databázi. Do stavu se neukládají. */
     public const SERVEROVE = ['vaultAdded', 'vaultRemoved', 'vaultVyjmout'];
+
+    public function __construct(private readonly KopieTrezoru $kopie) {}
 
     public function tykaSe(array $patch): bool
     {
@@ -52,9 +55,21 @@ class TrezorVeStavu
         $dotaz = fn () => MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id);
 
-        // Co v seznamu je, patří do trezoru.
+        /*
+         * Co v seznamu je, patří do trezoru.
+         *
+         * Hromadný `update()` nespouští události modelu, takže id položek, které
+         * se opravdu mění, se berou **předem** — a jen jim se odeberou kopie
+         * v cloudu („Fotky z trezoru nejdou na cloud"). Seznam chodí celý
+         * pořád dokola; položka, která v trezoru už byla, se znovu nezpracuje.
+         */
         if ($vTrezoru) {
-            (clone $dotaz())->whereIn('uuid', $vTrezoru)->update(['is_hidden' => true]);
+            $nove = (clone $dotaz())->whereIn('uuid', $vTrezoru)->where('is_hidden', false)->pluck('id')->all();
+
+            if ($nove) {
+                (clone $dotaz())->whereIn('id', $nove)->update(['is_hidden' => true]);
+                $this->kopie->vlozeno($nove);
+            }
         }
 
         /*
@@ -67,7 +82,13 @@ class TrezorVeStavu
          * odkazů.
          */
         if ($vyjmout && $odemceno) {
-            (clone $dotaz())->where('is_hidden', true)->whereIn('uuid', $vyjmout)->update(['is_hidden' => false]);
+            $vracene = (clone $dotaz())->where('is_hidden', true)->whereIn('uuid', $vyjmout)->pluck('id')->all();
+
+            if ($vracene) {
+                (clone $dotaz())->whereIn('id', $vracene)->update(['is_hidden' => false]);
+                // Mimo trezor se zrcadlí zase jako ostatní.
+                $this->kopie->vyjmuto($vracene);
+            }
         }
     }
 }

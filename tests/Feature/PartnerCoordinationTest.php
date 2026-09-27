@@ -130,7 +130,8 @@ class PartnerCoordinationTest extends TestCase
             ->assertOk()->assertJsonFragment([
                 'type' => 'settlement', 'source_key' => (string) $settlementId,
                 'settlement_id' => $settlementId, 'assignment_locked' => true,
-                'href' => '/trips/'.$sources['trip'].'/plan#partner-finance',
+                // Obrazovka aplikace; cestu nese `trip_id`.
+                'href' => '/galerie/cesty',
             ]);
         $action = collect($pulse->json('actions'))->firstWhere('type', 'settlement');
         $this->assertSame($this->partner->id, $action['assigned_to']['id']);

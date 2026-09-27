@@ -14,6 +14,7 @@ use App\Services\Banking\RevolutStatementImportService;
 use App\Services\Banking\SpaceFinancialOverviewService;
 use App\Services\Banking\TripBankReconciliationService;
 use App\Services\Banking\TripFinancialInsightService;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\JsonResponse;
@@ -111,7 +112,7 @@ class BankingController extends Controller
                 $request->user()->id,
                 'finance.imported',
                 $request->user()->name." doplnil/a společné finance o {$count} transakcí.",
-                '/finances',
+                TrasyPrototypu::url('x-transakce'),
                 ['import_uuid' => $result['import']['uuid'], 'rows_imported' => $count, 'priority' => 'normal']
             );
         }

@@ -51,11 +51,16 @@ class UnassignedAlbumSuggestionTest extends TestCase
             ->assertJsonPath('suggestions.0.context.type', 'event')->json('suggestions.0');
         $this->assertEqualsCanonicalizing($media->pluck('uuid')->all(), collect($payload['media'])->pluck('uuid')->all());
 
-        $this->get('/albums')->assertOk()->assertInertia(fn (Assert $page) => $page
+        /*
+         * Stránky `/albums` a `/prehled` od 27. 9. 2026 jen vedou do aplikace
+         * (`PresmerujStareRozhrani`). Seznam alb s návrhem vydává dál starší
+         * API přes tentýž `AlbumController::index`.
+         */
+        $this->get('/albums')->assertRedirect('/galerie/alba');
+        $this->get('/prehled')->assertRedirect('/');
+        $this->get('/api/v1/albums')->assertOk()->assertInertia(fn (Assert $page) => $page
             ->component('Albums/Index')->has('albumSuggestions', 1)
             ->where('albumSuggestions.0.fingerprint', $payload['fingerprint']));
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.album_suggestion.fingerprint', $payload['fingerprint']));
 
         $created = $this->postJson('/api/v1/album-suggestions/'.$payload['fingerprint'].'/accept', [
             'gallery_space_id' => $space->id, 'title' => 'Náš den u přehrady',
@@ -83,7 +88,7 @@ class UnassignedAlbumSuggestionTest extends TestCase
         $this->postJson('/api/v1/album-suggestions/'.$payload['fingerprint'].'/accept', [
             'gallery_space_id' => $space->id, 'media_uuids' => $media->pluck('uuid')->all(),
         ])->assertOk()->assertJsonPath('already_decided', true)->assertJsonPath('album.uuid', $created['album']['uuid']);
-        $this->actingAs($partner)->get('/albums/'.$created['album']['uuid'])->assertOk();
+        $this->actingAs($partner)->get('/api/v1/albums/'.$created['album']['uuid'])->assertOk();
     }
 
     public function test_suggestion_can_be_dismissed_and_foreign_media_cannot_be_injected(): void

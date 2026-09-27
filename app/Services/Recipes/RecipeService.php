@@ -8,6 +8,7 @@ use App\Models\MediaItem;
 use App\Models\Recipe;
 use App\Models\RecipeCookingSession;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -189,7 +190,7 @@ class RecipeService
         return [
             'uuid' => $media->uuid, 'title' => $media->display_title ?: $media->original_filename,
             'thumbnail_url' => $media->thumbnail_url, 'media_type' => $media->media_type,
-            'taken_at' => $media->taken_at?->toIso8601String(), 'detail_url' => '/media/'.$media->uuid,
+            'taken_at' => $media->taken_at?->toIso8601String(), 'detail_url' => TrasyPrototypu::url('all'),
         ];
     }
 

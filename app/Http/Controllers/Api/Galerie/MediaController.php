@@ -582,7 +582,11 @@ class MediaController extends Controller
          * InitiateDriveResumableUploadJob.
          */
         try {
-            MirrorMediaToCloud::dispatch($media->id);
+            // Trezor do cloudu nejde (rozhodnutí 27. 9. 2026); úloha to hlídá
+            // znovu sama.
+            if (! $media->is_hidden) {
+                MirrorMediaToCloud::dispatch($media->id);
+            }
         } catch (\Throwable $e) {
             Log::warning('Kopii na Disk se nepodařilo zařadit', [
                 'media_id' => $media->id,

@@ -13,6 +13,7 @@ use App\Models\MediaItem;
 use App\Services\AlbumService;
 use App\Services\Media\SmartAlbumService;
 use App\Services\Media\UnassignedAlbumSuggestionService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -288,7 +289,8 @@ class AlbumController extends Controller
         // Queue Drive folder creation
         CreateDriveFolderJob::dispatch($album);
 
-        return redirect()->route('albums.show', $album->uuid)
+        // Stránka alba je v aplikaci; stará `/albums/{uuid}` jen přesměrovává.
+        return redirect(TrasyPrototypu::url('albums'))
             ->with('success', 'Album bylo vytvořeno.');
     }
 
@@ -446,7 +448,7 @@ class AlbumController extends Controller
             return response()->json(['status' => 'deleted']);
         }
 
-        return redirect()->route('albums.index')->with('success', 'Album bylo smazáno.');
+        return redirect(TrasyPrototypu::url('albums'))->with('success', 'Album bylo smazáno.');
     }
 
     public function tree(Request $request): JsonResponse

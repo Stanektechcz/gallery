@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\AuditLog;
 use App\Models\BankConnection;
 use App\Services\Banking\BankingIntegrationService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
@@ -17,7 +18,9 @@ class BankingOAuthController extends Controller
             $result = $banking->complete($connection, $request->string('state')->toString());
             AuditLog::record('bank.connection.complete', $connection, collect($result)->except('connection')->all());
             $tripId = data_get($connection->encrypted_metadata, 'return_trip_id');
-            $cil = $tripId ? "/trips/{$tripId}/plan#bank-finance" : '/finances#connection';
+            // Rovnou na obrazovku aplikace — stará stránka by vedla přes druhé
+            // přesměrování a hláška by cestou zmizela. Kotvy aplikace nečte.
+            $cil = TrasyPrototypu::url($tripId ? 'x-cesty' : 'x-finance');
 
             // Připojení je hotové i bez prvního stažení — viz `complete()`.
             // Hlásí se to zvlášť, aby „nepodařilo se" nevedlo k novému pokusu.
@@ -31,7 +34,7 @@ class BankingOAuthController extends Controller
         } catch (\Throwable $exception) {
             report($exception);
 
-            return redirect('/finances#connection')->with('error', 'Připojení Revolutu se nepodařilo dokončit. Zkontrolujte stav souhlasu a zkuste připojení znovu.');
+            return redirect(TrasyPrototypu::url('x-finance'))->with('error', 'Připojení Revolutu se nepodařilo dokončit. Zkontrolujte stav souhlasu a zkuste připojení znovu.');
         }
     }
 }

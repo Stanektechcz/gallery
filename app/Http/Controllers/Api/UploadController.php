@@ -20,6 +20,7 @@ use App\Services\Media\FilenameMetadataService;
 use App\Services\Media\MediaFormatService;
 use App\Services\Media\VideoProcessingService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -512,7 +513,14 @@ class UploadController extends Controller
             // rather than inside the transaction: a worker picking the job up first would
             // look for a media row that does not exist yet.
             $mediaId = $media->id;
-            DB::afterCommit(function () use ($mediaId) {
+            // Trezor do cloudu nejde (rozhodnutí 27. 9. 2026); úloha to hlídá
+            // znovu sama, tohle jen nezařazuje zbytečnou práci.
+            $doCloudu = ! $media->is_hidden;
+            DB::afterCommit(function () use ($mediaId, $doCloudu) {
+                if (! $doCloudu) {
+                    return;
+                }
+
                 // Wrapped like every other dispatch in this method, and for a sharper
                 // reason. This one sat inside the try whose catch deletes the media row
                 // and wipes its directory — so a failure in the *backup copy* destroyed
@@ -580,7 +588,10 @@ class UploadController extends Controller
             // client receives a successful upload response. This avoids
             // buffering an entire video in PHP and keeps the gallery usable.
             try {
-                InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+                // Trezor na Disk nejde — viz výše u zrcadlení.
+                if (! $media->is_hidden) {
+                    InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+                }
             } catch (\Throwable $driveQueueException) {
                 Log::warning('Drive synchronizaci se nepodařilo zařadit do fronty', ['media_id' => $media->id, 'error' => $driveQueueException->getMessage()]);
             }
@@ -613,7 +624,8 @@ class UploadController extends Controller
                         $session->user_id,
                         'media.added',
                         request()->user()?->name.' přidal/a nové médium: '.$session->original_filename,
-                        "/media/{$media->uuid}",
+                        // Knihovna v aplikaci (`TrasyPrototypu::url`); fotku nese `media_uuid`.
+                        TrasyPrototypu::url('all'),
                         ['media_uuid' => $media->uuid],
                     );
                 }

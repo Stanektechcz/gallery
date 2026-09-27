@@ -49,7 +49,8 @@ class SaasRegistrationTest extends TestCase
     {
         config()->set('gallery.registration_open', false);
 
-        $this->get('/registrace')->assertRedirect('/login');
+        // Přihlašuje se v aplikaci na `/` (viz `TrasyPrototypu::url`).
+        $this->get('/registrace')->assertRedirect('/');
         $this->post('/registrace', [
             'name' => 'Kdokoliv', 'email' => 'kdo@example.cz', 'space_name' => 'X',
             'password' => 'tajneheslo1', 'password_confirmation' => 'tajneheslo1',

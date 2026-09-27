@@ -5,6 +5,7 @@ namespace App\Services\Taxonomy;
 use App\Models\GallerySpace;
 use App\Models\Tag;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -88,12 +89,12 @@ class UniversalTagService
             }
         }
         $media = $tag->media()->where('media_items.gallery_space_id', $tag->gallery_space_id)->limit(24)->get(['media_items.id', 'media_items.display_title', 'media_items.original_filename', 'media_items.uuid'])
-            ->map(fn ($item) => ['id' => (int) $item->id, 'title' => $item->display_title ?: $item->original_filename, 'url' => '/timeline?media='.$item->uuid])->values()->all();
+            ->map(fn ($item) => ['id' => (int) $item->id, 'title' => $item->display_title ?: $item->original_filename, 'url' => TrasyPrototypu::url('all')])->values()->all();
         if ($media) {
             $groups->push(['entity_type' => 'media', 'label' => 'Fotografie a videa', 'items' => $media]);
         }
         $albums = $tag->albums()->where('albums.gallery_space_id', $tag->gallery_space_id)->limit(24)->get(['albums.id', 'albums.title', 'albums.uuid'])
-            ->map(fn ($item) => ['id' => (int) $item->id, 'title' => $item->title, 'url' => '/albums/'.$item->uuid])->values()->all();
+            ->map(fn ($item) => ['id' => (int) $item->id, 'title' => $item->title, 'url' => TrasyPrototypu::url('albums')])->values()->all();
         if ($albums) {
             $groups->push(['entity_type' => 'album', 'label' => 'Alba', 'items' => $albums]);
         }
@@ -123,19 +124,25 @@ class UniversalTagService
         }
     }
 
+    /**
+     * Obrazovka aplikace pro označenou věc (`TrasyPrototypu::url`).
+     *
+     * Dřív adresy starého rozhraní (a `/gifts`, která neexistovala vůbec). Detail
+     * v aplikaci adresu nemá; záznam nese `id` vedle odkazu.
+     */
     private function urlFor(string $type, object $item): string
     {
-        return match ($type) {
-            'calendar_event' => '/calendar/events/'.$item->uuid,
-            'trip' => '/trips?trip='.$item->id,
-            'recipe' => '/recipes/'.$item->uuid,
-            'entertainment' => '/watchlist',
-            'todo' => '/planning#todos',
-            'expense' => '/finances',
-            'gift' => '/gifts',
-            'milestone' => '/milestones',
-            'travel_inbox' => '/trips',
-            'album' => '/albums/'.$item->uuid,
-        };
+        return TrasyPrototypu::url(match ($type) {
+            'calendar_event' => 'calendar',
+            'trip' => 'x-cesty',
+            'recipe' => 'x-kucharka',
+            'entertainment' => 'x-filmy',
+            'todo' => 'x-plan',
+            'expense' => 'x-finance',
+            'gift' => 'x-darky',
+            'milestone' => 'x-milniky',
+            'travel_inbox' => 'x-inbox-cesty',
+            'album' => 'albums',
+        });
     }
 }

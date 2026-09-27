@@ -10,7 +10,6 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class CoupleExperienceRecommendationTest extends TestCase
@@ -47,7 +46,7 @@ class CoupleExperienceRecommendationTest extends TestCase
         $this->actingAs($this->owner);
     }
 
-    public function test_calendar_and_dashboard_use_explainable_shared_recommendations(): void
+    public function test_calendar_uses_explainable_shared_recommendations(): void
     {
         Place::create([
             'gallery_space_id' => $this->space->id, 'name' => 'Drahý nový tip', 'type' => 'restaurant',
@@ -67,10 +66,9 @@ class CoupleExperienceRecommendationTest extends TestCase
         $this->assertStringContainsString('shodli jste se', $idea['reason']);
         $this->assertStringContainsString('low-cost', $idea['reason']);
 
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard/Index')
-            ->where('data.partner_hub.experience_recommendation.id', $this->favorite->id)
-            ->where('data.partner_hub.experience_recommendation.top_item.name', 'Dýňové risotto'));
+        // Starý rozcestník doporučení ukazoval taky; od 27. 9. 2026 jen vede
+        // do aplikace (`PresmerujStareRozhrani`), doporučení nese API výš.
+        $this->get('/prehled')->assertRedirect('/');
     }
 
     public function test_one_plan_action_creates_shared_idempotent_event_plan_and_reminders(): void

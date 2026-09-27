@@ -5,13 +5,21 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 
 /**
- * Jedna kopie v cloudu, která má po trvalém smazání položky zmizet.
+ * Jedna kopie v cloudu, která má zmizet — po trvalém smazání položky, nebo
+ * když položka odešla do trezoru.
  *
- * Žije déle než položka: vzniká v `MediaPurger` před smazáním řádku a maže ji
- * úloha `RemoveCloudCopy`. Jméno souboru ani titulek nenese — viz migrace.
+ * Žije déle než položka: vzniká v `MediaPurger` před smazáním řádku (nebo
+ * v `OdeberKopieVTrezoru`) a maže ji úloha `RemoveCloudCopy`. Jméno souboru
+ * ani titulek nenese — viz migrace.
  */
 class CloudCopyDeletion extends Model
 {
+    /** Trvalé smazání položky. */
+    public const DUVOD_SMAZANI = 'purge';
+
+    /** Položka odešla do trezoru — „Fotky z trezoru nejdou na cloud." */
+    public const DUVOD_TREZOR = 'vault';
+
     public const STATUS_PENDING = 'pending';
 
     public const STATUS_DONE = 'done';

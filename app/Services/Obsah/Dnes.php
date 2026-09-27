@@ -638,6 +638,7 @@ class Dnes implements MaPrazdneKolekce, PoskytovatelObsahu
             'media.trash' => 'do koše',
             'media.trash_proposed' => 'návrh ke smazání',
             'media.trash_approved' => 'smazání po společném schválení',
+            'media.trash_approved_alone' => 'smazání bez partnera (neměl přístup)',
             'media.trash_rejected' => 'ponechání v knihovně',
             'media.trash_withdrawn' => 'stažený návrh ke smazání',
             'gallery.delete_mode_proposed' => 'návrh, aby každý mazal sám',

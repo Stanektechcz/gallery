@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Jobs\Drive\CreateDriveFolderJob;
 use App\Jobs\Drive\MoveDriveFolderJob;
 use App\Jobs\Drive\RenameDriveFolderJob;
+use App\Jobs\Media\ObnovHledaniJob;
 use App\Models\Album;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
@@ -111,6 +112,9 @@ class AlbaController extends Controller
                 MediaItem::withoutGlobalScope(SpaceContext::SCOPE)->whereIn('id', $id)->update(['primary_album_id' => null]);
                 $this->prepocitej($dotcena);
             });
+
+            // Názvy alb jsou v `search_text` — fotka se nemá najít podle alba, ve kterém už není.
+            ObnovHledaniJob::zkusNaplanovat($id, 'vyjmutí z alb');
 
             AuditLog::record('album.media_removed', null, ['count' => $id->count()]);
 
@@ -369,8 +373,14 @@ class AlbaController extends Controller
             return response()->json(['ok' => false, 'zprava' => 'Album má podalba — nejdřív je přesuňte.'], 422);
         }
 
-        $pocet = DB::transaction(function () use ($zdroj, $cil, $request) {
+        $dotcene = collect();
+
+        $pocet = DB::transaction(function () use ($zdroj, $cil, $request, &$dotcene) {
             $fotky = DB::table('album_media')->where('album_id', $zdroj->id)->pluck('media_item_id');
+            // Před přesunem: potom už na zdrojové album neukazuje nic a jeho
+            // smazání (`ObnovujeHledaniFotek`) by žádnou fotku nenašlo.
+            $dotcene = $fotky->merge(MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+                ->where('primary_album_id', $zdroj->id)->pluck('id'));
             $poradi = (int) DB::table('album_media')->where('album_id', $cil->id)->max('sort_order');
 
             DB::table('album_media')->insertOrIgnore($fotky->values()->map(fn ($id, $i) => [
@@ -386,6 +396,8 @@ class AlbaController extends Controller
 
             return $fotky->count();
         });
+
+        ObnovHledaniJob::zkusNaplanovat($dotcene, 'sloučení alb');
 
         return response()->json([
             'ok' => true,
@@ -431,6 +443,10 @@ class AlbaController extends Controller
             ->update(['primary_album_id' => $album->id]);
 
         $this->prepocitej(array_merge($puvodni, [$album->id]));
+
+        // Nové album (a u hlavního i jeho cesta) patří do `search_text`. Úloha
+        // počká na potvrzení transakce, ve které se zařazuje.
+        ObnovHledaniJob::zkusNaplanovat($media->pluck('id'), 'zařazení do alba');
 
         return $media->count();
     }

@@ -8,6 +8,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Moments\DailyMomentService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 
@@ -70,7 +71,8 @@ class DailyMomentCommand extends Command
                     // is also what files it under Galerie a vzpomínky rather than Ostatní.
                     'moment.today',
                     'Zároveň! Vyfoťte, co právě děláte — máte '.$moment->window_minutes.' minut.',
-                    '/zaroven',
+                    // Stará stránka „Zároveň" v aplikaci obrazovku nemá — vede na úvod.
+                    TrasyPrototypu::url('home'),
                     '📸',
                     ['moment_uuid' => $moment->uuid],
                 ));

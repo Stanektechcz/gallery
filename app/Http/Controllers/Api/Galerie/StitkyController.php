@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\Galerie;
 use App\Http\Controllers\Api\Galerie\Concerns\UrcujePar;
 use App\Http\Controllers\Api\Galerie\Concerns\VraciObsah;
 use App\Http\Controllers\Controller;
+use App\Jobs\Media\ObnovHledaniJob;
 use App\Models\AuditLog;
 use App\Models\GallerySpace;
 use App\Services\Obsah\Knihovna;
@@ -74,6 +75,9 @@ class StitkyController extends Controller
             fn (object $a, object $b) => $a->id <=> $b->id,
         ])->first();
         $zdroje = $stitky->where('id', '!=', $cil->id)->pluck('id')->all();
+        // Fotky pod rušenými štítky — po sloučení ponesou v `search_text` jméno cíle.
+        // Zjišťuje se předem: vazby se přesouvají a štítky mažou mimo model.
+        $dotcene = DB::table('media_tag')->whereIn('tag_id', $zdroje)->pluck('media_item_id');
 
         DB::transaction(function () use ($cil, $zdroje) {
             $this->presun('media_tag', 'media_item_id', $cil->id, $zdroje);
@@ -92,6 +96,8 @@ class StitkyController extends Controller
 
             DB::table('tags')->whereIn('id', $zdroje)->delete();
         });
+
+        ObnovHledaniJob::zkusNaplanovat($dotcene, 'sloučení štítků');
 
         AuditLog::record('tag.merge', null, ['do' => $cil->id, 'z' => $zdroje]);
 

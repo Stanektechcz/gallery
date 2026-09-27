@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Notifications\EventReminderNotification;
 use App\Notifications\GalleryNotification;
 use App\Services\Notifications\WebPushService;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -40,7 +41,8 @@ class DeliverPlanningRemindersCommand extends Command
                 app(WebPushService::class)->sendToUser($recipient, [
                     'title' => $reminder->event->title ?: 'Připomínka',
                     'body' => $this->pushBody($reminder->event),
-                    'url' => '/calendar/events/'.$reminder->event->uuid,
+                    // Obrazovka aplikace (`TrasyPrototypu::url`); detail události adresu nemá.
+                    'url' => TrasyPrototypu::url('calendar'),
                     'tag' => 'event-'.$reminder->event->uuid,
                     // Připomínku si na tenhle čas nastavil sám — tiché hodiny ji nezastaví.
                     'i_v_tichu' => true,
@@ -68,7 +70,7 @@ class DeliverPlanningRemindersCommand extends Command
                     continue;
                 }
                 $recipient = User::find($todo->assigned_to ?: $todo->created_by);
-                $recipient?->notify(new GalleryNotification('todo.reminder', 'Připomínka úkolu: '.$todo->title, '/planning#todos', '✅', ['todo_uuid' => $todo->uuid]));
+                $recipient?->notify(new GalleryNotification('todo.reminder', 'Připomínka úkolu: '.$todo->title, TrasyPrototypu::url('x-plan'), '✅', ['todo_uuid' => $todo->uuid]));
             }
         }
 
@@ -78,8 +80,8 @@ class DeliverPlanningRemindersCommand extends Command
                 continue;
             }
             $recipient = User::find($capsule->recipient_user_id ?: $capsule->created_by);
-            $eventUuid = $capsule->event_id ? DB::table('calendar_events')->where('id', $capsule->event_id)->value('uuid') : null;
-            $url = $eventUuid ? "/calendar/events/{$eventUuid}?capsule={$capsule->uuid}" : '/memories';
+            // Kapsle má v aplikaci vlastní obrazovku, ať je navázaná na událost, nebo ne.
+            $url = TrasyPrototypu::url('x-kapsle');
             if ($recipient) {
                 $recipient->notify(new GalleryNotification('memory.capsule', "Časová kapsle je připravená: {$capsule->title}", $url, '💌', ['capsule_uuid' => $capsule->uuid]));
             }

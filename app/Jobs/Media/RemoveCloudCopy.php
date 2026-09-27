@@ -3,11 +3,14 @@
 namespace App\Jobs\Media;
 
 use App\Models\CloudCopyDeletion;
+use App\Models\MediaItem;
 use App\Models\StorageConnection;
+use App\Services\Media\KopieTrezoru;
 use App\Services\Storage\DropboxClient;
 use App\Services\Storage\GoogleDriveStorageProvider;
 use App\Services\Storage\OneDriveClient;
 use App\Services\Storage\WebDavClient;
+use App\Support\SpaceContext;
 use Google\Service\Exception as GoogleServiceException;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -18,7 +21,8 @@ use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Smaže jednu kopii v cloudu po trvalém smazání položky.
+ * Smaže jednu kopii v cloudu po trvalém smazání položky nebo po jejím přesunu
+ * do trezoru (`reason = vault`, viz `OdeberKopieVTrezoru`).
  *
  * Nese jen id záznamu v `cloud_copy_deletions`, ne položku — ta už v databázi
  * není. Výpadek cloudu se zkouší znovu s rostoucím odstupem (služba mívá
@@ -33,6 +37,13 @@ use Illuminate\Support\Facades\Log;
  * Koš, ne okamžité zničení: Disk, Dropbox i OneDrive soubor ještě nějakou dobu
  * drží ve svém koši. Stejně se chová koš v galerii, a omyl po schválení obou
  * se tak dá ještě napravit v cloudu.
+ *
+ * Trezor je výjimka tam, kde to cloud dovolí: fotka z trezoru nemá zůstat ani
+ * v koši cloudu (originál je ověřeně na serveru, `OdeberKopieVTrezoru`). Google
+ * Disk maže trvale (`files.delete`). Dropbox a OneDrive ne: trvalé smazání
+ * (`permanently_delete`) Dropbox dovoluje jen týmovým účtům Business
+ * a OneDrive `permanentDelete` u osobních disků obecně nenabízí — tam kopie
+ * skončí v koši cloudu a zmizí po jeho lhůtě. WebDAV koš nemá, maže rovnou.
  */
 class RemoveCloudCopy implements ShouldQueue
 {
@@ -86,6 +97,10 @@ class RemoveCloudCopy implements ShouldQueue
 
         $spojeni = $zaznam->storage_connection_id ? StorageConnection::find($zaznam->storage_connection_id) : null;
 
+        if ($zaznam->reason === CloudCopyDeletion::DUVOD_TREZOR && $this->zastavTrezor($zaznam)) {
+            return;
+        }
+
         if ($duvod = $this->procNelze($zaznam, $spojeni)) {
             $zaznam->forceFill(['status' => CloudCopyDeletion::STATUS_FAILED, 'last_error' => $duvod])->save();
 
@@ -96,7 +111,11 @@ class RemoveCloudCopy implements ShouldQueue
             'dropbox' => $dropbox->delete($spojeni, $zaznam->remote_ref),
             'onedrive' => $oneDrive->delete($spojeni, $zaznam->remote_ref),
             'webdav' => $webDav->delete($spojeni, $zaznam->remote_ref),
-            'google_drive' => $this->smazNaDisku($spojeni, $zaznam->remote_ref),
+            'google_drive' => $this->smazNaDisku(
+                $spojeni,
+                $zaznam->remote_ref,
+                trvale: $zaznam->reason === CloudCopyDeletion::DUVOD_TREZOR,
+            ),
         };
 
         if ($vysledek['ok']) {
@@ -157,15 +176,86 @@ class RemoveCloudCopy implements ShouldQueue
     }
 
     /**
-     * Do koše na Disku, stejně jako ostatní cloudy. Přes kontejner, aby šel
-     * poskytovatel v testech nahradit (jako v úlohách složek na Disku).
+     * Pojistky záznamu z trezoru těsně před smazáním. `true` = záznam je
+     * vyřízený bez mazání (hotovo, nebo selhal s důvodem).
+     *
+     * Mezi zapsáním záznamu a smazáním mohou uběhnout hodiny a Disk maže
+     * trvale. Proto se znovu ptá:
+     *
+     *  - Je položka pořád v trezoru? Když ne, kopie zůstává — po vyjmutí se
+     *    zrcadlí znovu a nové nahrání může ležet na stejné cestě (Dropbox,
+     *    OneDrive i WebDAV ukládají pod `uuid.přípona`). Bez zámku by
+     *    smazání mohlo závod se zápisem varianty vyhrát a vzít čerstvou
+     *    zálohu. Stará kopie mimo trezor nikomu neublíží.
+     *  - Neodkazuje na kopii položka znovu? Pak ji nemazat.
+     *  - Je originál na serveru pořád ověřený? Bez něj může být kopie
+     *    v cloudu jediná — záznam selže s důvodem a doktor ho ukáže.
+     *
+     * Položka, která už neexistuje, byla trvale smazaná (po schválení obou):
+     * její kopie mazat smíme, stejně jako při `purge`.
+     */
+    private function zastavTrezor(CloudCopyDeletion $zaznam): bool
+    {
+        $media = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->withTrashed()
+            ->where('uuid', $zaznam->media_uuid)
+            ->first();
+
+        if (! $media) {
+            return false;
+        }
+
+        if (! $media->is_hidden || $this->opetPouzivana($zaznam, $media)) {
+            $zaznam->forceFill([
+                'status' => CloudCopyDeletion::STATUS_DONE,
+                'last_error' => $media->is_hidden
+                    ? 'Nesmazáno: položka na kopii znovu odkazuje.'
+                    : 'Nesmazáno: položka už není v trezoru — kopie zůstává jako záloha.',
+                'done_at' => now(),
+            ])->save();
+
+            return true;
+        }
+
+        if ($duvod = app(KopieTrezoru::class)->procNelzeOverit($media)) {
+            $zaznam->forceFill([
+                'status' => CloudCopyDeletion::STATUS_FAILED,
+                'last_error' => 'Nesmazáno: originál na serveru nejde ověřit ('.KopieTrezoru::popis($duvod)
+                    .') — kopie v cloudu může být jediná. Po opravě: php artisan gallery:cloud-mazani --znovu',
+            ])->save();
+
+            return true;
+        }
+
+        return false;
+    }
+
+    /** Odkazuje položka na tuhle kopii znovu? */
+    private function opetPouzivana(CloudCopyDeletion $zaznam, MediaItem $media): bool
+    {
+        if ($zaznam->provider === 'google_drive') {
+            return (string) $media->drive_file_id === $zaznam->remote_ref;
+        }
+
+        return $media->variants()
+            ->where('type', 'cloud_copy')
+            ->where('disk', $zaznam->provider)
+            ->where('path', $zaznam->remote_ref)
+            ->exists();
+    }
+
+    /**
+     * Do koše na Disku, stejně jako ostatní cloudy — u trezoru trvale.
+     * Přes kontejner, aby šel poskytovatel v testech nahradit (jako v úlohách
+     * složek na Disku).
      *
      * @return array{ok: bool, error?: string}
      */
-    private function smazNaDisku(StorageConnection $spojeni, string $idSouboru): array
+    private function smazNaDisku(StorageConnection $spojeni, string $idSouboru, bool $trvale = false): array
     {
         try {
-            app(GoogleDriveStorageProvider::class, ['connection' => $spojeni])->trash($idSouboru);
+            $disk = app(GoogleDriveStorageProvider::class, ['connection' => $spojeni]);
+            $trvale ? $disk->deletePermanently($idSouboru) : $disk->trash($idSouboru);
 
             return ['ok' => true];
         } catch (GoogleServiceException $e) {

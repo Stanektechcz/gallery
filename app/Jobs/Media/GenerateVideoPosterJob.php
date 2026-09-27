@@ -96,8 +96,10 @@ class GenerateVideoPosterJob implements ShouldQueue
             // v `routes/console.php`.
             GenerateVideoCompatibilityVariantJob::dispatch($media->id)->onQueue('heavy');
 
-            // Continue to Drive upload
-            InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            // Continue to Drive upload — ne z trezoru (úloha nahrávání to hlídá znovu).
+            if (! $media->is_hidden) {
+                InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            }
 
         } catch (\Throwable $e) {
             Log::error("Video processing failed for media #{$media->id}", ['error' => $e->getMessage()]);

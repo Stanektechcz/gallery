@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\GallerySpace;
 use App\Models\UserIntegration;
 use App\Services\Integrations\DiscordClient;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -14,6 +15,9 @@ use Illuminate\Support\Str;
  *
  * Kept out of the API controller because it is a redirect flow, not JSON: the person
  * leaves for Discord and comes back to a page, and both halves need the session.
+ *
+ * Návrat vede rovnou na nastavení v aplikaci (`TrasyPrototypu::url`) — stará
+ * stránka propojení od 27. 9. 2026 jen přesměrovává a hláška by to nepřežila.
  */
 class DiscordOAuthController extends Controller
 {
@@ -38,22 +42,22 @@ class DiscordOAuthController extends Controller
         $visibility = $request->session()->pull(self::STATE_KEY.'.visibility', 'personal');
 
         if ($request->query('error')) {
-            return redirect('/settings/propojeni')->with('warning', 'Propojení s Discordem bylo zrušeno.');
+            return redirect(TrasyPrototypu::url('settings'))->with('warning', 'Propojení s Discordem bylo zrušeno.');
         }
 
         // Compared in constant time and only once: the state was pulled, not read.
         if (! $expected || ! is_string($request->query('state')) || ! hash_equals($expected, $request->query('state'))) {
-            return redirect('/settings/propojeni')->with('error', 'Propojení s Discordem se nepodařilo ověřit. Zkuste to znovu.');
+            return redirect(TrasyPrototypu::url('settings'))->with('error', 'Propojení s Discordem se nepodařilo ověřit. Zkuste to znovu.');
         }
 
         $code = $request->query('code');
         if (! is_string($code) || $code === '') {
-            return redirect('/settings/propojeni')->with('error', 'Discord nevrátil ověřovací kód.');
+            return redirect(TrasyPrototypu::url('settings'))->with('error', 'Discord nevrátil ověřovací kód.');
         }
 
         $exchange = $discord->exchange($code, route('discord.callback'));
         if (! ($exchange['ok'] ?? false)) {
-            return redirect('/settings/propojeni')->with('error', $exchange['error'] ?? 'Propojení s Discordem selhalo.');
+            return redirect(TrasyPrototypu::url('settings'))->with('error', $exchange['error'] ?? 'Propojení s Discordem selhalo.');
         }
 
         $space = GallerySpace::whereHas('members', fn ($members) => $members->whereKey($request->user()->id))
@@ -88,6 +92,6 @@ class DiscordOAuthController extends Controller
             ]);
         }
 
-        return redirect('/settings/propojeni')->with('success', 'Discord je propojený.');
+        return redirect(TrasyPrototypu::url('settings'))->with('success', 'Discord je propojený.');
     }
 }

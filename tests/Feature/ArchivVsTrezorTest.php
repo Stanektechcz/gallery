@@ -66,26 +66,25 @@ class ArchivVsTrezorTest extends TestCase
         $verejna = $this->polozka(['original_filename' => 'vylet.jpg']);
         $trezorova = $this->polozka(['original_filename' => 'tajne.jpg', 'is_hidden' => true]);
 
-        $odpoved = $this->actingAs($this->uzivatel)->get('/archive');
-
-        $odpoved->assertOk();
-        $data = $odpoved->viewData('page')['props']['media']['data'];
-        $uuids = array_column($data, 'uuid');
-
-        $this->assertContains($verejna->uuid, $uuids);
-        $this->assertNotContains($trezorova->uuid, $uuids, 'Položka z trezoru unikla do archivu.');
+        /*
+         * Stránky archivu a statistik od 27. 9. 2026 nic nevykreslují a vedou
+         * do aplikace (`PresmerujStareRozhrani`). Hlídá se, že přesměrování
+         * nenese nic z archivu ani z trezoru; hromadné akce níž zůstávají.
+         */
+        $this->actingAs($this->uzivatel)->get('/archive')
+            ->assertRedirect('/')
+            ->assertDontSee($verejna->uuid)
+            ->assertDontSee($trezorova->uuid);
     }
 
-    /** Statistiky počítají archiv stejně jako archiv sám — bez trezoru. */
     public function test_statistiky_nepocitaji_archivovany_trezor(): void
     {
         $this->polozka(['original_filename' => 'vylet.jpg']);
-        $this->polozka(['original_filename' => 'tajne.jpg', 'is_hidden' => true]);
+        $trezorova = $this->polozka(['original_filename' => 'tajne.jpg', 'is_hidden' => true]);
 
-        $stats = $this->actingAs($this->uzivatel)->get('/stats')->assertOk()
-            ->viewData('page')['props']['stats'];
-
-        $this->assertSame(1, $stats['archived']);
+        $this->actingAs($this->uzivatel)->get('/stats')
+            ->assertRedirect('/galerie/statistiky')
+            ->assertDontSee($trezorova->uuid);
     }
 
     public function test_hromadne_odarchivovani_se_nedotkne_trezoru(): void

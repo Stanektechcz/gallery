@@ -129,6 +129,34 @@ class MazaniController extends Controller
     }
 
     /**
+     * Vlastník schvaluje sám, protože partner do galerie nemá přístup.
+     *
+     * Rozhodnutí 27. 9. 2026: „Přebití vlastníkem se záznamem". Chce
+     * `potvrzuji_bez_partnera: true` — bez něj 422 s vysvětlením; kdo
+     * a kdy to smí, hlídá `MazaniFotek::schvalSam` (jinak 403). Odpověď má
+     * týž tvar jako `schvalit`, obrazovka ji zpracuje stejně.
+     */
+    public function schvalitSam(Request $request): JsonResponse
+    {
+        $ids = $this->ids($request);
+        $prostor = $this->prostor($request);
+        // Jen skutečné `true` — ne „ano", „1" ani chybějící klíč.
+        $potvrzeno = $request->input('potvrzuji_bez_partnera') === true;
+
+        $vysledek = $this->mazani->schvalSam($prostor, $request->user(), $ids, Trezor::odemcen($request), $potvrzeno);
+        $smazano = $vysledek->schvaleno;
+
+        return response()->json([
+            'ok' => $smazano !== [],
+            'ids' => $smazano,
+            'zprava' => $smazano !== []
+                ? $this->sPoctem('Schváleno bez partnera — zapsáno do protokolu', count($smazano)).' · '.$this->lhuta()
+                : 'Nic ke schválení — návrh mezitím někdo vyřídil.',
+            'rezim' => $this->mazani->rezim($prostor),
+        ] + $this->obsahPoAkci($this->obsah, $prostor));
+    }
+
+    /**
      * „Ponechat": navrhující návrh stahuje, druhý ho odmítá. Fotka zůstává.
      *
      * Zpráva rozlišuje obojí — „Návrh stažen" u vlastního, „Ponecháno

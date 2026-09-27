@@ -2,6 +2,7 @@
 
 namespace App\Services\Provoz;
 
+use App\Jobs\Media\ObnovHledaniJob;
 use App\Models\GallerySpace;
 use App\Models\MediaItem;
 use App\Models\Person;
@@ -163,6 +164,7 @@ class MediaVeStavu
         }
 
         $media = $this->media($prostor, array_keys($zmenene))->get()->keyBy('uuid');
+        $doHledani = [];
 
         foreach ($zmenene as $uuid => $uprava) {
             $m = $media[$uuid] ?? null;
@@ -193,15 +195,42 @@ class MediaVeStavu
 
             if ($sloupce !== []) {
                 $m->forceFill($sloupce)->save();
+                $doHledani[] = $m->id;
             }
 
             if ($zmena('tags') && is_array($uprava['tags'])) {
                 $this->stitky($m, $uprava['tags'], $prostor, $kdo);
+                $doHledani[] = $m->id;
             }
 
             if ($zmena('people') && is_array($uprava['people'])) {
                 $this->osoby($m, $uprava['people'], $prostor, $kdo);
+                $doHledani[] = $m->id;
             }
+        }
+
+        $this->obnovHledani($doHledani);
+    }
+
+    /**
+     * Popisek, místo, datum, štítky a lidé jsou v `search_text` — po změně
+     * se složí znovu, jednou úlohou pro všechny změněné fotky.
+     *
+     * Chyba se jen zapíše: úprava sama se povedla a vracet ji jako dluh by
+     * znamenalo zapisovat ji znovu kvůli odvozenému údaji.
+     *
+     * @param  list<int>  $id
+     */
+    private function obnovHledani(array $id): void
+    {
+        if ($id === []) {
+            return;
+        }
+
+        try {
+            ObnovHledaniJob::naplanuj($id);
+        } catch (\Throwable $e) {
+            Log::warning('Přepočet hledaného textu po úpravě fotek se nepodařilo zařadit', ['chyba' => $e->getMessage()]);
         }
     }
 

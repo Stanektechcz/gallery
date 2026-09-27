@@ -130,6 +130,26 @@ final class TrasyPrototypu
     }
 
     /**
+     * Odkaz na obrazovku aplikace — pro přesměrování, upozornění, e-maily a API.
+     *
+     * Od 27. 9. 2026 stará rozhraní vedou do aplikace (`PresmerujStareRozhrani`)
+     * a odkazy, které server posílá ven, míří rovnou sem: přes starou adresu by
+     * šly dvěma přesměrováními a hláška v sezení by po prvním zmizela.
+     *
+     * Na rozdíl od `cesta()` neznámou trasu nepromine — překlep by jinak tiše
+     * vedl na úvod a nikdo by si ho nevšiml. `home` je kořen `/`. Kotvy
+     * (`#todos`) ani dotazy se nepřidávají: aplikace je nečte.
+     */
+    public static function url(string $trasa): string
+    {
+        if (! array_key_exists($trasa, self::ADRESY)) {
+            throw new \InvalidArgumentException("Obrazovka „{$trasa}“ v aplikaci není.");
+        }
+
+        return $trasa === 'home' ? '/' : self::cesta($trasa);
+    }
+
+    /**
      * Pro prohlížeč: trasa => kousek adresy.
      *
      * Posílá se celá mapa, ne jen ta jedna trasa: prohlížeč adresu přepisuje

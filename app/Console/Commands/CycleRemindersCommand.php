@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Health\CycleService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Cache;
@@ -79,7 +80,7 @@ class CycleRemindersCommand extends Command
                 $zbyva === 0
                     ? 'Menstruace by měla začít dnes.'
                     : 'Menstruace se blíží — čekaná '.Carbon::parse($predpoved['next_period_on'])->locale('cs')->isoFormat('D. M.').'.',
-                '/cyklus',
+                TrasyPrototypu::url('x-cyklus'),
                 '🩸',
                 ['days_until' => $zbyva],
             ));

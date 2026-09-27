@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Album;
 use App\Models\MediaItem;
 use App\Models\User;
+use App\Support\TrasyPrototypu;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -38,21 +39,22 @@ class OnboardingController extends Controller
                 'title' => 'Pozvat druhého člena',
                 'description' => 'Galerie dává smysl ve dvou. Pozvánku pošlete e-mailem.',
                 'done' => $space->members()->count() > 1 || $this->hasPendingInvitation(),
-                'href' => '/admin/users',
+                // Obrazovky aplikace (`TrasyPrototypu::url`); zve se v administraci prostoru.
+                'href' => TrasyPrototypu::url('x-admin'),
             ],
             [
                 'key' => 'media',
                 'title' => 'Nahrát první fotky',
                 'description' => 'Přetáhněte je kamkoliv do galerie, nebo použijte tlačítko nahrávání.',
                 'done' => MediaItem::where('gallery_space_id', $space->id)->exists(),
-                'href' => '/timeline',
+                'href' => TrasyPrototypu::url('timeline'),
             ],
             [
                 'key' => 'album',
                 'title' => 'Založit první album',
                 'description' => 'Alba drží vzpomínky pohromadě podle událostí.',
                 'done' => Album::where('gallery_space_id', $space->id)->exists(),
-                'href' => '/albums',
+                'href' => TrasyPrototypu::url('albums'),
             ],
         ];
 

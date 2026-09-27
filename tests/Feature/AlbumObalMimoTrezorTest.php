@@ -87,7 +87,9 @@ class AlbumObalMimoTrezorTest extends TestCase
         ]);
         $album->update(['media_count' => 2]);
 
-        $odpoved = $this->get('/albums');
+        // Stránka `/albums` přesměruje do aplikace; tentýž `AlbumController::index`
+        // obsluhuje dál starší API, takže se výběr obalu hlídá tam.
+        $odpoved = $this->get('/api/v1/albums');
         $odpoved->assertOk();
 
         $albums = $odpoved->viewData('page')['props']['albums'];
@@ -103,7 +105,7 @@ class AlbumObalMimoTrezorTest extends TestCase
         $album = $this->album();
         $album->update(['cover_media_id' => $trezorova->id]);
 
-        $odpoved = $this->get('/albums/'.$album->uuid);
+        $odpoved = $this->get('/api/v1/albums/'.$album->uuid);
         $odpoved->assertOk();
 
         $albumData = $odpoved->viewData('page')['props']['album'];

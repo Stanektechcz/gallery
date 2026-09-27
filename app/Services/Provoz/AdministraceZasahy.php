@@ -167,7 +167,17 @@ class AdministraceZasahy
             return false;
         }
 
-        $clen->update(['is_active' => $aktivni]);
+        /*
+         * Kdy přístup zmizel — od toho běží lhůta, po které smí vlastník schválit
+         * návrh ke smazání sám (`MazaniFotek::LHUTA_BEZ_PRISTUPU_DNI`). Opakované
+         * „odebrat" ji nepřetočí; obnovení ji smaže, další odebrání začne znovu.
+         */
+        $clen->forceFill([
+            'is_active' => $aktivni,
+            'access_revoked_at' => $aktivni
+                ? null
+                : ($clen->is_active === false && $clen->access_revoked_at !== null ? $clen->access_revoked_at : now()),
+        ])->save();
 
         if (! $aktivni) {
             // Odebraný přístup musí platit hned. Bez zrušení tokenů by se telefon

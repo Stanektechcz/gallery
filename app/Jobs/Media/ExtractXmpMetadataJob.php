@@ -4,6 +4,7 @@ namespace App\Jobs\Media;
 
 use App\Models\MediaItem;
 use App\Models\Tag;
+use App\Services\Hledani\ObnovaHledani;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -20,7 +21,7 @@ class ExtractXmpMetadataJob implements ShouldQueue
         private readonly array $keywords,
     ) {}
 
-    public function handle(): void
+    public function handle(ObnovaHledani $obnova): void
     {
         $media = MediaItem::find($this->mediaItemId);
         if (! $media) {
@@ -44,6 +45,7 @@ class ExtractXmpMetadataJob implements ShouldQueue
             $media->tags()->syncWithoutDetaching([$tag->id]);
         }
 
-        $media->rebuildSearchText();
+        // Vazby naráz a bez posunu `updated_at` — viz ObnovaHledani.
+        $obnova->obnovJednu($media);
     }
 }

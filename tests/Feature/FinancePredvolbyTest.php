@@ -104,16 +104,17 @@ class FinancePredvolbyTest extends TestCase
         $this->assertEqualsWithDelta(200, $odpoved->json('settings.default_reserve'), 0.01);
     }
 
-    /** Stránka nese předvolby už v odpovědi, aby modul nepřeskočil na jinou záložku. */
-    public function test_stranka_nese_predvolby_rovnou(): void
+    /**
+     * Stránka `/rozpocty` nesla předvolby rovnou v odpovědi. Od 27. 9. 2026 vede
+     * do aplikace (`PresmerujStareRozhrani`); výchozí záložka se tak čte jen z API.
+     */
+    public function test_stranka_vede_do_aplikace_a_predvolba_zustava_v_api(): void
     {
         $this->patchJson('/api/v1/rozpocet/nastaveni', ['default_tab' => 'ucty'])->assertOk();
 
-        $this->get('/rozpocty')
-            ->assertOk()
-            ->assertInertia(fn ($page) => $page
-                ->component('Rozpocet/Index')
-                ->where('nastaveni.default_tab', 'ucty'));
+        $this->get('/rozpocty')->assertRedirect('/galerie/rozpocty');
+        $this->getJson('/api/v1/rozpocet/nastaveni')
+            ->assertOk()->assertJsonPath('settings.default_tab', 'ucty');
     }
 
     /** Předvolby jsou na prostor: co si nastaví jeden, platí pro oba. */

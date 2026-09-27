@@ -118,14 +118,23 @@ class UlozisteGalerie
             ];
         }
 
+        // Trezor se nepočítá: do cloudu nejde (rozhodnutí 27. 9. 2026), takže
+        // nečeká. Věta „vše ve dvou kopiích" ale musí přiznat, že on ve dvou není.
         $ceka = MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
             ->where('gallery_space_id', $prostor->id)
-            ->whereNull('trashed_at')
+            ->smiDoCloudu()
             ->where('storage_status', 'local_only')
             ->count();
 
+        $trezor = $ceka === 0 && MediaItem::withoutGlobalScope(SpaceContext::SCOPE)
+            ->where('gallery_space_id', $prostor->id)
+            ->whereNull('trashed_at')
+            ->where('is_hidden', true)
+            ->exists();
+
         return $ceka === 0
-            ? ['sync' => 'Vše je ve dvou kopiích', 'syncIcon' => 'ph-cloud-check', 'syncTon' => 'ok']
+            ? ['sync' => $trezor ? 'Vše kromě trezoru je ve dvou kopiích' : 'Vše je ve dvou kopiích',
+                'syncIcon' => 'ph-cloud-check', 'syncTon' => 'ok']
             : [
                 'sync' => $ceka.' '.$this->sklonuj($ceka, 'originál čeká', 'originály čekají', 'originálů čeká'),
                 'syncIcon' => 'ph-cloud-arrow-up',

@@ -9,6 +9,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Services\Planning\CalendarEventTripService;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -112,7 +113,7 @@ class IcsCalendarImportController extends Controller
                 $request->user()->id,
                 'calendar.imported',
                 "Do společného kalendáře bylo importováno {$stats['created']} událostí.",
-                '/calendar',
+                TrasyPrototypu::url('calendar'),
                 ['created' => $stats['created'], 'trips_created' => $stats['tripsCreated']],
             );
         }

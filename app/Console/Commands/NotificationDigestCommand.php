@@ -6,6 +6,7 @@ use App\Models\User;
 use App\Notifications\GalleryNotification;
 use App\Services\Notifications\NotificationPreferenceService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
@@ -88,7 +89,7 @@ class NotificationDigestCommand extends Command
             $user->notify(new GalleryNotification(
                 'system.digest',
                 'Dnešní souhrn: '.$text.'.',
-                '/inbox',
+                TrasyPrototypu::url('x-inbox'),
                 '📬',
                 ['digest' => true],
             ));

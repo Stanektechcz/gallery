@@ -4,6 +4,7 @@ namespace App\Jobs\Media;
 
 use App\Models\MediaItem;
 use App\Models\UploadSession;
+use App\Services\Hledani\ObnovaHledani;
 use App\Services\Media\ImageVariantService;
 use App\Services\Media\PerceptualHashService;
 use Illuminate\Bus\Queueable;
@@ -75,17 +76,18 @@ class GenerateImageVariantsJob implements ShouldQueue
 
             $media->update(['processing_progress' => 80]);
 
-            // Build search text
-            $media->load(['tags', 'people', 'places', 'primaryAlbum']);
-            $media->rebuildSearchText();
+            // Hledaný text: vazby naráz, bez posunu `updated_at` (viz ObnovaHledani).
+            app(ObnovaHledani::class)->obnovJednu($media);
 
             $media->update([
                 'processing_stage' => 'uploading_to_drive',
                 'processing_progress' => 90,
             ]);
 
-            // Queue Drive upload
-            InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            // Queue Drive upload — ne z trezoru (úloha nahrávání to hlídá znovu).
+            if (! $media->is_hidden) {
+                InitiateDriveResumableUploadJob::dispatch($media->id)->onQueue('drive');
+            }
 
         } catch (\Throwable $e) {
             Log::error("Variant generation failed for media #{$media->id}", ['error' => $e->getMessage()]);

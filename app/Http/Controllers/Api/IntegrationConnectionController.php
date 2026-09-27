@@ -188,6 +188,8 @@ class IntegrationConnectionController extends Controller
         $base = DB::table('media_items')
             ->where('gallery_space_id', $spaceId)
             ->whereNull('trashed_at')
+            // Trezor do cloudu nejde (rozhodnutí 27. 9. 2026) — nechybí mu tedy nic.
+            ->where('is_hidden', false)
             ->whereExists(fn ($q) => $q->select(DB::raw(1))
                 ->from('media_variants')
                 ->whereColumn('media_variants.media_item_id', 'media_items.id')

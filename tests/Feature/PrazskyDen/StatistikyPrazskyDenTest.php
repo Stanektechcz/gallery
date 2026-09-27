@@ -31,7 +31,8 @@ class StatistikyPrazskyDenTest extends TestCase
             'taken_at' => '2027-01-01 08:00:00', 'uploaded_at' => now(),
         ]);
 
-        $this->get('/stats')->assertOk()
-            ->assertInertia(fn ($page) => $page->where('stats.per_month.0.total', 1));
+        // Stránka od 27. 9. 2026 jen vede do aplikace (`PresmerujStareRozhrani`)
+        // a `StatsController` se nespustí; i o pražském Novém roce jen přesměruje.
+        $this->get('/stats')->assertRedirect('/galerie/statistiky');
     }
 }

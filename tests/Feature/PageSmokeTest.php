@@ -35,24 +35,37 @@ class PageSmokeTest extends TestCase
         $this->actingAs($this->user);
     }
 
+    /**
+     * Stránky starého rozhraní od 27. 9. 2026 vedou do aplikace
+     * (`PresmerujStareRozhrani`). Průchod hlídá, že každá přesměruje a že
+     * obrazovka, na kterou vede, opravdu existuje — překlep v cíli by
+     * dvojici poslal na 404.
+     */
     public function test_all_static_authenticated_pages_render_without_server_error(): void
     {
+        $this->get('/')->assertOk();
+
         foreach ([
-            '/', '/home', '/timeline', '/albums', '/albums/create', '/compare', '/tv', '/print', '/curation', '/milestones', '/shared-memories',
+            '/home', '/timeline', '/albums', '/albums/create', '/compare', '/tv', '/print', '/curation', '/milestones', '/shared-memories',
             '/trips', '/tickets', '/jizdenky', '/map', '/search', '/calendar', '/travel-inbox', '/weekly', '/planning', '/finances', '/finance',
             '/watchlist', '/date-ideas', '/anniversary-album', '/gifts-anniversaries', '/stats', '/inbox',
             '/people', '/places', '/activity', '/journey', '/itinerary', '/tags', '/recovery', '/privacy',
             '/favorites', '/trash', '/archive', '/vault', '/memories', '/shares', '/settings/storage/google', '/settings/security',
             '/admin', '/admin/storage-risk', '/admin/users', '/admin/jobs', '/admin/audit', '/admin/health', '/admin/integrations',
         ] as $path) {
-            $this->get($path)->assertOk();
+            $odpoved = $this->get($path);
+            $this->assertTrue($odpoved->isRedirect(), $path.' nepřesměrovala do aplikace.');
+
+            $cil = (string) parse_url((string) $odpoved->headers->get('Location'), PHP_URL_PATH);
+            $this->get($cil)->assertOk();
         }
     }
 
     public function test_public_pages_and_health_endpoints_are_reachable(): void
     {
         $this->app['auth']->guard()->logout();
-        $this->get('/login')->assertOk();
+        // Přihlašuje se v aplikaci; stará stránka tam vede.
+        $this->get('/login')->assertRedirect('/');
         $this->get('/forgot-password')->assertOk();
         $this->get('/health/live')->assertOk();
         $this->get('/health/ready')->assertOk();

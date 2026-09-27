@@ -9,6 +9,7 @@ use App\Models\Place;
 use App\Models\Recipe;
 use App\Models\User;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -213,32 +214,30 @@ class MentionSearchService
     }
 
     /**
-     * Where each kind of mention leads.
+     * Where each kind of mention leads — obrazovka aplikace (`TrasyPrototypu::ADRESY`).
      *
-     * Verified against routes/web.php rather than assumed — the previous guess sent every
-     * calendar mention to /calendar/{uuid}, which is not a route, so every plan a person
-     * mentioned answered 404. Keep this in step with MentionText.tsx.
+     * Dřív adresy starého rozhraní (`/calendar/events/{uuid}` …). Ty od 27. 9. 2026
+     * jen přesměrovávají do aplikace (`PresmerujStareRozhrani`), takže zmínka vede
+     * rovnou tam. Detail (jedna událost, recept, cesta) vlastní adresu v aplikaci
+     * nemá — otevře se seznam, ze kterého se dá rozkliknout.
      *
      * @var array<string, string>
      */
     public const ROUTES = [
-        'event' => '/calendar/events/%s',
-        'recipe' => '/recipes/%s',
-        'place' => '/places/%s',
-        'trip' => '/trips/%s/plan',
-        'person' => '/people/%s',
-        // The diary has no per-entry page, so a mention opens the diary itself.
-        'journal' => '/denik',
+        'event' => 'calendar',
+        'recipe' => 'x-kucharka',
+        'place' => 'x-mista',
+        'trip' => 'x-cesty',
+        'person' => 'x-lide',
+        'journal' => 'x-denik',
     ];
 
+    /** `$id` zůstává v podpisu kvůli volajícím; obrazovky aplikace ho v adrese nenesou. */
     public static function url(string $type, string $id): string
     {
-        $pattern = self::ROUTES[$type] ?? null;
-        if (! $pattern) {
-            return '/';
-        }
+        $trasa = self::ROUTES[$type] ?? null;
 
-        return str_contains($pattern, '%s') ? sprintf($pattern, rawurlencode($id)) : $pattern;
+        return TrasyPrototypu::url($trasa ?? 'home');
     }
 
     /**

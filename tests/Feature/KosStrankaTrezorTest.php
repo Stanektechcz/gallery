@@ -8,7 +8,6 @@ use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia;
 use Tests\TestCase;
 
 /**
@@ -43,20 +42,25 @@ class KosStrankaTrezorTest extends TestCase
         $this->fotka('pas-v-trezoru.jpg', true);
     }
 
+    /*
+     * Seznam koše od 27. 9. 2026 nevykresluje nikdo — stránka vede do aplikace
+     * (`PresmerujStareRozhrani`) a koš aplikace hlídají testy `KosController`.
+     * Zbývá ověřit, že přesměrování nic z koše ani z trezoru nenese, ať je
+     * trezor zamčený, nebo ne. Vracení a mazání níž zůstává pro staré klienty.
+     */
     public function test_zamceny_trezor_v_kosi_neukaze_skryte(): void
     {
         $this->actingAs($this->adri)->get('/trash')
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $stranka) => $stranka
-                ->has('media.data', 1)
-                ->where('media.data.0.uuid', $this->bezna->uuid));
+            ->assertRedirect('/galerie/kos')
+            ->assertDontSee('pas-v-trezoru.jpg')
+            ->assertDontSee($this->bezna->uuid);
     }
 
     public function test_odemceny_trezor_v_kosi_ukaze_vse(): void
     {
         $this->actingAs($this->adri)->withSession($this->odemcenyTrezor($this->adri))->get('/trash')
-            ->assertOk()
-            ->assertInertia(fn (AssertableInertia $stranka) => $stranka->has('media.data', 2));
+            ->assertRedirect('/galerie/kos')
+            ->assertDontSee('pas-v-trezoru.jpg');
     }
 
     /**

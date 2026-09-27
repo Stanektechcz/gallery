@@ -2,14 +2,28 @@
 
 namespace App\Models;
 
+use App\Models\Concerns\ObnovujeHledaniFotek;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 
 class Tag extends Model
 {
+    use ObnovujeHledaniFotek;
+
     protected $fillable = [
         'gallery_space_id', 'parent_id', 'name', 'slug', 'depth',
         'materialized_path', 'color', 'created_by',
     ];
+
+    protected function sloupceVHledani(): array
+    {
+        return ['name'];
+    }
+
+    protected function fotkyVHledani(): iterable
+    {
+        return DB::table('media_tag')->where('tag_id', $this->id)->pluck('media_item_id');
+    }
 
     public function gallerySpace()
     {

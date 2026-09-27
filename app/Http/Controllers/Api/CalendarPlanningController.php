@@ -30,6 +30,7 @@ use App\Services\Planning\TravelInboxService;
 use App\Services\Planning\TripDayShiftService;
 use App\Services\Planning\TripPartnerFinanceService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
@@ -443,7 +444,7 @@ class CalendarPlanningController extends Controller
 
         if ($event->created_by !== $user->id) {
             $labels = ['accepted' => 'potvrdil/a účast', 'tentative' => 'označil/a účast jako možná', 'declined' => 'odmítl/a účast'];
-            $event->creator?->notify(new GalleryNotification('calendar.response', "{$user->name} {$labels[$data['response']]}: {$event->title}", '/calendar/events/'.$event->uuid, '📅'));
+            $event->creator?->notify(new GalleryNotification('calendar.response', "{$user->name} {$labels[$data['response']]}: {$event->title}", TrasyPrototypu::url('calendar'), '📅'));
         }
 
         return response()->json($this->eventPayload($event->fresh(), $user));
@@ -1587,7 +1588,7 @@ class CalendarPlanningController extends Controller
         if (! $task->assigned_to || $task->assigned_to === $actorId) {
             return;
         }
-        User::find($task->assigned_to)?->notify(new GalleryNotification('calendar.task.assigned', "Nový společný úkol: {$task->title} ({$event->title})", '/calendar/events/'.$event->uuid, '✅'));
+        User::find($task->assigned_to)?->notify(new GalleryNotification('calendar.task.assigned', "Nový společný úkol: {$task->title} ({$event->title})", TrasyPrototypu::url('calendar'), '✅'));
     }
 
     private function findTrip(User $user, int $id): object
@@ -1754,7 +1755,7 @@ class CalendarPlanningController extends Controller
             User::whereIn('id', $removed)->get()->each(fn (User $member) => $member->notify(new GalleryNotification(
                 'calendar.participant.removed',
                 "Už nejste účastníkem akce: {$event->title}",
-                '/calendar',
+                TrasyPrototypu::url('calendar'),
                 '📅'
             )));
         }
@@ -1814,7 +1815,8 @@ class CalendarPlanningController extends Controller
     private function notifyParticipants(CalendarEvent $event, User $actor, string $type, string $message): void
     {
         foreach ($event->participants()->where('users.id', '!=', $actor->id)->get() as $user) {
-            $user->notify(new GalleryNotification($type, $message, '/calendar/events/'.$event->uuid, '📅'));
+            // Obrazovka aplikace (`TrasyPrototypu::url`); detail události adresu nemá.
+            $user->notify(new GalleryNotification($type, $message, TrasyPrototypu::url('calendar'), '📅'));
         }
     }
 

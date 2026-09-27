@@ -106,6 +106,31 @@ class MazaniVTelefonuTest extends TestCase
     }
 
     /**
+     * Přebití vlastníkem se záznamem (rozhodnutí 27. 9. 2026): partner nemá
+     * přístup → u vlastního návrhu „Schválit sám", přes list s potvrzením
+     * a s výslovným `potvrzuji_bez_partnera: true`.
+     */
+    public function test_vlastnik_schvali_sam_kdyz_partner_nema_pristup(): void
+    {
+        $telefon = self::dokument();
+
+        $this->assertStringContainsString('.partnerBezPristupu', $telefon);
+        // Během čekací lhůty tlačítko chybí — a obrazovka řekne proč.
+        $this->assertStringContainsString('.partnerBezPristupuLhuta', $telefon);
+        $this->assertStringContainsString('po 14 dnech bez přístupu', $telefon);
+        $this->assertStringContainsString('Schválit sám (partner nemá přístup)', $telefon);
+        $this->assertStringContainsString('<sc-if value="{{ k.samOn }}">', $telefon);
+        $this->assertStringContainsString('onClick="{{ k.schvalitSam }}"', $telefon);
+        $this->assertStringContainsString("sheet: 'schvalitSam'", $telefon);
+        $this->assertStringContainsString('<sc-if value="{{ sheetIsSchvalitSam }}">', $telefon);
+
+        $vyrid = self::metoda($telefon, 'navrhVyrid(');
+        $this->assertStringContainsString("'kos/schvalit-sam'", $vyrid);
+        $this->assertStringContainsString('potvrzuji_bez_partnera: true', $vyrid);
+        $this->assertSame(1, substr_count($telefon, "\n  navrhVyrid("), 'Druhá definice by tiše přepsala první.');
+    }
+
+    /**
      * Přepínače formulářů (`sw`) jdou s tím, na co se klepnulo.
      *
      * Server přepne jen id z `__zmenene.sw`; bez něj bere celou mapu — a stará

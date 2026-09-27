@@ -7,6 +7,7 @@ use App\Models\AuditLog;
 use App\Models\User;
 use App\Services\Auth\DruhyFaktor;
 use App\Services\Auth\TotpService;
+use App\Support\TrasyPrototypu;
 use App\Support\Trezor;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -121,7 +122,7 @@ class TwoFactorController extends Controller
     public function challenge(Request $request): Response|RedirectResponse
     {
         if (! $request->session()->has('two_factor.user_id')) {
-            return redirect()->route('login');
+            return redirect(TrasyPrototypu::url('home'));
         }
 
         return Inertia::render('Auth/TwoFactorChallenge');
@@ -137,7 +138,7 @@ class TwoFactorController extends Controller
     {
         $id = $request->session()->get('two_factor.user_id');
         if (! $id) {
-            return redirect()->route('login');
+            return redirect(TrasyPrototypu::url('home'));
         }
 
         $request->validate(['code' => 'required|string|max:20']);
@@ -146,7 +147,7 @@ class TwoFactorController extends Controller
         if (! $user || ! $user->two_factor_secret) {
             $request->session()->forget(['two_factor.user_id', 'two_factor.remember']);
 
-            return redirect()->route('login');
+            return redirect(TrasyPrototypu::url('home'));
         }
 
         // Stejné ověření i stejné počítadlo pokusů jako u přihlášení aplikace.
@@ -169,6 +170,7 @@ class TwoFactorController extends Controller
         $user->update(['last_login_at' => now(), 'last_login_ip' => $request->ip()]);
         AuditLog::record('auth.login', $user, ['second_factor' => true]);
 
-        return redirect()->intended('/timeline');
+        // Rovnou do aplikace, ne přes starou `/timeline` (viz `TrasyPrototypu::url`).
+        return redirect()->intended(TrasyPrototypu::url('timeline'));
     }
 }

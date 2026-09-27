@@ -9,7 +9,6 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class RecipeSystemTest extends TestCase
@@ -58,7 +57,7 @@ class RecipeSystemTest extends TestCase
         $this->getJson('/api/v1/recipes/'.$recipe['uuid'].'/shopping-list?servings=4')->assertOk()
             ->assertJsonPath('sections.0.items.0.scaled_quantity', 400);
         $this->getJson('/api/v1/search/suggestions?q=risotto')->assertOk()
-            ->assertJsonFragment(['type' => 'recipe', 'label' => 'Houbové risotto', 'url' => '/recipes/'.$recipe['uuid']]);
+            ->assertJsonFragment(['type' => 'recipe', 'label' => 'Houbové risotto', 'url' => '/galerie/kucharka']);
 
         $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/media', ['media_uuids' => [$media->uuid], 'role' => 'cover'])
             ->assertOk()->assertJsonPath('cover.uuid', $media->uuid);
@@ -72,8 +71,9 @@ class RecipeSystemTest extends TestCase
         $this->assertDatabaseCount('event_reminders', 2);
         $this->getJson('/api/v1/calendar/events/'.$session['calendar_event']['uuid'])->assertOk()
             ->assertJsonPath('origin.kind', 'recipe_cooking')->assertJsonPath('origin.recipe.uuid', $recipe['uuid']);
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->where('data.partner_hub.recipe.kind', 'planned')->where('data.partner_hub.recipe.uuid', $recipe['uuid']));
+        // Rozcestník `/prehled` ukazoval naplánované vaření; od 27. 9. 2026 jen vede
+        // do aplikace (`PresmerujStareRozhrani`), naplánování nese API výš.
+        $this->get('/prehled')->assertRedirect('/');
 
         $this->postJson('/api/v1/recipes/'.$recipe['uuid'].'/cooking-sessions/start', ['session_uuid' => $session['uuid'], 'servings' => 3])
             ->assertOk()->assertJsonPath('status', 'cooking');

@@ -62,13 +62,13 @@ class CasovePasmoSchrankyTest extends TestCase
             'updated_at' => now(),
         ]);
 
-        $odpoved = $this->actingAs($uzivatel)->get('/inbox');
-        $odpoved->assertOk();
-
-        $polozky = collect($odpoved->viewData('page')['props']['actionItems']);
-        $this->assertFalse(
-            $polozky->contains(fn ($p) => $p['title'] === 'Vstupenky na prohlídku'),
-            'Podklad ke včerejší (místně) události zůstává ve schránce kvůli UTC půlnoci.'
-        );
+        /*
+         * Od 27. 9. 2026 stránka `/inbox` nic nevykresluje a vede do aplikace
+         * (`PresmerujStareRozhrani`); `InboxController` se nespustí. Zbývá
+         * hlídat, že přesměrování nic ze schránky nenese.
+         */
+        $this->actingAs($uzivatel)->get('/inbox')
+            ->assertRedirect('/galerie/inbox')
+            ->assertDontSee('Vstupenky na prohlídku');
     }
 }

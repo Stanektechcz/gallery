@@ -33,9 +33,15 @@ class AktivitaJenZGalerieTest extends TestCase
         $this->zaznam($adri, $nase, 'spolecny-vylet.jpg');
         $this->zaznam($adri, $ciziGalerie, 'z-jine-galerie.jpg');
 
+        /*
+         * Od 27. 9. 2026 stránka nic nevykresluje a vede do aplikace
+         * (`PresmerujStareRozhrani`); protokol v aplikaci čte `Obsah\Dnes`
+         * se stejným filtrem podle galerie. Tady zbývá hlídat, že přesměrování
+         * s sebou nic z protokolu nepošle.
+         */
         $this->actingAs($maki)->get('/activity')
-            ->assertOk()
-            ->assertSee('spolecny-vylet.jpg')
+            ->assertRedirect('/galerie/aktivita')
+            ->assertDontSee('spolecny-vylet.jpg')
             ->assertDontSee('z-jine-galerie.jpg');
     }
 

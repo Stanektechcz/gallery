@@ -106,6 +106,11 @@ class KosController extends Controller
             return response()->json(['ok' => false, 'zprava' => 'Tahle položka v koši není.'], 404);
         }
 
+        // Schválená vlastníkem bez partnera: trvale až po lhůtě koše (`MazaniFotek::drziLhutu`).
+        if (app(MazaniFotek::class)->drziLhutu($polozka)) {
+            return response()->json(['ok' => false, 'zprava' => MazaniFotek::DRZENA_LHUTA], 422);
+        }
+
         $jmeno = $polozka->original_filename;
 
         // Jméno jen mimo trezor, jako `gallery:purge-trash`: přehled „Dnes"
@@ -132,7 +137,9 @@ class KosController extends Controller
             return $odmitnuto;
         }
 
-        $polozky = $this->vKosi($prostor)->get();
+        // Co vlastník schválil bez partnera, zůstává do konce lhůty koše (`MazaniFotek::drziLhutu`).
+        $polozky = MazaniFotek::bezDrzeneLhuty($this->vKosi($prostor))->get();
+        $drzene = $this->vKosi($prostor)->count() - $polozky->count();
 
         foreach ($polozky as $polozka) {
             AuditLog::record('media.purge', $polozka, ['via' => 'empty_trash']);
@@ -141,16 +148,22 @@ class KosController extends Controller
         }
 
         $kolik = $polozky->count();
+        $zprava = $kolik === 0
+            ? ($drzene === 0 ? 'Koš byl prázdný' : 'Nic se trvale neodstranilo')
+            : 'Koš vyprázdněn — '.$kolik.' '.match (true) {
+                $kolik === 1 => 'položka trvale odstraněna',
+                $kolik <= 4 => 'položky trvale odstraněny',
+                default => 'položek trvale odstraněno',
+            };
+
+        if ($drzene > 0) {
+            $zprava .= ' · '.$drzene.' '.($drzene === 1 ? 'položka schválená' : ($drzene <= 4 ? 'položky schválené' : 'položek schválených'))
+                .' bez partnera zůstává v koši do konce lhůty';
+        }
 
         return response()->json([
             'ok' => true,
-            'zprava' => $kolik === 0
-                ? 'Koš byl prázdný'
-                : 'Koš vyprázdněn — '.$kolik.' '.match (true) {
-                    $kolik === 1 => 'položka trvale odstraněna',
-                    $kolik <= 4 => 'položky trvale odstraněny',
-                    default => 'položek trvale odstraněno',
-                },
+            'zprava' => $zprava,
         ] + $this->obsahPoAkci($this->obsah, $prostor));
     }
 

@@ -7,6 +7,7 @@ use App\Models\CalendarEvent;
 use App\Models\GallerySpace;
 use App\Models\GeneratedMemory;
 use App\Models\MediaItem;
+use App\Support\TrasyPrototypu;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -95,7 +96,8 @@ class MemoryGeneratorService
                 'occurs_on' => $day->toDateString(),
                 'years_ago' => $years,
                 'media_ids' => $media->pluck('uuid')->all(),
-                'link' => '/timeline?date='.$then->toDateString(),
+                // Obrazovky aplikace (`TrasyPrototypu::url`); dotaz ani detail aplikace nečte.
+                'link' => TrasyPrototypu::url('timeline'),
                 // Recent years matter more, and photographs matter more than age.
                 'score' => 200 - ($years * 5) + min($media->count(), 20),
             ]);
@@ -162,7 +164,7 @@ class MemoryGeneratorService
                 'occurs_on' => $day->toDateString(),
                 'years_ago' => $years,
                 'media_ids' => $media->pluck('uuid')->all(),
-                'link' => '/calendar/events/'.($event->uuid ?? $event->id),
+                'link' => TrasyPrototypu::url('calendar'),
                 // Named beats unnamed; photographs still add to it.
                 'score' => 260 - ($years * 5) + min($media->count(), 20),
             ]);
@@ -215,7 +217,7 @@ class MemoryGeneratorService
                     'occurs_on' => $day->toDateString(),
                     'years_ago' => $years,
                     'media_ids' => $media->pluck('uuid')->all(),
-                    'link' => '/albums/'.($album->uuid ?? $album->id),
+                    'link' => TrasyPrototypu::url('albums'),
                     'score' => 230 - ($years * 5) + min($media->count(), 20),
                 ]);
             }

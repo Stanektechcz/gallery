@@ -13,6 +13,7 @@ use App\Notifications\GalleryNotification;
 use App\Services\Auth\PristupDoGalerie;
 use App\Services\Planning\CalendarEventCreationService;
 use App\Support\Cas;
+use App\Support\TrasyPrototypu;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -63,7 +64,7 @@ class MemoryEveningService
                 'type' => 'memory_evening', 'status' => 'planned', 'starts_at' => $scheduled, 'ends_at' => $scheduled->copy()->addMinutes(90),
                 'timezone' => 'Europe/Prague', 'color' => '#ec4899', 'is_private' => false,
                 'recurrence_rule' => ($data['repeat_annually'] ?? false) ? ['frequency' => 'yearly', 'interval' => 1] : null,
-                'metadata' => array_filter(['kind' => 'memory_evening', 'memory_evening' => true, 'memory_evening_uuid' => $eveningUuid, 'fingerprint' => $data['fingerprint'], 'board_uuid' => $boardUuid, 'memory_moment_uuids' => $data['source_moment_uuids'] ?? null, 'href' => '/memories#memory-evenings'], fn ($value) => $value !== null),
+                'metadata' => array_filter(['kind' => 'memory_evening', 'memory_evening' => true, 'memory_evening_uuid' => $eveningUuid, 'fingerprint' => $data['fingerprint'], 'board_uuid' => $boardUuid, 'memory_moment_uuids' => $data['source_moment_uuids'] ?? null, 'href' => TrasyPrototypu::url('x-vzpominky')], fn ($value) => $value !== null),
             ]);
             $members = $event->participants()->pluck('users.id');
             /*
@@ -93,7 +94,7 @@ class MemoryEveningService
 
         // Upozornění dostane jen druhý z dvojice — host galerie ne.
         foreach ($this->pristup->dvojice($space)->reject(fn (User $clen) => (int) $clen->id === (int) $actor->id) as $member) {
-            $member->notify(new GalleryNotification('memory.evening.planned', $actor->name.' naplánoval/a společný večer se vzpomínkami: '.$evening->title, '/memories#memory-evenings', '💞', ['memory_evening_uuid' => $evening->uuid]));
+            $member->notify(new GalleryNotification('memory.evening.planned', $actor->name.' naplánoval/a společný večer se vzpomínkami: '.$evening->title, TrasyPrototypu::url('x-vzpominky'), '💞', ['memory_evening_uuid' => $evening->uuid]));
         }
 
         return $evening;

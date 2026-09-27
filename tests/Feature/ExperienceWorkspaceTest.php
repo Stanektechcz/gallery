@@ -9,7 +9,6 @@ use App\Support\Cas;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Inertia\Testing\AssertableInertia as Assert;
 use Tests\TestCase;
 
 class ExperienceWorkspaceTest extends TestCase
@@ -48,7 +47,7 @@ class ExperienceWorkspaceTest extends TestCase
             ->assertJsonPath('interpreted.filters.media_type', 'photo');
     }
 
-    public function test_dashboard_unifies_editable_event_tasks_packing_and_planning_items_into_one_action_list(): void
+    public function test_stary_prehled_s_otevrenymi_kroky_vede_do_aplikace(): void
     {
         $event = $this->actingAs($this->owner)->postJson('/api/v1/calendar/events', [
             'gallery_space_id' => $this->space->id,
@@ -74,12 +73,16 @@ class ExperienceWorkspaceTest extends TestCase
             'gallery_space_id' => $this->space->id, 'title' => 'Porovnat ubytování', 'trip_id' => $tripId, 'kind' => 'idea',
         ])->assertCreated();
 
-        $this->get('/prehled')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Dashboard/Index')
-            ->has('data.partner_hub.next_actions', 3)
-            ->where('data.partner_hub.next_actions.0.type', 'event_task')
-            ->where('data.partner_hub.next_actions.1.type', 'packing_item')
-            ->where('data.partner_hub.next_actions.2.type', 'planning_item'));
+        /*
+         * Společný seznam dalších kroků skládal jen `DashboardController` pro
+         * stránku `/prehled`. Ta od 27. 9. 2026 vede do aplikace
+         * (`PresmerujStareRozhrani`) a kontroler se nespustí — zbývá hlídat,
+         * že přesměrování nic z plánu nenese.
+         */
+        $this->get('/prehled')
+            ->assertRedirect('/')
+            ->assertDontSee('Koupit vstupenky')
+            ->assertDontSee('Občanský průkaz');
     }
 
     public function test_private_saved_view_cannot_be_changed_by_another_member(): void
@@ -148,14 +151,20 @@ class ExperienceWorkspaceTest extends TestCase
 
         $this->actingAs($this->owner)->postJson("/vault/media/{$uuid}/toggle")
             ->assertOk()->assertJsonPath('is_hidden', true);
-        $this->get("/media/{$uuid}")->assertRedirect('/vault');
-        $this->get('/vault')->assertOk()->assertInertia(fn (Assert $page) => $page->component('Vault/Gate'));
+        /*
+         * Stránky `/media/{uuid}` a `/vault` od 27. 9. 2026 jen vedou do
+         * aplikace (`PresmerujStareRozhrani`) a nic nevypíšou. Zámek trezoru
+         * (`ProtectVaultMedia`) dál hlídá originál; odemčení přes starý
+         * formulář zůstává pro staré klienty.
+         */
+        $this->get("/media/{$uuid}")->assertRedirect('/galerie/knihovna')->assertDontSee($uuid);
+        $this->get("/media/{$uuid}/full")->assertRedirect('/galerie/trezor');
+        $this->get('/vault')->assertRedirect('/galerie/trezor')->assertDontSee($uuid);
+        $this->getJson("/media/{$uuid}/full")->assertStatus(423);
 
         $this->post('/vault/unlock', ['password' => 'wrong'])->assertSessionHasErrors('password');
         $this->post('/vault/unlock', ['password' => 'secret-pass'])->assertRedirect('/vault');
-        $this->get('/vault')->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Vault/Index')
-            ->where('media.data.0.uuid', $uuid));
+        $this->get('/vault')->assertRedirect('/galerie/trezor')->assertDontSee($uuid);
     }
 
     public function test_media_detail_links_back_to_its_shared_event_trip_and_memory(): void
@@ -169,11 +178,14 @@ class ExperienceWorkspaceTest extends TestCase
         DB::table('trip_media')->insert(['trip_id' => $tripId, 'media_item_id' => $mediaId, 'added_at' => now()]);
         DB::table('shared_memory_moments')->insert(['uuid' => (string) Str::uuid(), 'gallery_space_id' => $this->space->id, 'created_by' => $this->owner->id, 'calendar_event_id' => $eventId, 'trip_id' => $tripId, 'title' => 'Náš západ slunce', 'happened_on' => now()->subDay()->toDateString(), 'media_item_ids' => json_encode([$mediaId]), 'is_favorite' => true, 'created_at' => now(), 'updated_at' => now()]);
 
-        $this->actingAs($this->owner)->get("/media/{$mediaUuid}")->assertOk()->assertInertia(fn (Assert $page) => $page
-            ->component('Media/Show')
-            ->where('media.experience_links.events.0.uuid', $eventUuid)
-            ->where('media.experience_links.trips.0.id', $tripId)
-            ->where('media.experience_links.memories.0.title', 'Náš západ slunce'));
+        // Stránka `/media/{uuid}` od 27. 9. 2026 jen vede do aplikace
+        // (`PresmerujStareRozhrani`); tytéž odkazy nese starší API detailu.
+        $this->actingAs($this->owner)->get("/media/{$mediaUuid}")->assertRedirect('/galerie/knihovna');
+        $this->getJson("/api/v1/media/{$mediaUuid}")
+            ->assertOk()
+            ->assertJsonPath('experience_links.events.0.uuid', $eventUuid)
+            ->assertJsonPath('experience_links.trips.0.id', $tripId)
+            ->assertJsonPath('experience_links.memories.0.title', 'Náš západ slunce');
     }
 
     public function test_media_can_find_and_attach_an_editable_event_from_its_capture_time(): void
@@ -496,7 +508,8 @@ class ExperienceWorkspaceTest extends TestCase
             ->assertOk()->assertJsonPath('album.uuid', $album['uuid']);
         $this->getJson("/api/v1/calendar/events/{$eventUuid}")->assertOk()->assertJsonPath('album.uuid', $album['uuid']);
         $this->getJson('/api/v1/shared-memory-moments')->assertOk()->assertJsonPath('0.album.uuid', $album['uuid']);
-        $this->get("/albums/{$album['uuid']}")->assertOk();
+        // Stránka alba vede od 27. 9. 2026 do aplikace; album dál vydá starší API.
+        $this->get("/api/v1/albums/{$album['uuid']}")->assertOk();
     }
 
     private function media(array $overrides = []): int

@@ -10,6 +10,7 @@ use App\Models\User;
 use App\Services\Billing\EntitlementService;
 use App\Support\Provozovatel;
 use App\Support\SpaceContext;
+use App\Support\TrasyPrototypu;
 use App\Support\Trezor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -35,7 +36,8 @@ class RegistrationController extends Controller
     public function show(): Response|RedirectResponse
     {
         if (! config('gallery.registration_open')) {
-            return redirect('/login')->with('error', 'Registrace je zavřená. Do galerie se vstupuje na pozvánku.');
+            // Rovnou do aplikace (přihlášení), ne přes starou `/login`.
+            return redirect(TrasyPrototypu::url('home'))->with('error', 'Registrace je zavřená. Do galerie se vstupuje na pozvánku.');
         }
 
         return Inertia::render('Auth/Register');

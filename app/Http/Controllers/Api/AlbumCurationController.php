@@ -129,7 +129,8 @@ class AlbumCurationController extends Controller
         $album = $this->album($uuid);
         Gate::authorize('update', $album);
         abort_unless($this->driveConnections->forSpace($album->gallery_space_id) !== null, 422, 'Nejprve připojte funkční Google Drive v nastavení úložiště.');
-        $count = $this->assistant->mediaQuery($album)->whereNull('drive_file_id')->count();
+        // Bez trezoru — do cloudu nejde, takže ho nelze ani slibovat.
+        $count = $this->assistant->mediaQuery($album)->smiDoCloudu()->whereNull('drive_file_id')->count();
         if ($count > 0) {
             EnqueueAlbumDriveSyncJob::dispatch($album->id)->onQueue('drive');
         }

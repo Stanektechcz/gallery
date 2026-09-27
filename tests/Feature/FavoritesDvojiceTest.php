@@ -72,7 +72,7 @@ class FavoritesDvojiceTest extends TestCase
         ]);
     }
 
-    public function test_sdilene_oblibene_nepotrebuji_hosta(): void
+    public function test_stranka_oblibenych_vede_do_aplikace(): void
     {
         $fotka = $this->fotka();
 
@@ -81,11 +81,14 @@ class FavoritesDvojiceTest extends TestCase
             ['user_id' => $this->partner->id, 'media_item_id' => $fotka->id, 'created_at' => now()],
         ]);
 
-        $odpoved = $this->get('/favorites');
-        $odpoved->assertOk();
-
-        $shared = collect($odpoved->viewData('page')['props']['shared_items'])->pluck('uuid');
-        $this->assertContains($fotka->uuid, $shared, 'Sdílené oblíbené vyžadují i oblíbené hosta.');
+        /*
+         * Stránka `/favorites` (a s ní výčet společných oblíbených ve
+         * `FavoritesController::index`) od 27. 9. 2026 jen vede do aplikace
+         * (`PresmerujStareRozhrani`). Přepínač oblíbené níž zůstává.
+         */
+        $this->get('/favorites')
+            ->assertRedirect('/galerie/oblibene')
+            ->assertDontSee($fotka->uuid);
     }
 
     public function test_badge_partnera_neukazuje_hosta(): void

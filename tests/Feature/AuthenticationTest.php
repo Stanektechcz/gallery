@@ -10,10 +10,13 @@ class AuthenticationTest extends TestCase
 {
     use RefreshDatabase;
 
-    /** @test */
-    public function test_login_page_is_accessible(): void
+    /**
+     * Přihlašuje se v aplikaci na `/`; stará stránka tam od 27. 9. 2026 vede
+     * (`PresmerujStareRozhrani`). `POST /login` zůstává pro staré klienty.
+     */
+    public function test_login_page_leads_to_the_app(): void
     {
-        $this->get('/login')->assertOk();
+        $this->get('/login')->assertRedirect('/');
     }
 
     /** @test */
@@ -30,7 +33,8 @@ class AuthenticationTest extends TestCase
             'password' => 'securepassword123',
         ]);
 
-        $response->assertRedirect('/timeline');
+        // Rovnou na obrazovku aplikace, ne přes starou `/timeline`.
+        $response->assertRedirect('/galerie/casova-osa');
         $this->assertAuthenticatedAs($user);
     }
 
@@ -60,7 +64,7 @@ class AuthenticationTest extends TestCase
     public function test_user_can_logout(): void
     {
         $user = User::factory()->create(['is_active' => true]);
-        $this->actingAs($user)->post('/logout')->assertRedirect('/login');
+        $this->actingAs($user)->post('/logout')->assertRedirect('/');
         $this->assertGuest();
     }
 
