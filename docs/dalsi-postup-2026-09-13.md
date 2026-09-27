@@ -804,6 +804,113 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2at. Čtyřicáté sedmé kolo — trezor mimo cloud, hledání v celé knihovně, jedno rozhraní (27. 9.)
+
+Zadání: **„Fotky z trezoru nejdou na cloud, vyhledávání ať je maximálně
+efektivní, dodělej co zbývá a připrav na nasazení"**. K tomu tři
+rozhodnutí: staré rozhraní **přesměrovat** na aplikaci, partner bez
+přístupu → **přebití vlastníkem se záznamem**, přihlášení přes cookie
+**až po nasazení**. Tři audity (trezor a cloud, hledání, nasazení), pak
+pět pracovníků na oddělených souborech a revize.
+
+### Trezor mimo cloud
+
+* Fotka v trezoru (`is_hidden`) se nezrcadlí na Google Disk, Dropbox,
+  OneDrive ani WebDAV — kontrola při zařazení **i** uvnitř úloh (příznak se
+  mohl změnit, zatímco úloha čekala); stala-li se fotka skrytou během
+  nahrávání, nahraná kopie se hned zapíše ke smazání.
+* Přesun do trezoru (tlačítko i hromadně ze stavu) kopie smaže —
+  **jen když je místní originál ověřený** (soubor existuje, sedí velikost
+  a otisk `sha256`). Cloud je jen kopie, ale když místní soubor chybí,
+  aplikace z něj čte; bez ověření se nemaže nic. Z Google Disku natrvalo,
+  ne do koše; Dropbox a OneDrive u osobních účtů trvalé smazání přes API
+  nenabízí (smažou do svého koše). Vyjmutí z trezoru zrcadlení obnoví.
+* `gallery:trezor-z-cloudu` (nanečisto, `--provest`) uklidí kopie fotek,
+  které v trezoru už jsou. Doktor hlásí chybu, dokud nějaká zbývá; počty
+  „zálohováno" trezor nepočítají. Texty o úložišti opraveny (originály
+  jsou na serveru, cloud drží druhou kopii, trezor žádnou).
+
+### Hledání v celé knihovně
+
+* **Aplikace se na fotky dosud serveru neptala** — hledala jen v posledních
+  240 načtených. Teď `GET /api/hledat` (celá knihovna, bez koše
+  a trezoru), na počítači v knihovně i v globálním hledání, na telefonu
+  v hledání; 250 ms po posledním úhozu, zastaralé odpovědi se zahodí,
+  bez sítě se hledá v prohlížeči.
+* **Index úplný a bez diakritiky:** místo z aplikace, všechna alba, měsíc
+  (i v 2. pádě), rok, roční období, „video"/„fotka", přípona; kopie bez
+  diakritiky. Obnovuje se po úpravách v aplikaci, hromadných akcích,
+  přejmenování i sloučení štítků, lidí, míst a alb (dřív jen při nahrání).
+  `gallery:rebuild-search` složí index všem.
+* **Stupně:** všechna slova → kterékoli slovo s řazením podle shody
+  (aplikace řekne „nejbližší shody"); lehké zkracování českých koncovek
+  („výletech" → „výlet"). Na MySQL FULLTEXT, jinak `LIKE` po slovech.
+  Počty a fazety jedním dotazem.
+* Ostatní filtry v aplikaci (platby, deník, recepty, zprávy, cesty, místa)
+  hledají bez ohledu na diakritiku a po slovech. „Letos/loni" podle
+  dnešního data (telefon měl natvrdo 2025).
+
+### Jedno rozhraní
+
+* Staré stránky (`/prehled`, `/timeline`, `/trash`, … 84 cest) vedou do
+  aplikace, na odpovídající obrazovku. Zůstávají sdílené odkazy, obnova
+  hesla, pozvánky, `/app`, `/sluzba`, `/cenik` a celé API. Odkazy
+  v upozorněních, e-mailech a přesměrování po přihlášení, platbě
+  a připojení úložiště míří rovnou na obrazovky aplikace. Po cestě:
+  připojení Google Disku z karty propojení padalo na 500 (špatné jméno
+  cesty); neplatná pozvánka teď řekne proč.
+
+### Mazání a přihlášení
+
+* **Partner bez přístupu:** vlastník smí návrh na smazání schválit sám,
+  jen když partner nemá přístup (odebraný nebo zrušený účet), s výslovným
+  potvrzením; zapíše se `media.trash_approved_alone`. Na počítači
+  i telefonu „Schválit sám (partner nemá přístup)".
+* **Pojistka proti obejití** (nález bezpečnostní revize): přístup
+  partnerovi odebírá vlastník sám, takže by šlo odebrat, schválit, trvale
+  smazat a vrátit. Schválit sám jde proto až **14 dní po odebrání
+  přístupu** (`users.access_revoked_at`; u dřív odebraných se lhůta počítá
+  od nasazení) a takto schválená fotka se z koše **nedá smazat natrvalo
+  dřív než po 30 dnech** — ani ručně, ani vysypáním koše; plánovaný úklid
+  ji pak smaže jako ostatní. Aplikace obě lhůty ukazuje.
+* Revize dál: smazání kopie z trezoru těsně před smazáním znovu ověří
+  místní originál (jinak selže s důvodem); fotku mezitím vyjmutou
+  z trezoru nesmaže; hotové nahrávání na Disk u fotky, která mezitím
+  přešla do trezoru, se neztratí z evidence; doktor hlásí i nedokončená
+  mazání z trezoru. Hledání: znaky jako ʼ nebo ½ dotaz na MySQL neshodí;
+  skrytá osoba se neobjeví v našeptávači ani jako filtr.
+* Přihlášení vydrží nejdéle rok od přihlášení, i při každodenním používání.
+* `deploy.sh`: vypíše předchozí verzi pro návrat, hned po kódu
+  `config:clear`, PHP-FPM hledá podle verze PHP (aaPanel
+  `/etc/init.d/php-fpm-84`).
+* **Kontrolní seznam nasazení:** [`docs/NASAZENI.md`](NASAZENI.md).
+* Frontend znovu sestavený (`public/build`) — stránka pozvánky.
+
+### Zbývá
+
+* Přihlášení přes cookie místo tokenu v `localStorage` (rozhodnutí:
+  po nasazení).
+* Hlášky (`->with()`) po přesměrování aplikace neukazuje — čte jen
+  `?heslo=zmeneno`.
+* Mrtvé řadiče starého rozhraní (`DashboardController`, `InboxController`, …)
+  lze smazat spolu s testy, které už jen hlídají přesměrování.
+* Staré odkazy uložené v databázi (upozornění, akce) jdou přes
+  přesměrování.
+
+| Commit | Obsah |
+|---|---|
+| `8b5c526d` | Přihlášení vydrží nejdéle rok |
+| `06c8a55d` | Trezor mimo cloud, hledání v celé knihovně, jedno rozhraní, přebití vlastníkem |
+| `2e733e5b` | Frontend znovu sestavený (stránka pozvánky) |
+| `86b36962` | `deploy.sh` — verze pro návrat, `config:clear`, PHP-FPM podle verze |
+
+Testy: **2927 PHP testů (112 nových)**, prošly v běžném čase, o Silvestru
+23:30 i v letní noci 1. 7. 22:40 (2 přeskočené běží jen na MySQL v CI).
+**Jedna migrace** (`2026_09_29_130000`). V prohlížeči bez přihlášení
+ověřeno: obě rozvržení naběhnou bez chyb a porušení CSP, `/prehled`
+vede na `/`; hledání po přihlášení v prohlížeči ověřené není (testy
+a zkušební skript nad kódem obou dokumentů).
+
 ## 2as. Čtyřicáté šesté kolo — MySQL v CI povinná, částky cest jako čísla (27. 9.)
 
 Zadání: **„Pokračuj dalším kolem a pak to pushni"**. Druhý běh CI (po kole
