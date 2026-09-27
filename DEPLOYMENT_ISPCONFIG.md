@@ -86,6 +86,13 @@ php artisan db:seed --force
     Header always set X-Content-Type-Options "nosniff"
     Header always set Referrer-Policy "strict-origin-when-cross-origin"
 
+    # Statické stránky (mapa v rámečku, stránka bez připojení) vydává server
+    # sám, mimo Laravel — bez tohohle by neměly žádnou CSP. Cizí zdroje jen
+    # Leaflet z unpkg a dlaždice OpenStreetMap; vlastní inline skript mají.
+    <FilesMatch "^(mapa|offline)\.html$">
+        Header always set Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com/leaflet@1.9.4/dist/leaflet.js; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'"
+    </FilesMatch>
+
     # PHP-FPM — socket odpovídá skutečně nainstalované verzi >= 8.4.1, ne
     # systémovému PHP; zkontrolujte `php -v` dané FPM instalace.
     <FilesMatch \.php$>
@@ -98,6 +105,18 @@ php artisan db:seed --force
     ErrorLog ${APACHE_LOG_DIR}/gallery_error.log
     CustomLog ${APACHE_LOG_DIR}/gallery_access.log combined
 </VirtualHost>
+```
+
+Na nginx (aaPanel) totéž v konfiguraci webu. `add_header` v `location`
+ruší hlavičky zděděné ze `server`, proto se opakují:
+
+```nginx
+location ~ ^/(mapa|offline)\.html$ {
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' https://unpkg.com/leaflet@1.9.4/dist/leaflet.js; style-src 'self' 'unsafe-inline' https://unpkg.com; img-src 'self' data: blob: https://unpkg.com https://tile.openstreetmap.org https://*.tile.openstreetmap.org; connect-src 'self'; object-src 'none'; base-uri 'self'; frame-ancestors 'self'" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+}
 ```
 
 ## Cron (scheduler)

@@ -804,6 +804,52 @@ k 25. 8., rychlý zápis nákupu i nápadu v databázi, přesun úkolu do Hotovo
 
 Testy: **1488 PHP testů**, všechny prošly. **Dvě migrace** (viz níže).
 
+## 2as. Čtyřicáté šesté kolo — MySQL v CI povinná, částky cest jako čísla (27. 9.)
+
+Zadání: **„Pokračuj dalším kolem a pak to pushni"**. Druhý běh CI (po kole
+45) prošel celý v obou úlohách — na MySQL 8.0.46 (strict,
+`ONLY_FULL_GROUP_BY`) `OK (2802 tests, 14024 assertions)`.
+
+* **Úloha MySQL je povinná** — `continue-on-error` z `tests.yml` pryč,
+  chyba, která se projeví jen na MySQL, teď zastaví `main` stejně jako
+  SQLite.
+* **Částky cest jako čísla i na MySQL** — DECIMAL přichází z MySQL jako
+  text a odpovědi, které vracely syrový řádek, posílaly `"1200.00"`:
+  výdaje cesty (uložení, úprava, přehled plánování i sdílené výdaje),
+  varianty trasy, limity rozpočtu, vyrovnání, náklady na auto (i litry
+  a kilometry), rezervace dopravy a ubytování, položky seznamu přání
+  a jejich návrhy. Testy tvar hlídají; že na tom záleží, dokazuje běh
+  na MySQL.
+* **CSP pro statické stránky** — `mapa.html` a `offline.html` vydává
+  server mimo Laravel, a tak bez politiky. `DEPLOYMENT_ISPCONFIG.md` má
+  hlavičku pro Apache i nginx (aaPanel; `add_header` v `location` ruší
+  zděděné hlavičky, proto se opakují).
+
+### Po nasazení
+
+* Na serveru doplnit hlavičku CSP pro `mapa.html` a `offline.html`
+  (ukázka v `DEPLOYMENT_ISPCONFIG.md`) a ověřit, že mapa v rámečku dál
+  kreslí dlaždice i špendlíky.
+
+### Zbývá
+
+* Další sloupce DECIMAL mimo peníze jdou z MySQL taky jako text —
+  `latitude`/`longitude`, `exchange_rate`, `confidence`,
+  `default_split_value`, `score`, `rating`, `temperature`, `quantity`,
+  `calories`/`protein`/`carbs`/`fat_per_serving`, `frame_rate`,
+  `aspect_ratio`, `availability_ratio`. Kde je klient jen zobrazuje,
+  nevadí to; při další práci na těch obrazovkách zkontrolovat, jestli
+  s nimi nepočítá.
+* Rozhodnutí z 2aq (trezor v cloudu) a zbytek z 2aq a 2ar dál.
+
+| Commit | Obsah |
+|---|---|
+| `b4fdee95` | CI: úloha MySQL je povinná |
+| `ee759dab` | Částky cest jako čísla i na MySQL |
+
+Testy: **2815 PHP testů (13 nových)**, všechny prošly v běžném čase,
+o Silvestru 23:30 i v letní noci 1. 7. 22:40. **Žádná migrace.**
+
 ## 2ar. Čtyřicáté páté kolo — co ukázal první běh CI na Linuxu a MySQL (27. 9.)
 
 Zadání: **„Pokračuj dalším kolem a pak to pushni"**. První běh
